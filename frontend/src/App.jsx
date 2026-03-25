@@ -12,7 +12,7 @@ import {
   LogOut, ChevronRight, Search, Bell, TrendingUp, TrendingDown,
   Activity, Shield, User, Lock, Menu, Check, Download,
   ArrowLeft, Camera, Star, Award, Flame, Target, Zap, BarChart3,
-  Trophy, CalendarDays, Weight, Home, Heart, Brain, RefreshCw, Plus, Settings, UserPlus, Cake, FileSignature, Save
+  Trophy, CalendarDays, Weight, Home, Heart, Brain, RefreshCw, Plus, Settings, UserPlus, Cake, FileSignature, Save, ClipboardCheck
 } from "lucide-react";
 
 /* ════════════════════════════════════════════
@@ -58,9 +58,9 @@ const addD  = (d, n) => { const r = new Date(d); r.setDate(r.getDate()+n); retur
    DADOS INICIAIS (PERSISTENTES)
 ═══════════════════════════════════════════════ */
 const MOCK_HIST_BASE = [
-  { date: subDays(new Date(), 42).toISOString(), weight: 89.5, m:{gv:2,mm:2,pcr:3,fer:2,hb:2,au:3,th:2,ca:2}, b:{gi:2,lib:2,dor:3,au:2,en:2,so:3}, n:{co:2,ge:2,mv:3} },
-  { date: subDays(new Date(), 21).toISOString(), weight: 87.1, m:{gv:3,mm:2,pcr:3,fer:3,hb:2,au:3,th:2,ca:3}, b:{gi:3,lib:3,dor:3,au:2,en:2,so:3}, n:{co:2,ge:3,mv:2} },
-  { date: new Date().toISOString(), weight: 84.2, m:{gv:3,mm:3,pcr:2,fer:3,hb:3,au:2,th:3,ca:2}, b:{gi:3,lib:2,dor:2,au:3,en:3,so:2}, n:{co:3,ge:2,mv:3} }
+  { date: subDays(new Date(), 42).toISOString(), weight: 89.5, massaMagra: 54.3, massaGordura: 35.2, m:{gv:2,mm:2,pcr:3,fer:2,hb:2,au:3,th:2,ca:2}, b:{gi:2,lib:2,dor:3,au:2,en:2,so:3}, n:{co:2,ge:2,mv:3} },
+  { date: subDays(new Date(), 21).toISOString(), weight: 87.1, massaMagra: 55.2, massaGordura: 31.9, m:{gv:3,mm:2,pcr:3,fer:3,hb:2,au:3,th:2,ca:3}, b:{gi:3,lib:3,dor:3,au:2,en:2,so:3}, n:{co:2,ge:3,mv:2} },
+  { date: new Date().toISOString(),              weight: 84.2, massaMagra: 56.8, massaGordura: 27.4, m:{gv:3,mm:3,pcr:2,fer:3,hb:3,au:2,th:3,ca:2}, b:{gi:3,lib:2,dor:2,au:3,en:3,so:2}, n:{co:3,ge:2,mv:3} }
 ];
 
 const MOCK_PATIENTS = [
@@ -70,8 +70,25 @@ const MOCK_PATIENTS = [
 ];
 
 const MOCK_TEAM = [
-  { id:1, name:"Dra. Mariana Wogel", role:"Médica", color:G[600], perms: ["admin"] },
-  { id:2, name:"Juliana Santos", role:"Enfermagem", color:S.grn, perms: ["edit"] }
+  { id:1, name:"Dra. Mariana Wogel", role:"admin",   label:"Administradora", specialty:"Nutróloga",  color:G[600], email:"mariana@institutowogel.com",  phone:"(24) 99999-0001", createdAt:"2024-01-01T00:00:00.000Z" },
+  { id:2, name:"Juliana Santos",     role:"enferm",  label:"Enfermagem",     specialty:"Enfermeira", color:S.grn,  email:"juliana@institutowogel.com",   phone:"(24) 99999-0002", createdAt:"2024-03-15T00:00:00.000Z" },
+];
+
+const ROLES = [
+  { id:"admin",    label:"Administrador(a)", color:G[600] },
+  { id:"medico",   label:"Médico(a)",        color:S.blue },
+  { id:"enferm",   label:"Enfermagem",       color:S.grn  },
+  { id:"nutri",    label:"Nutricionista",    color:S.pur  },
+  { id:"psi",      label:"Psicóloga",        color:"#E91E63" },
+  { id:"personal", label:"Personal",         color:S.yel  },
+];
+
+const MOCK_ACTIVITY = [
+  { id:1, date: subDays(new Date(), 1).toISOString(),  memberId:2, memberName:"Juliana Santos",     action:"pesagem",  patientId:1, patientName:"Ana Carolina Silva", detail:"Peso: 84.2kg | MM: 56.8kg | MG: 27.4kg" },
+  { id:2, date: subDays(new Date(), 2).toISOString(),  memberId:2, memberName:"Juliana Santos",     action:"pesagem",  patientId:2, patientName:"Beatriz Oliveira",   detail:"Peso: 86.8kg | MM: 54.1kg | MG: 32.7kg" },
+  { id:3, date: subDays(new Date(), 3).toISOString(),  memberId:1, memberName:"Dra. Mariana Wogel", action:"scores",   patientId:1, patientName:"Ana Carolina Silva", detail:"Scores metabólicos atualizados" },
+  { id:4, date: subDays(new Date(), 5).toISOString(),  memberId:1, memberName:"Dra. Mariana Wogel", action:"cadastro", patientId:3, patientName:"Camila Ferreira",   detail:"Novo paciente cadastrado" },
+  { id:5, date: subDays(new Date(), 7).toISOString(),  memberId:2, memberName:"Juliana Santos",     action:"checklist",patientId:3, patientName:"Camila Ferreira",   detail:"Checklist semana 3 atualizado" },
 ];
 
 const genSC = (ps) => ps.reduce((acc, p) => {
@@ -250,6 +267,19 @@ function Dash({  ps, onSel, mob }) {
   const [df, setDf] = useState("all");
   const SC = genSC(ps);
 
+  // Composição corporal média atual
+  const avgMM = ps.length ? +(ps.reduce((a,p)=>{ const last=p.history[p.history.length-1]; return a+(last.massaMagra||0); },0)/ps.length).toFixed(1) : 0;
+  const avgMG = ps.length ? +(ps.reduce((a,p)=>{ const last=p.history[p.history.length-1]; return a+(last.massaGordura||0); },0)/ps.length).toFixed(1) : 0;
+  const avgPctMM = ps.length ? +(ps.reduce((a,p)=>{ const last=p.history[p.history.length-1]; const tot=(last.massaMagra||0)+(last.massaGordura||0); return a+(tot>0?(last.massaMagra/tot*100):0); },0)/ps.length).toFixed(1) : 0;
+  const avgPctMG = ps.length ? +(100-avgPctMM).toFixed(1) : 0;
+
+  // Histórico de composição (para gráfico)
+  const compHist = (() => {
+    const weeks = {};
+    ps.forEach(p => { p.history.forEach((h,i) => { const k=`S${i+1}`; if(!weeks[k]) weeks[k]={s:k,mm:0,mg:0,n:0}; weeks[k].mm+=(h.massaMagra||0); weeks[k].mg+=(h.massaGordura||0); weeks[k].n++; }); });
+    return Object.values(weeks).map(w=>({s:w.s, mm:w.n?+(w.mm/w.n).toFixed(1):0, mg:w.n?+(w.mg/w.n).toFixed(1):0}));
+  })();
+
   const tl   = ps.reduce((a,p) => a+(p.iw-p.cw), 0);
   const ae   = Math.round(ps.reduce((a,p) => a+p.eng, 0)/ps.length);
   const cr   = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); });
@@ -288,7 +318,7 @@ function Dash({  ps, onSel, mob }) {
       {/* Filtro período */}
       <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
         <span style={{ fontSize:11, color:G[600], fontWeight:500 }}>Período:</span>
-        {[["all","Todos"],["week","7d"],["month","30d"],["quarter","90d"]].map(([k,l]) => (
+        {[["all","Todos"],["week","7d"],["month","30d"],["quarter","90d"],["120d","120d"]].map(([k,l]) => (
           <div key={k} onClick={()=>setDf(k)} style={{ padding:"5px 12px", borderRadius:20, fontSize:11, cursor:"pointer", fontWeight:df===k?600:400, background:df===k?G[600]:"#fff", color:df===k?"#fff":G[700], border:`1px solid ${df===k?G[600]:G[300]}` }}>{l}</div>
         ))}
       </div>
@@ -307,6 +337,32 @@ function Dash({  ps, onSel, mob }) {
         <Mt value={el.length}          label="Score elite"         icon={Trophy}        color={S.pur} sub={el.map(p=>p.name.split(" ")[0]).join(", ")||"—"}/>
         <Mt value={rTod.length}        label="Retornos hoje"       icon={CalendarDays}  color={S.blue} sub={rTod.map(p=>p.name.split(" ")[0]).join(", ")||"Nenhum"}/>
         <Mt value={`${Math.round(ps.filter(p=>p.eng>=80).length/ps.length*100)}%`} label="Engajamento alto" icon={Zap} color={S.grn}/>
+      </div>
+
+      {/* KPIs composição corporal */}
+      <div style={{ display:"grid", gridTemplateColumns:mob?"1fr 1fr":"repeat(4,1fr)", gap:8 }}>
+        <Mt value={`${avgMM}kg`}    label="Massa magra média"   icon={Activity} color={S.blue}  sub={`${avgPctMM}% do peso`}/>
+        <Mt value={`${avgMG}kg`}    label="Massa gorda média"   icon={Weight}   color={S.yel}   sub={`${avgPctMG}% do peso`}/>
+        <Mt value={`${(tl/ps.length).toFixed(1)}kg`} label="Perda média"   icon={TrendingDown} color={S.grn}/>
+        <Mt value={`${ae}%`}        label="Engajamento"         icon={Flame}    color={ae>=80?S.grn:S.yel}/>
+      </div>
+
+      {/* Gráfico composição corporal */}
+      <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
+        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:4 }}>Composição corporal média</div>
+        <div style={{ fontSize:10, color:"#aaa", marginBottom:8 }}>Massa magra vs massa gorda (kg) ao longo do programa</div>
+        <ResponsiveContainer width="100%" height={180}>
+          <AreaChart data={compHist}>
+            <defs>
+              <linearGradient id="gmm" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.blue} stopOpacity={0.3}/><stop offset="100%" stopColor={S.blue} stopOpacity={0}/></linearGradient>
+              <linearGradient id="gmg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.yel} stopOpacity={0.3}/><stop offset="100%" stopColor={S.yel} stopOpacity={0}/></linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis tick={{fontSize:9,fill:"#bbb"}} unit="kg"/>
+            <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Legend iconType="circle" wrapperStyle={{fontSize:10}}/>
+            <Area type="monotone" dataKey="mm" name="Massa Magra" stroke={S.blue} fill="url(#gmm)" strokeWidth={2}/>
+            <Area type="monotone" dataKey="mg" name="Massa Gorda" stroke={S.yel}  fill="url(#gmg)" strokeWidth={2}/>
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
 
       {/* Calendário + Conquistas */}
@@ -505,7 +561,7 @@ function PList({  ps, onSel, mob, onAdd }) {
 /* ════════════════════════════════════════════
    DETALHE DO PACIENTE (5 abas)
 ═══════════════════════════════════════════════ */
-function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores }) {
+function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onLog }) {
   const SC = genSC([p]);
   const [tab, setTab]   = useState("ficha");
   const plan = PLANS.find(x=>x.id===p.plan);
@@ -518,6 +574,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores }) {
   const [cl, setCl]   = useState(() => genCL(p, tier));
   const [es, setEs]   = useState(sc ? JSON.parse(JSON.stringify(sc)) : null);
   const [sw, setSw]   = useState(p.week);
+  const [showWeighIn, setShowWeighIn] = useState(false);
 
   const tabs = [
     {k:"ficha",   l:"Ficha",     i:User},
@@ -566,6 +623,57 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores }) {
               <div><span style={{ color:"#aaa" }}>Ciclo: </span>{p.cycle}</div>
             </div>
           </div>
+          {/* Composição corporal */}
+          {(() => {
+            const last = p.history[p.history.length-1];
+            const mm = last.massaMagra || 0;
+            const mg = last.massaGordura || 0;
+            const tot = mm + mg || 1;
+            const pctMM = (mm/tot*100).toFixed(1);
+            const pctMG = (mg/tot*100).toFixed(1);
+            return (
+              <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                  <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Composição corporal</span>
+                  <button onClick={()=>setShowWeighIn(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:7, background:G[600], color:"#fff", fontSize:11, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}><Plus size={11}/>Registrar pesagem</button>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10 }}>
+                  <div style={{ textAlign:"center", padding:"10px 8px", background:S.blueBg, borderRadius:8 }}>
+                    <div style={{ fontSize:20, fontWeight:700, color:S.blue }}>{mm.toFixed(1)}kg</div>
+                    <div style={{ fontSize:10, color:S.blue, fontWeight:600 }}>Massa Magra</div>
+                    <div style={{ fontSize:10, color:"#aaa" }}>{pctMM}% do total</div>
+                  </div>
+                  <div style={{ textAlign:"center", padding:"10px 8px", background:S.yelBg, borderRadius:8 }}>
+                    <div style={{ fontSize:20, fontWeight:700, color:S.yel }}>{mg.toFixed(1)}kg</div>
+                    <div style={{ fontSize:10, color:S.yel, fontWeight:600 }}>Massa Gorda</div>
+                    <div style={{ fontSize:10, color:"#aaa" }}>{pctMG}% do total</div>
+                  </div>
+                </div>
+                {/* Barra de composição */}
+                <div style={{ height:8, borderRadius:4, overflow:"hidden", display:"flex" }}>
+                  <div style={{ width:`${pctMM}%`, background:S.blue, transition:"width 0.5s" }}/>
+                  <div style={{ width:`${pctMG}%`, background:S.yel,  transition:"width 0.5s" }}/>
+                </div>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#aaa", marginTop:3 }}>
+                  <span style={{ color:S.blue }}>■ Magra {pctMM}%</span>
+                  <span style={{ color:S.yel }}>■ Gorda {pctMG}%</span>
+                </div>
+                {/* Histórico de pesagens */}
+                {p.history.length > 1 && (
+                  <div style={{ marginTop:12 }}>
+                    <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:6 }}>Histórico de pesagens</div>
+                    <div style={{ overflowX:"auto" }}>
+                      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:320 }}>
+                        <thead><tr>{["Data","Peso","MM (kg)","%MM","MG (kg)","%MG"].map(h=><th key={h} style={{ textAlign:"left", padding:"4px 6px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600, textTransform:"uppercase" }}>{h}</th>)}</tr></thead>
+                        <tbody>{[...p.history].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{format(new Date(h.date),"dd/MM/yy")}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{h.weight.toFixed(1)}kg</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           <div style={{ display:"grid", gap:6 }}>
             <SBar label="Saúde metabólica" total={met} max={24} fn={sM}/>
             <SBar label="Bem-estar"         total={be}  max={18} fn={sB}/>
@@ -581,6 +689,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores }) {
               </AreaChart>
             </ResponsiveContainer>
           </div>
+          {showWeighIn && <WeighInModal p={p} onClose={()=>setShowWeighIn(false)} onSave={(entry)=>{ onAddWeighIn && onAddWeighIn(entry); setShowWeighIn(false); }} onLog={onLog}/>}
         </div>
       )}
 
@@ -797,19 +906,80 @@ function Alerts({  ps, onSel }) {
 /* ════════════════════════════════════════════
    EQUIPE
 ═══════════════════════════════════════════════ */
-function TeamP({ team, ta, setTa }) {
+function TeamP({ team, setTeam, ta, setTa, activityLog }) {
+  const [sel,        setSel]        = useState(null); // membro selecionado
+  const [showNew,    setShowNew]    = useState(false);
+
+  if (sel) {
+    const m   = team.find(x=>x.id===sel);
+    const log = activityLog.filter(a=>a.memberId===sel).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    const roleInfo = ROLES.find(r=>r.id===m.role) || { label: m.role, color: G[600] };
+    return (
+      <div>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16 }}>
+          <div onClick={()=>setSel(null)} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50] }}><ArrowLeft size={16} color={G[700]}/></div>
+          <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>{m.name}</span>
+        </div>
+        <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"16px", marginBottom:12, display:"flex", alignItems:"center", gap:14 }}>
+          <Av name={m.name} size={56} src={ta[m.id]} onEdit={url=>setTa(pr=>({...pr,[m.id]:url}))}/>
+          <div style={{ flex:1 }}>
+            <div style={{ fontWeight:700, fontSize:15, color:G[800] }}>{m.name}</div>
+            <div style={{ fontSize:11, color:"#aaa", marginTop:2 }}>{m.specialty} • {m.email}</div>
+            <div style={{ fontSize:11, color:"#aaa" }}>{m.phone}</div>
+            <div style={{ marginTop:6 }}><Bg color={roleInfo.color} bg={roleInfo.color+"22"}>{roleInfo.label}</Bg></div>
+          </div>
+        </div>
+        <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Histórico de atividades ({log.length})</div>
+          {log.length === 0 ? (
+            <div style={{ textAlign:"center", padding:20, color:"#ccc", fontSize:12 }}>Nenhuma atividade registrada</div>
+          ) : log.map((a,i) => {
+            const icons = { pesagem:Weight, scores:Activity, cadastro:UserPlus, checklist:ClipboardCheck };
+            const colors = { pesagem:S.blue, scores:S.pur, cadastro:S.grn, checklist:G[500] };
+            const Icon = icons[a.action] || FileText;
+            const col  = colors[a.action] || G[600];
+            return (
+              <div key={i} style={{ display:"flex", gap:10, padding:"8px 0", borderBottom:i<log.length-1?`1px solid ${G[50]}`:"none" }}>
+                <div style={{ width:28, height:28, borderRadius:"50%", background:col+"22", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <Icon size={13} color={col}/>
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:12, fontWeight:500, color:G[800] }}>{a.patientName}</div>
+                  <div style={{ fontSize:11, color:"#aaa" }}>{a.detail}</div>
+                </div>
+                <div style={{ fontSize:10, color:"#bbb", whiteSpace:"nowrap" }}>{format(new Date(a.date),"dd/MM HH:mm")}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      {team.map(m => (
-        <div key={m.id} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:12 }}>
-          <Av name={m.name} size={46} src={ta[m.id]} onEdit={url=>setTa(pr=>({...pr,[m.id]:url}))}/>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{m.name}</div>
-            <div style={{ fontSize:11, color:"#aaa", marginTop:2 }}>Instituto Dra. Mariana Wogel</div>
+      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:14 }}>
+        <button onClick={()=>setShowNew(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}><Plus size={13}/>Novo membro</button>
+      </div>
+      {team.map(m => {
+        const roleInfo = ROLES.find(r=>r.id===m.role) || { label: m.label||m.role, color: m.color };
+        const mLog = activityLog.filter(a=>a.memberId===m.id);
+        return (
+          <div key={m.id} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:12 }}>
+            <Av name={m.name} size={46} src={ta[m.id]} onEdit={url=>setTa(pr=>({...pr,[m.id]:url}))}/>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{m.name}</div>
+              <div style={{ fontSize:11, color:"#aaa", marginTop:2 }}>{m.specialty} • {m.email}</div>
+              <div style={{ fontSize:10, color:"#bbb", marginTop:2 }}>{mLog.length} atividades registradas</div>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:5, alignItems:"flex-end" }}>
+              <Bg color={roleInfo.color} bg={roleInfo.color+"22"}>{roleInfo.label}</Bg>
+              <div onClick={()=>setSel(m.id)} style={{ fontSize:10, color:G[600], cursor:"pointer", textDecoration:"underline" }}>Ver histórico</div>
+            </div>
           </div>
-          <Bg color={m.color} bg={m.color+"22"}>{m.role}</Bg>
-        </div>
-      ))}
+        );
+      })}
+      {showNew && <NewMemberModal onClose={()=>setShowNew(false)} onSave={nm=>{ setTeam(prev=>[...prev,nm]); setShowNew(false); }}/>}
     </div>
   );
 }
@@ -930,6 +1100,123 @@ function Portal({  p, av, setAv }) {
 }
 
 /* ════════════════════════════════════════════
+   MODAL REGISTRO DE PESAGEM
+═══════════════════════════════════════════════ */
+function WeighInModal({ p, onClose, onSave, onLog }) {
+  const [data,    setData]    = useState(format(new Date(), "yyyy-MM-dd"));
+  const [peso,    setPeso]    = useState(p.cw || "");
+  const [mm,      setMm]      = useState("");
+  const [mg,      setMg]      = useState("");
+
+  const tot = parseFloat(mm||0) + parseFloat(mg||0);
+  const pctMM = tot > 0 ? (parseFloat(mm||0)/tot*100).toFixed(1) : "—";
+  const pctMG = tot > 0 ? (parseFloat(mg||0)/tot*100).toFixed(1) : "—";
+
+  const handleSave = () => {
+    const w = parseFloat(peso);
+    const mVal = parseFloat(mm||0);
+    const gVal = parseFloat(mg||0);
+    if (!w) return alert("Informe o peso.");
+    const entry = {
+      date: new Date(data).toISOString(),
+      weight: w,
+      massaMagra: mVal,
+      massaGordura: gVal,
+      m: p.history[p.history.length-1].m,
+      b: p.history[p.history.length-1].b,
+      n: p.history[p.history.length-1].n,
+    };
+    onSave(entry);
+    onLog && onLog({ action:"pesagem", patientId:p.id, patientName:p.name, detail:`Peso: ${w}kg | MM: ${mVal}kg | MG: ${gVal}kg` });
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:380, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+          <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>Registrar pesagem</span>
+          <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50], fontSize:13, color:"#aaa" }}>✕</div>
+        </div>
+        <div style={{ fontSize:11, color:"#aaa", marginBottom:14 }}>{p.name}</div>
+        {[
+          { label:"Data da pesagem", val:data, set:setData, type:"date" },
+          { label:"Peso total (kg)", val:peso, set:setPeso, type:"number", ph:"84.2" },
+          { label:"Massa magra (kg)", val:mm, set:setMm, type:"number", ph:"56.8" },
+          { label:"Massa gorda (kg)", val:mg, set:setMg, type:"number", ph:"27.4" },
+        ].map(f => (
+          <div key={f.label} style={{ marginBottom:12 }}>
+            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
+            <input type={f.type} value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph||""}
+              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+          </div>
+        ))}
+        {tot > 0 && (
+          <div style={{ background:G[50], borderRadius:8, padding:"8px 12px", marginBottom:14, display:"flex", gap:16, fontSize:11 }}>
+            <span style={{ color:S.blue }}>Magra: <strong>{pctMM}%</strong></span>
+            <span style={{ color:S.yel }}>Gorda: <strong>{pctMG}%</strong></span>
+          </div>
+        )}
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={handleSave} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar pesagem</button>
+          <button onClick={onClose} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
+   MODAL NOVO MEMBRO DA EQUIPE
+═══════════════════════════════════════════════ */
+function NewMemberModal({ onClose, onSave }) {
+  const [nome,      setNome]      = useState("");
+  const [role,      setRole]      = useState("enferm");
+  const [specialty, setSpecialty] = useState("");
+  const [email,     setEmail]     = useState("");
+  const [phone,     setPhone]     = useState("");
+
+  const handleSave = () => {
+    if (!nome.trim()) return alert("Informe o nome.");
+    const roleInfo = ROLES.find(r=>r.id===role);
+    const nm = { id: Date.now(), name: nome.trim(), role, label: roleInfo?.label||role, specialty, email, phone, color: roleInfo?.color||G[600], createdAt: new Date().toISOString() };
+    onSave(nm);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:420, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+          <span style={{ fontSize:16, fontWeight:700, color:G[800] }}>Novo membro da equipe</span>
+          <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50] }}>✕</div>
+        </div>
+        <div style={{ marginBottom:12 }}>
+          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Função / Nível de acesso</label>
+          <select value={role} onChange={e=>setRole(e.target.value)} style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", background:"#fff" }}>
+            {ROLES.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}
+          </select>
+        </div>
+        {[
+          { label:"Nome completo", val:nome, set:setNome, type:"text",  ph:"Ana Lima" },
+          { label:"Especialidade", val:specialty, set:setSpecialty, type:"text", ph:"Nutricionista Clínica" },
+          { label:"E-mail",        val:email, set:setEmail, type:"email", ph:"email@instituto.com" },
+          { label:"Telefone",      val:phone, set:setPhone, type:"tel",   ph:"(24) 99999-0000" },
+        ].map(f => (
+          <div key={f.label} style={{ marginBottom:12 }}>
+            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
+            <input type={f.type} value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph}
+              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+          </div>
+        ))}
+        <div style={{ display:"flex", gap:8, marginTop:4 }}>
+          <button onClick={handleSave} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Adicionar</button>
+          <button onClick={onClose}   style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
    MODAL NOVO PACIENTE
 ═══════════════════════════════════════════════ */
 function NewLeadModal({ onClose, onSave }) {
@@ -1031,8 +1318,15 @@ function Login({ onLogin }) {
 export default function App() {
   const [ps, setPs] = useState(() => { try { return JSON.parse(localStorage.getItem('sl_ps')) || MOCK_PATIENTS; } catch(e) { return MOCK_PATIENTS; } });
   const [team, setTeam] = useState(() => { try { return JSON.parse(localStorage.getItem('sl_team')) || MOCK_TEAM; } catch(e) { return MOCK_TEAM; } });
+  const [activityLog, setActivityLog] = useState(() => { try { return JSON.parse(localStorage.getItem('sl_activity')) || MOCK_ACTIVITY; } catch(e) { return MOCK_ACTIVITY; } });
   useEffect(() => { localStorage.setItem('sl_ps', JSON.stringify(ps)); }, [ps]);
   useEffect(() => { localStorage.setItem('sl_team', JSON.stringify(team)); }, [team]);
+  useEffect(() => { localStorage.setItem('sl_activity', JSON.stringify(activityLog)); }, [activityLog]);
+
+  const addLog = ({ action, patientId, patientName, detail }) => {
+    const entry = { id: Date.now(), date: new Date().toISOString(), memberId:1, memberName:"Dra. Mariana Wogel", action, patientId, patientName, detail };
+    setActivityLog(prev=>[entry,...prev]);
+  };
   const SC = genSC(ps);
 
   const [lg,   setLg]   = useState(false);
@@ -1087,9 +1381,12 @@ export default function App() {
     <>
       {page==="dash"  && <Dash  ps={ps} onSel={go} mob={mob}/>}
       {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)}/>}
-      {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs} onSaveScores={scores=>setPs(prev=>prev.map(x=>x.id===sp.id?{...x,history:[...x.history.slice(0,-1),{...x.history[x.history.length-1],...scores}]}:x))}/>}
+      {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}
+        onSaveScores={scores=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,history:[...x.history.slice(0,-1),{...x.history[x.history.length-1],...scores}]}:x)); addLog({action:"scores",patientId:sp.id,patientName:sp.name,detail:"Scores metabólicos atualizados"}); }}
+        onAddWeighIn={entry=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,cw:entry.weight,history:[...x.history,entry]}:x)); }}
+        onLog={addLog}/>}
       {page==="alert" && <Alerts ps={ps} onSel={go}/>}
-      {page==="team"  && <TeamP team={team} ta={ta} setTa={setTa}/>}
+      {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog}/>}
     </>
   );
 
@@ -1112,7 +1409,7 @@ export default function App() {
       </div>
       {/* Conteúdo */}
       <div style={{ padding:"10px 12px" }}>
-        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>setPs(prev=>[...prev,np])}/>}
+        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setPs(prev=>[...prev,np]); addLog({action:"cadastro",patientId:np.id,patientName:np.name,detail:"Novo paciente cadastrado"}); }}/>}
         {content}</div>
       {/* Bottom nav */}
       <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:`1px solid ${G[200]}`, display:"flex", justifyContent:"space-around", padding:"6px 0 max(6px,env(safe-area-inset-bottom))", zIndex:50 }}>
@@ -1178,7 +1475,7 @@ export default function App() {
           </div>
         </div>
         
-        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>setPs(prev=>[...prev,np])}/>}
+        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setPs(prev=>[...prev,np]); addLog({action:"cadastro",patientId:np.id,patientName:np.name,detail:"Novo paciente cadastrado"}); }}/>}
         {content}
       </div>
     </div>
