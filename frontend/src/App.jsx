@@ -459,6 +459,7 @@ function Dash({  ps, onSel, mob }) {
    LISTA DE PACIENTES
 ═══════════════════════════════════════════════ */
 function PList({  ps, onSel, mob }) {
+  const SC = genSC(ps);
   const [q,  setQ]  = useState("");
   const [fp, setFp] = useState("all");
   const f = ps.filter(p => p.name.toLowerCase().includes(q.toLowerCase()) && (fp==="all"||p.plan===fp));
