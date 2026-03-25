@@ -51,7 +51,7 @@ const TIER = {
 };
 
 const TODAY = new Date(2026, 2, 24);
-const fmt   = d => `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}`;
+const fmt   = d => { const dt = new Date(d); return `${String(dt.getDate()).padStart(2,"0")}/${String(dt.getMonth()+1).padStart(2,"0")}`; };
 const addD  = (d, n) => { const r = new Date(d); r.setDate(r.getDate()+n); return r; };
 
 /* ════════════════════════════════════════════
@@ -255,7 +255,7 @@ function Dash({  ps, onSel, mob }) {
   const cr   = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); });
   const el   = ps.filter(p => { const sc=SC[p.id]; return sc&&cM(sc.m)>=21; });
   const rTod = ps.filter(p => p.nr && fmt(p.nr)===fmt(TODAY));
-  const rWk  = ps.filter(p => { if(!p.nr)return false; const d=p.nr.getTime(); return d>=TODAY.getTime()&&d<=addD(TODAY,7).getTime(); }).sort((a,b)=>a.nr-b.nr);
+  const rWk  = ps.filter(p => { if(!p.nr)return false; const d=new Date(p.nr).getTime(); return d>=TODAY.getTime()&&d<=addD(TODAY,7).getTime(); }).sort((a,b)=>new Date(a.nr)-new Date(b.nr));
   const top  = useMemo(() => ps.map(p=>({...p,pct:((p.iw-p.cw)/p.iw*100)})).sort((a,b)=>b.pct-a.pct).slice(0,3), [ps]);
   const pavg = useMemo(() => {
     const s={c:0,i:0,g:0,v:0,n:0};
@@ -318,7 +318,7 @@ function Dash({  ps, onSel, mob }) {
           </div>
           {rWk.length===0 ? <div style={{ fontSize:12, color:"#ccc", padding:8, textAlign:"center" }}>Nenhum</div>
             : rWk.map(p => {
-              const isT=fmt(p.nr)===fmt(TODAY); const past=p.nr<TODAY;
+              const isT=fmt(p.nr)===fmt(TODAY); const past=new Date(p.nr)<TODAY;
               return (
                 <div key={p.id} onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 8px", borderRadius:7, marginBottom:3, cursor:"pointer", background:isT?S.blueBg:past?S.redBg:"transparent" }}>
                   <Av name={p.name} size={28}/>
