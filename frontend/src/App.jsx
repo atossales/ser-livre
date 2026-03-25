@@ -161,8 +161,8 @@ const genCL = (p, tier) => {
       psi:  f.psi ? (d||(pt&&Math.random()>0.5)) : null,
       bio:  d||(pt&&Math.random()>0.3),
       tr:   Array.from({length:f.tr}, () => d||(pt&&Math.random()>0.4)),
-      nu:   i%4===0 ? {av:d, pl:d, sc:d} : null,
-      dose: d||pt ? `${2.5+Math.floor(i/4)*2.5}mg` : "",
+      nu:   i%4===1 ? {av:d, pl:d, sc:d} : null,
+      dose: d||pt ? (i<=4?"2.5mg":i<=8?"5mg":i<=12?"7.5mg":"10mg") : "2.5mg",
     };
   }
   return r;
@@ -576,9 +576,189 @@ function PList({  ps, onSel, mob, onAdd }) {
 }
 
 /* ════════════════════════════════════════════
+   RELATÓRIO — componente com estado próprio
+═══════════════════════════════════════════════ */
+function RelTab({ p, mob, plan, met, be, mn }) {
+  const [relDe,   setRelDe]   = useState("");
+  const [relAte,  setRelAte]  = useState("");
+  const [relComp, setRelComp] = useState(false);
+
+  const sh = p.scoreHistory || [];
+  const shFilt = relDe||relAte ? sh.filter(s => {
+    const d = new Date(s.date);
+    if(relDe && d < new Date(relDe)) return false;
+    if(relAte && d > new Date(relAte)) return false;
+    return true;
+  }) : sh;
+  const histFilt = relDe||relAte ? p.history.filter(h => {
+    const d = new Date(h.date);
+    if(relDe && d < new Date(relDe)) return false;
+    if(relAte && d > new Date(relAte)) return false;
+    return true;
+  }) : p.history;
+
+  const comp1 = shFilt[0];
+  const comp2 = shFilt[shFilt.length-1];
+  const lastH = p.history[p.history.length-1];
+  const mmLast = lastH?.massaMagra||0;
+  const mgLast = lastH?.massaGordura||0;
+  const totComp = mmLast+mgLast||1;
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+      {/* Controles de período e PDF */}
+      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10, flexWrap:"wrap", gap:6 }}>
+          <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Relatório Clínico</span>
+          <div style={{ display:"flex", gap:6 }}>
+            <button onClick={()=>setRelComp(!relComp)} style={{ fontSize:11, padding:"6px 12px", borderRadius:7, background:relComp?G[600]:G[50], color:relComp?"#fff":G[700], border:`1px solid ${G[300]}`, cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>📊 Comparativo</button>
+            <button onClick={()=>{ const el=document.getElementById(`rel-${p.id}`); if(el) html2pdf().set({margin:8,filename:`relatorio-${p.name}.pdf`,html2canvas:{scale:2,useCORS:true},jsPDF:{format:"a4",orientation:"portrait"}}).from(el).save(); }} style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:7, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}><Download size={13}/>PDF</button>
+          </div>
+        </div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <div style={{ flex:1, minWidth:130 }}>
+            <label style={{ fontSize:10, color:"#aaa", marginBottom:2, display:"block" }}>De</label>
+            <input type="date" value={relDe} onChange={e=>setRelDe(e.target.value)} style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:11, fontFamily:"inherit", boxSizing:"border-box" }}/>
+          </div>
+          <div style={{ flex:1, minWidth:130 }}>
+            <label style={{ fontSize:10, color:"#aaa", marginBottom:2, display:"block" }}>Até</label>
+            <input type="date" value={relAte} onChange={e=>setRelAte(e.target.value)} style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:11, fontFamily:"inherit", boxSizing:"border-box" }}/>
+          </div>
+          {(relDe||relAte) && <button onClick={()=>{setRelDe("");setRelAte("");}} style={{ alignSelf:"flex-end", padding:"7px 12px", borderRadius:7, background:G[50], border:`1px solid ${G[300]}`, fontSize:11, color:G[700], cursor:"pointer", fontFamily:"inherit" }}>Limpar</button>}
+        </div>
+      </div>
+
+      {/* Conteúdo do relatório (exportável) */}
+      <div id={`rel-${p.id}`} style={{ display:"flex", flexDirection:"column", gap:10 }}>
+
+        {/* Cabeçalho */}
+        <div style={{ background:`linear-gradient(135deg,${G[700]},${G[900]})`, borderRadius:12, padding:"20px 18px", color:"#fff" }}>
+          <div style={{ fontSize:11, opacity:0.5, marginBottom:4 }}>Programa Ser Livre — Instituto Dra. Mariana Wogel</div>
+          <div style={{ fontSize:19, fontWeight:700 }}>Relatório Clínico</div>
+          <div style={{ fontSize:12, opacity:0.6, marginTop:2 }}>{p.name} · Emitido em {fmt(TODAY)}/2026</div>
+          {(relDe||relAte) && <div style={{ fontSize:10, opacity:0.4, marginTop:2 }}>Período: {relDe||"início"} → {relAte||"hoje"}</div>}
+        </div>
+
+        {/* Dados da ficha */}
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px" }}>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>📋 Dados do paciente</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"6px 20px", fontSize:12 }}>
+            <div><span style={{ color:"#aaa" }}>Nome: </span><strong>{p.name}</strong></div>
+            <div><span style={{ color:"#aaa" }}>Plano: </span><strong>{plan?.name}</strong></div>
+            <div><span style={{ color:"#aaa" }}>Nascimento: </span>{p.birthDate} ({calcAge(p.birthDate)} anos)</div>
+            <div><span style={{ color:"#aaa" }}>Telefone: </span>{p.phone}</div>
+            <div><span style={{ color:"#aaa" }}>Início do programa: </span>{p.sd}</div>
+            <div><span style={{ color:"#aaa" }}>Ciclo/Semana: </span>C{p.cycle} — S{p.week}/16</div>
+          </div>
+        </div>
+
+        {/* Evolução de peso */}
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px" }}>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>⚖️ Evolução de peso</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:10 }}>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.iw}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Peso inicial</div></div>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.cw}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Peso atual</div></div>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>-{(p.iw-p.cw).toFixed(1)}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Perdido</div></div>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>{(((p.iw-p.cw)/p.iw)*100).toFixed(1)}%</div><div style={{ fontSize:9, color:"#aaa" }}>Redução</div></div>
+          </div>
+          {histFilt.length > 0 && (
+            <div style={{ overflowX:"auto" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:400 }}>
+                <thead><tr>{["Data","Peso","MM (kg)","%MM","MG (kg)","%MG"].map(h=><th key={h} style={{ textAlign:"left", padding:"5px 7px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600, textTransform:"uppercase" }}>{h}</th>)}</tr></thead>
+                <tbody>{[...histFilt].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{format(new Date(h.date),"dd/MM/yy")}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{h.weight.toFixed(1)}kg</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Composição corporal atual */}
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px" }}>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>🧬 Composição corporal atual</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:S.blueBg, borderRadius:8 }}><div style={{ fontSize:18, fontWeight:700, color:S.blue }}>{mmLast.toFixed(1)}kg</div><div style={{ fontSize:10, color:S.blue, fontWeight:600 }}>Massa Magra</div><div style={{ fontSize:10, color:"#aaa" }}>{(mmLast/totComp*100).toFixed(1)}% do total</div></div>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:S.yelBg, borderRadius:8 }}><div style={{ fontSize:18, fontWeight:700, color:S.yel }}>{mgLast.toFixed(1)}kg</div><div style={{ fontSize:10, color:S.yel, fontWeight:600 }}>Massa Gorda</div><div style={{ fontSize:10, color:"#aaa" }}>{(mgLast/totComp*100).toFixed(1)}% do total</div></div>
+          </div>
+          <div style={{ height:7, borderRadius:4, overflow:"hidden", display:"flex" }}>
+            <div style={{ width:`${(mmLast/totComp*100).toFixed(1)}%`, background:S.blue }}/>
+            <div style={{ width:`${(mgLast/totComp*100).toFixed(1)}%`, background:S.yel }}/>
+          </div>
+        </div>
+
+        {/* Scores atuais */}
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px" }}>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>📊 Scores clínicos atuais</div>
+          {[{l:"Saúde metabólica",t:met,m:24,fn:sM},{l:"Bem-estar",t:be,m:18,fn:sB},{l:"Blindagem mental",t:mn,m:9,fn:sN}].map((s,i) => {
+            const st=s.fn(s.t);
+            return <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"7px 0", borderBottom:`1px solid ${G[100]}`, flexWrap:"wrap", gap:3 }}><span style={{ fontSize:12 }}>{s.l}</span><div style={{ display:"flex", alignItems:"center", gap:6 }}><div style={{ width:80, height:6, background:G[100], borderRadius:3, overflow:"hidden" }}><div style={{ height:"100%", width:`${(s.t/s.m*100).toFixed(0)}%`, background:st.c, borderRadius:3 }}/></div><Bg color={st.c} bg={st.bg}>{st.e} {s.t}/{s.m} — {st.l}</Bg></div></div>;
+          })}
+        </div>
+
+        {/* Comparativo mensal (se ativado e houver dados) */}
+        {relComp && shFilt.length >= 2 && (
+          <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px" }}>
+            <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>📈 Comparativo: {comp1.month} → {comp2.month}</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
+              {[{l:"Metabólico",c1:cM(comp1.m),c2:cM(comp2.m),max:24,fn:sM},{l:"Bem-estar",c1:cB(comp1.b),c2:cB(comp2.b),max:18,fn:sB},{l:"Mental",c1:cN(comp1.n),c2:cN(comp2.n),max:9,fn:sN}].map((s,i)=>{
+                const d=s.c2-s.c1; const st=s.fn(s.c2);
+                return <div key={i} style={{ textAlign:"center", padding:"10px 8px", background:st.bg, borderRadius:8 }}>
+                  <div style={{ fontSize:11, color:st.c, fontWeight:600 }}>{s.l}</div>
+                  <div style={{ fontSize:20, fontWeight:700, color:st.c }}>{s.c2}/{s.max}</div>
+                  <div style={{ fontSize:11, fontWeight:600, color:d>0?S.grn:d<0?S.red:"#aaa", marginTop:3 }}>{d>0?"+":""}{d!==0?d:"="} pts</div>
+                  <div style={{ fontSize:9, color:"#aaa" }}>era {s.c1}</div>
+                </div>;
+              })}
+            </div>
+            <div style={{ overflowX:"auto", marginTop:10 }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:420 }}>
+                <thead><tr>{["Mês","Met","Δ","Bem","Δ","Mental","Δ","Status"].map(h=><th key={h} style={{ textAlign:"left", padding:"5px 7px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600, textTransform:"uppercase" }}>{h}</th>)}</tr></thead>
+                <tbody>{shFilt.map((s,i)=>{
+                  const met_=cM(s.m),bem_=cB(s.b),men_=cN(s.n);
+                  const pr_=i>0?shFilt[i-1]:null;
+                  const dM=pr_?met_-cM(pr_.m):null,dB=pr_?bem_-cB(pr_.b):null,dN=pr_?men_-cN(pr_.n):null;
+                  const overall=met_>=17&&bem_>13&&men_>=8?"Elite":met_>=13&&bem_>=10&&men_>=5?"Ok":"Atenção";
+                  const ovC=overall==="Elite"?S.pur:overall==="Ok"?S.grn:S.red;
+                  return <tr key={i} style={{ background:i===shFilt.length-1?G[50]:"transparent" }}>
+                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}`, fontWeight:i===shFilt.length-1?600:400 }}>{s.month}</td>
+                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}`, color:sM(met_).c, fontWeight:600 }}>{met_}/24</td>
+                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}`, fontSize:10 }}>{dM===null?"—":<span style={{ color:dM>0?S.grn:dM<0?S.red:"#aaa", fontWeight:600 }}>{dM>0?"+":""}{dM}</span>}</td>
+                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}`, color:sB(bem_).c, fontWeight:600 }}>{bem_}/18</td>
+                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}`, fontSize:10 }}>{dB===null?"—":<span style={{ color:dB>0?S.grn:dB<0?S.red:"#aaa", fontWeight:600 }}>{dB>0?"+":""}{dB}</span>}</td>
+                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}`, color:sN(men_).c, fontWeight:600 }}>{men_}/9</td>
+                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}`, fontSize:10 }}>{dN===null?"—":<span style={{ color:dN>0?S.grn:dN<0?S.red:"#aaa", fontWeight:600 }}>{dN>0?"+":""}{dN}</span>}</td>
+                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}` }}><Bg color={ovC} bg={ovC+"22"}>{overall}</Bg></td>
+                  </tr>;
+                })}</tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Plano de ação */}
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px" }}>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:8 }}>🎯 Plano de ação</div>
+          {met<=12 && <div style={{ padding:"6px 10px", background:S.redBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🔴 <strong>Metabólico crítico</strong> — Protocolo de ataque + detox</div>}
+          {be<10   && <div style={{ padding:"6px 10px", background:S.redBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🔴 <strong>Bem-estar crítico</strong> — Intervenção médica imediata</div>}
+          {met>=13 && met<=16 && <div style={{ padding:"6px 10px", background:S.yelBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🟡 <strong>Transição metabólica</strong> — Ajustes terapêuticos</div>}
+          {met>=17 && <div style={{ padding:"6px 10px", background:S.grnBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🟢 <strong>Saudável</strong> — Manutenção + evolução contínua</div>}
+          {mn<=4   && <div style={{ padding:"6px 10px", background:S.redBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🔴 <strong>Risco de recaída</strong> — Sessão individual com psicóloga</div>}
+          {be>=10&&be<=13&&met>=17 && <div style={{ padding:"6px 10px", background:S.yelBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🟡 <strong>Bem-estar em alerta</strong> — Nutricionista intervém</div>}
+        </div>
+
+        {/* Rodapé */}
+        <div style={{ textAlign:"center", padding:"12px 0", borderTop:`1px solid ${G[200]}`, fontSize:10, color:"#bbb" }}>
+          Dra. Mariana Wogel — Nutróloga<br/>Praça São Sebastião 119 — Três Rios, RJ<br/>
+          <span style={{ fontSize:9, color:"#ddd" }}>Relatório gerado em {format(new Date(),"dd/MM/yyyy 'às' HH:mm")}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
    DETALHE DO PACIENTE (5 abas)
 ═══════════════════════════════════════════════ */
-function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onLog, onAddScoreMonth }) {
+function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onLog, onAddScoreMonth, onChangePlan, activityLog }) {
   const SC = genSC([p]);
   const [tab, setTab]   = useState("ficha");
   const plan = PLANS.find(x=>x.id===p.plan);
@@ -592,6 +772,8 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
   const [es, setEs]   = useState(sc ? JSON.parse(JSON.stringify(sc)) : null);
   const [sw, setSw]   = useState(p.week);
   const [showWeighIn, setShowWeighIn] = useState(false);
+  const [showChangePlan, setShowChangePlan] = useState(false);
+  const [newPlanId, setNewPlanId] = useState(p.plan);
 
   const tabs = [
     {k:"ficha",    l:"Ficha",     i:User},
@@ -633,7 +815,10 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
             <Mt value={`${Math.round((p.iw-p.cw)/p.iw*100)}%`} label="Perda total"/>
           </div>
           <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px", fontSize:12 }}>
-            <div style={{ fontWeight:600, color:G[800], marginBottom:8 }}>Dados do paciente</div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+              <span style={{ fontWeight:600, color:G[800] }}>Dados do paciente</span>
+              <button onClick={()=>setShowChangePlan(true)} style={{ fontSize:10, padding:"4px 10px", borderRadius:6, background:G[50], border:`1px solid ${G[300]}`, color:G[700], cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>✏️ Alterar plano</button>
+            </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"6px 16px" }}>
               <div><span style={{ color:"#aaa" }}>Telefone: </span>{p.phone}</div>
               <div><span style={{ color:"#aaa" }}>Plano: </span>{plan?.name}</div>
@@ -641,6 +826,32 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
               <div><span style={{ color:"#aaa" }}>Ciclo: </span>{p.cycle}</div>
             </div>
           </div>
+          {showChangePlan && (
+            <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+              <div style={{ background:"#fff", width:"100%", maxWidth:380, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+                <div style={{ fontSize:15, fontWeight:700, color:G[800], marginBottom:6 }}>Alterar plano</div>
+                <div style={{ fontSize:12, color:"#aaa", marginBottom:16 }}>O histórico já realizado é mantido. A mudança vale a partir da semana atual.</div>
+                <div style={{ marginBottom:16 }}>
+                  <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:4, display:"block" }}>Novo plano</label>
+                  <select value={newPlanId} onChange={e=>setNewPlanId(e.target.value)}
+                    style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", background:"#fff" }}>
+                    {PLANS.map(pl=><option key={pl.id} value={pl.id}>{pl.name}</option>)}
+                  </select>
+                </div>
+                {newPlanId !== p.plan && (
+                  <div style={{ padding:"8px 12px", background:G[50], borderRadius:8, marginBottom:14, fontSize:11, color:G[700] }}>
+                    {PLANS.find(x=>x.id===p.plan)?.name} → <strong>{PLANS.find(x=>x.id===newPlanId)?.name}</strong>
+                  </div>
+                )}
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={()=>{ if(newPlanId!==p.plan){ onChangePlan&&onChangePlan(newPlanId); onLog&&onLog({action:"upgrade",patientId:p.id,patientName:p.name,detail:`Plano alterado: ${PLANS.find(x=>x.id===p.plan)?.name} → ${PLANS.find(x=>x.id===newPlanId)?.name}`}); } setShowChangePlan(false); }}
+                    style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Confirmar</button>
+                  <button onClick={()=>setShowChangePlan(false)}
+                    style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+                </div>
+              </div>
+            </div>
+          )}
           {/* Composição corporal */}
           {(() => {
             const last = p.history[p.history.length-1];
@@ -697,6 +908,30 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
             <SBar label="Bem-estar"         total={be}  max={18} fn={sB}/>
             <SBar label="Blindagem mental"  total={mn}  max={9}  fn={sN}/>
           </div>
+          {/* Histórico de atividades do paciente */}
+          {activityLog && activityLog.filter(a=>a.patientId===p.id).length > 0 && (
+            <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+              <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Histórico de atividades</div>
+              {activityLog.filter(a=>a.patientId===p.id).sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,20).map((a,i,arr) => {
+                const icons = { pesagem:Weight, scores:Activity, cadastro:UserPlus, checklist:ClipboardCheck, scores_mensais:TrendingUp, upgrade:RefreshCw };
+                const colors = { pesagem:S.blue, scores:S.pur, cadastro:S.grn, checklist:G[500], scores_mensais:S.pur, upgrade:S.yel };
+                const Icon = icons[a.action] || FileText;
+                const col  = colors[a.action] || G[600];
+                return (
+                  <div key={i} style={{ display:"flex", gap:10, padding:"8px 0", borderBottom:i<arr.length-1?`1px solid ${G[50]}`:"none" }}>
+                    <div style={{ width:28, height:28, borderRadius:"50%", background:col+"22", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      <Icon size={13} color={col}/>
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:500, color:G[800] }}>{a.memberName||"Equipe"}</div>
+                      <div style={{ fontSize:11, color:"#aaa" }}>{a.detail}</div>
+                    </div>
+                    <div style={{ fontSize:10, color:"#bbb", whiteSpace:"nowrap" }}>{format(new Date(a.date),"dd/MM HH:mm")}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
             <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Curva de peso</div>
             <ResponsiveContainer width="100%" height={160}>
@@ -723,7 +958,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
           {cl[sw] && (
             <div>
               {/* Alerta Consulta + Hilab para Platinum Plus e Gold Plus */}
-              {(sw===8||sw===16) && (plan?.id==="platinum_plus"||plan?.id==="gold_plus") && (
+              {(sw===8||sw===16) && (
                 <div style={{ background:`linear-gradient(135deg,${G[700]},${G[800]})`, borderRadius:10, padding:"14px 16px", marginBottom:10, color:"#fff" }}>
                   <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
                     <div style={{ width:32, height:32, borderRadius:"50%", background:"rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -751,9 +986,15 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
                 <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>
                   Semana {sw}
-                  {(sw===8||sw===16) && tier<=2 && <Bg color={G[700]} bg={G[100]}>{sw===8?"Exames Hilab":"Exames Hilab + Consulta"}</Bg>}
+                  {(sw===8||sw===16) && <Bg color={G[700]} bg={G[100]}>{sw===8?"Exames Hilab":"Exames Hilab + Consulta"}</Bg>}
                 </span>
-                {cl[sw].dose && <span style={{ fontSize:11, color:G[600] }}>Dose: {cl[sw].dose}</span>}
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:11, color:G[600] }}>Tirzepatida:</span>
+                  <select value={cl[sw].dose||"2.5mg"} onChange={e=>setCl(pr=>({...pr,[sw]:{...pr[sw],dose:e.target.value}}))}
+                    style={{ padding:"3px 8px", borderRadius:6, border:`1px solid ${G[300]}`, fontSize:11, fontFamily:"inherit", background:G[50], color:G[700], fontWeight:600, cursor:"pointer" }}>
+                    {["2.5mg","5mg","7.5mg","10mg"].map(d=><option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
               </div>
               <div style={{ display:"grid", gridTemplateColumns:mob?"1fr":"1fr 1fr", gap:"0 16px" }}>
                 <div>
@@ -773,8 +1014,8 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                   {cl[sw].tr?.map((t,i) => <CI key={i} checked={t} label={`Treino ${i+1}`} onToggle={()=>{ setCl(pr => { const nt=[...pr[sw].tr]; nt[i]=!nt[i]; return {...pr,[sw]:{...pr[sw],tr:nt}}; }); }}/>)}
                   {cl[sw].nu && <>
                     <div style={{ fontSize:11, fontWeight:600, color:G[700], padding:"5px 0", borderBottom:`1px solid ${G[200]}`, marginTop:4 }}>Nutricionista</div>
-                    <CI checked={cl[sw].nu.av} label={ft.nf?"Avaliação completa":"Controle adesão"} onToggle={()=>setCl(pr=>({...pr,[sw]:{...pr[sw],nu:{...pr[sw].nu,av:!pr[sw].nu.av}}}))}/>
-                    {ft.nf && <CI checked={cl[sw].nu.pl} label="Plano alimentar" onToggle={()=>setCl(pr=>({...pr,[sw]:{...pr[sw],nu:{...pr[sw].nu,pl:!pr[sw].nu.pl}}}))}/>}
+                    <CI checked={cl[sw].nu.av} label="Avaliação nutricional" onToggle={()=>setCl(pr=>({...pr,[sw]:{...pr[sw],nu:{...pr[sw].nu,av:!pr[sw].nu.av}}}))}/>
+                    <CI checked={cl[sw].nu.pl} label="Plano alimentar enviado" onToggle={()=>setCl(pr=>({...pr,[sw]:{...pr[sw],nu:{...pr[sw].nu,pl:!pr[sw].nu.pl}}}))}/>
                     <CI checked={cl[sw].nu.sc} label="Preencher scores" onToggle={()=>setCl(pr=>({...pr,[sw]:{...pr[sw],nu:{...pr[sw].nu,sc:!pr[sw].nu.sc}}}))}/>
                   </>}
                 </div>
@@ -994,39 +1235,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
       )}
 
       {/* ABA RELATÓRIO */}
-      {tab==="rel" && (
-        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:mob?"12px":"18px 22px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14, flexWrap:"wrap", gap:6 }}>
-            <span style={{ fontSize:14, fontWeight:600, color:G[800] }}>Relatório</span>
-            <button onClick={()=>{ const el=document.getElementById(`rel-${p.id}`); if(el) html2pdf().set({margin:10,filename:`relatorio-${p.name}.pdf`,html2canvas:{scale:2},jsPDF:{format:"a4"}}).from(el).save(); }} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 16px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}><Download size={13}/>PDF</button>
-          </div>
-          <div id={`rel-${p.id}`} style={{ border:`1px solid ${G[200]}`, borderRadius:8, padding:mob?10:16 }}>
-            <div style={{ textAlign:"center", paddingBottom:12, borderBottom:`2px solid ${G[300]}`, marginBottom:14 }}>
-              <div style={{ fontSize:16, fontWeight:700, color:G[800] }}>Relatório de Acompanhamento</div>
-              <div style={{ fontSize:11, color:G[600] }}>Programa Ser Livre — Instituto Dra. Mariana Wogel</div>
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:mob?"1fr":"1fr 1fr", gap:6, marginBottom:14, fontSize:12 }}>
-              <div><strong>Paciente:</strong> {p.name}</div>
-              <div><strong>Plano:</strong> {plan?.name}</div>
-              <div><strong>Ciclo:</strong> {p.cycle} — S{p.week}/16</div>
-              <div><strong>Data:</strong> {fmt(TODAY)}/2026</div>
-            </div>
-            {[{l:"Saúde metabólica",t:met,m:24,fn:sM},{l:"Bem-estar",t:be,m:18,fn:sB},{l:"Mental",t:mn,m:9,fn:sN}].map((s,i) => {
-              const st=s.fn(s.t);
-              return <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"7px 0", borderBottom:`1px solid ${G[100]}`, flexWrap:"wrap", gap:3 }}><span style={{ fontSize:12 }}>{s.l}</span><Bg color={st.c} bg={st.bg}>{st.e} {s.t}/{s.m} — {st.l}</Bg></div>;
-            })}
-            <div style={{ marginTop:14, fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Plano de ação</div>
-            {met<=12 && <div style={{ padding:"6px 10px", background:S.redBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🔴 <strong>Metabólico crítico</strong> — Protocolo de ataque + detox</div>}
-            {be<10   && <div style={{ padding:"6px 10px", background:S.redBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🔴 <strong>Bem-estar crítico</strong> — Intervenção médica</div>}
-            {met>=13 && met<=16 && <div style={{ padding:"6px 10px", background:S.yelBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🟡 <strong>Transição metabólica</strong> — Ajustes terapêuticos</div>}
-            {met>=17 && <div style={{ padding:"6px 10px", background:S.grnBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🟢 <strong>Saudável</strong> — Manutenção + evolução</div>}
-            {mn<=4   && <div style={{ padding:"6px 10px", background:S.redBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🔴 <strong>Risco recaída</strong> — Sessão individual psicóloga</div>}
-            <div style={{ marginTop:16, borderTop:`1px solid ${G[200]}`, paddingTop:10, textAlign:"center", fontSize:10, color:"#ccc" }}>
-              Dra. Mariana Wogel — Nutróloga<br/>Praça São Sebastião 119 — Três Rios, RJ
-            </div>
-          </div>
-        </div>
-      )}
+      {tab==="rel" && <RelTab p={p} mob={mob} plan={plan} met={met} be={be} mn={mn}/>}
     </div>
   );
 }
@@ -1090,6 +1299,7 @@ function Alerts({  ps, onSel }) {
 function TeamP({ team, setTeam, ta, setTa, activityLog }) {
   const [sel,        setSel]        = useState(null); // membro selecionado
   const [showNew,    setShowNew]    = useState(false);
+  const [editMember, setEditMember] = useState(null);
 
   if (sel) {
     const m   = team.find(x=>x.id===sel);
@@ -1099,7 +1309,8 @@ function TeamP({ team, setTeam, ta, setTa, activityLog }) {
       <div>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16 }}>
           <div onClick={()=>setSel(null)} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50] }}><ArrowLeft size={16} color={G[700]}/></div>
-          <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>{m.name}</span>
+          <span style={{ fontSize:15, fontWeight:700, color:G[800], flex:1 }}>{m.name}</span>
+          <button onClick={()=>setEditMember({...m})} style={{ fontSize:11, padding:"5px 12px", borderRadius:7, background:G[50], border:`1px solid ${G[300]}`, color:G[700], cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>✏️ Editar</button>
         </div>
         <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"16px", marginBottom:12, display:"flex", alignItems:"center", gap:14 }}>
           <Av name={m.name} size={56} src={ta[m.id]} onEdit={url=>setTa(pr=>({...pr,[m.id]:url}))}/>
@@ -1133,6 +1344,41 @@ function TeamP({ team, setTeam, ta, setTa, activityLog }) {
             );
           })}
         </div>
+        {editMember && (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+            <div style={{ background:"#fff", width:"100%", maxWidth:420, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+                <span style={{ fontSize:16, fontWeight:700, color:G[800] }}>Editar membro</span>
+                <div onClick={()=>setEditMember(null)} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50] }}>✕</div>
+              </div>
+              <div style={{ marginBottom:12 }}>
+                <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Função / Nível de acesso</label>
+                <select value={editMember.role} onChange={e=>{ const ri=ROLES.find(r=>r.id===e.target.value); setEditMember(pr=>({...pr,role:e.target.value,label:ri?.label||e.target.value,color:ri?.color||pr.color})); }}
+                  style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", background:"#fff" }}>
+                  {ROLES.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}
+                </select>
+              </div>
+              {[
+                { label:"Nome completo",  key:"name",      type:"text"  },
+                { label:"Especialidade",  key:"specialty", type:"text"  },
+                { label:"E-mail",         key:"email",     type:"email" },
+                { label:"Telefone",       key:"phone",     type:"tel"   },
+              ].map(f => (
+                <div key={f.key} style={{ marginBottom:12 }}>
+                  <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
+                  <input type={f.type} value={editMember[f.key]||""} onChange={e=>setEditMember(pr=>({...pr,[f.key]:e.target.value}))}
+                    style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+                </div>
+              ))}
+              <div style={{ display:"flex", gap:8, marginTop:4 }}>
+                <button onClick={()=>{ setTeam(prev=>prev.map(x=>x.id===editMember.id?editMember:x)); setEditMember(null); }}
+                  style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
+                <button onClick={()=>setEditMember(null)}
+                  style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1566,6 +1812,8 @@ export default function App() {
         onSaveScores={scores=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,history:[...x.history.slice(0,-1),{...x.history[x.history.length-1],...scores}]}:x)); addLog({action:"scores",patientId:sp.id,patientName:sp.name,detail:"Scores metabólicos atualizados"}); }}
         onAddWeighIn={entry=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,cw:entry.weight,history:[...x.history,entry]}:x)); }}
         onAddScoreMonth={({m,b,n})=>{ const mo=format(new Date(),"MMM/yy"); setPs(prev=>prev.map(x=>x.id===sp.id?{...x,scoreHistory:[...(x.scoreHistory||[]),{id:Date.now(),date:new Date().toISOString(),month:mo,m,b,n}]}:x)); }}
+        onChangePlan={newPlan=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,plan:newPlan}:x)); }}
+        activityLog={activityLog}
         onLog={addLog}/>}
       {page==="alert" && <Alerts ps={ps} onSel={go}/>}
       {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog}/>}
