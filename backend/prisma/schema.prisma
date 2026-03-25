@@ -262,3 +262,15 @@ enum AlertSeverity {
   RED     // Vermelho — avisar Dra. Mariana
   YELLOW  // Amarelo — equipe ficar atenta
 }
+
+// ──────────────────────────────────────────────
+// STATE BLOB — Persistência do estado do frontend
+// Armazena JSON arbitrário indexado por chave.
+// Permite que múltiplos usuários compartilhem os
+// mesmos dados independente do dispositivo/browser.
+// ──────────────────────────────────────────────
+model StateBlob {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}

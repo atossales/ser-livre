@@ -40,7 +40,8 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // ── Configurações ──
-app.use(cors());
+app.use(cors({ origin: '*', methods: ['GET','PUT','POST','DELETE','OPTIONS'], allowedHeaders: ['Content-Type','Authorization'] }));
+app.options('*', cors());
 app.use(express.json());
 
 // Upload de avatares
@@ -441,6 +442,33 @@ app.post('/api/seed', async (req, res) => {
     });
 
     res.json({ message: 'Seed criado com sucesso! Senha padrão: 123456' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════
+//  STATE BLOB — Persistência do frontend
+// GET  /api/state/:key  → retorna JSON salvo
+// PUT  /api/state/:key  → salva JSON
+// ════════════════════════════════════════════
+app.get('/api/state/:key', async (req, res) => {
+  try {
+    const blob = await prisma.stateBlob.findUnique({ where: { key: req.params.key } });
+    res.json(blob ? blob.value : null);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/state/:key', express.json({ limit: '20mb' }), async (req, res) => {
+  try {
+    await prisma.stateBlob.upsert({
+      where: { key: req.params.key },
+      create: { key: req.params.key, value: req.body },
+      update: { value: req.body }
+    });
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

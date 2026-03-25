@@ -612,7 +612,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
           <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Relatório Clínico</span>
           <div style={{ display:"flex", gap:6 }}>
             <button onClick={()=>setRelComp(!relComp)} style={{ fontSize:11, padding:"6px 12px", borderRadius:7, background:relComp?G[600]:G[50], color:relComp?"#fff":G[700], border:`1px solid ${G[300]}`, cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>📊 Comparativo</button>
-            <button onClick={()=>{ const el=document.getElementById(`rel-${p.id}`); if(el) html2pdf().set({margin:8,filename:`relatorio-${p.name}.pdf`,html2canvas:{scale:2,useCORS:true},jsPDF:{format:"a4",orientation:"portrait"}}).from(el).save(); }} style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:7, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}><Download size={13}/>PDF</button>
+            <button onClick={()=>{ const el=document.getElementById(`rel-${p.id}`); if(el) html2pdf().set({margin:[10,10,10,10],filename:`relatorio-${p.name}.pdf`,html2canvas:{scale:2,useCORS:true,letterRendering:true},jsPDF:{format:"a4",orientation:"portrait",unit:"mm"},pagebreak:{mode:["css","legacy"],before:".pdf-page-break",avoid:".pdf-no-break"}}).from(el).save(); }} style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:7, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}><Download size={13}/>PDF</button>
           </div>
         </div>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -632,15 +632,23 @@ function RelTab({ p, mob, plan, met, be, mn }) {
       <div id={`rel-${p.id}`} style={{ display:"flex", flexDirection:"column", gap:10 }}>
 
         {/* Cabeçalho */}
-        <div style={{ background:`linear-gradient(135deg,${G[700]},${G[900]})`, borderRadius:12, padding:"20px 18px", color:"#fff" }}>
-          <div style={{ fontSize:11, opacity:0.5, marginBottom:4 }}>Programa Ser Livre — Instituto Dra. Mariana Wogel</div>
+        <div style={{ background:`linear-gradient(135deg,${G[700]},${G[900]})`, borderRadius:12, padding:"20px 18px", color:"#fff", pageBreakInside:"avoid" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:12 }}>
+            <img src="https://i.imgur.com/iI43uBa.png" alt="Instituto Dra. Mariana Wogel"
+              onError={e=>{ e.target.src="https://i.imgur.com/iI43uBa.jpg"; }}
+              style={{ width:52, height:52, borderRadius:8, objectFit:"contain", background:"rgba(255,255,255,0.1)", padding:4 }}/>
+            <div>
+              <div style={{ fontSize:11, opacity:0.5 }}>Programa Ser Livre</div>
+              <div style={{ fontSize:14, fontWeight:700, opacity:0.9 }}>Instituto Dra. Mariana Wogel</div>
+            </div>
+          </div>
           <div style={{ fontSize:19, fontWeight:700 }}>Relatório Clínico</div>
           <div style={{ fontSize:12, opacity:0.6, marginTop:2 }}>{p.name} · Emitido em {fmt(TODAY)}/2026</div>
           {(relDe||relAte) && <div style={{ fontSize:10, opacity:0.4, marginTop:2 }}>Período: {relDe||"início"} → {relAte||"hoje"}</div>}
         </div>
 
         {/* Dados da ficha */}
-        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px" }}>
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
           <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>📋 Dados do paciente</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"6px 20px", fontSize:12 }}>
             <div><span style={{ color:"#aaa" }}>Nome: </span><strong>{p.name}</strong></div>
@@ -653,7 +661,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
         </div>
 
         {/* Evolução de peso */}
-        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px" }}>
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
           <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>⚖️ Evolução de peso</div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:10 }}>
             <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.iw}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Peso inicial</div></div>
@@ -673,7 +681,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
         </div>
 
         {/* Composição corporal atual */}
-        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px" }}>
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
           <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>🧬 Composição corporal atual</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
             <div style={{ textAlign:"center", padding:"10px 8px", background:S.blueBg, borderRadius:8 }}><div style={{ fontSize:18, fontWeight:700, color:S.blue }}>{mmLast.toFixed(1)}kg</div><div style={{ fontSize:10, color:S.blue, fontWeight:600 }}>Massa Magra</div><div style={{ fontSize:10, color:"#aaa" }}>{(mmLast/totComp*100).toFixed(1)}% do total</div></div>
@@ -686,7 +694,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
         </div>
 
         {/* Scores atuais */}
-        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px" }}>
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
           <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>📊 Scores clínicos atuais</div>
           {[{l:"Saúde metabólica",t:met,m:24,fn:sM},{l:"Bem-estar",t:be,m:18,fn:sB},{l:"Blindagem mental",t:mn,m:9,fn:sN}].map((s,i) => {
             const st=s.fn(s.t);
@@ -696,7 +704,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
 
         {/* Comparativo mensal (se ativado e houver dados) */}
         {relComp && shFilt.length >= 2 && (
-          <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px" }}>
+          <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
             <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>📈 Comparativo: {comp1.month} → {comp2.month}</div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
               {[{l:"Metabólico",c1:cM(comp1.m),c2:cM(comp2.m),max:24,fn:sM},{l:"Bem-estar",c1:cB(comp1.b),c2:cB(comp2.b),max:18,fn:sB},{l:"Mental",c1:cN(comp1.n),c2:cN(comp2.n),max:9,fn:sN}].map((s,i)=>{
@@ -735,7 +743,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
         )}
 
         {/* Plano de ação */}
-        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px" }}>
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
           <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:8 }}>🎯 Plano de ação</div>
           {met<=12 && <div style={{ padding:"6px 10px", background:S.redBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🔴 <strong>Metabólico crítico</strong> — Protocolo de ataque + detox</div>}
           {be<10   && <div style={{ padding:"6px 10px", background:S.redBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🔴 <strong>Bem-estar crítico</strong> — Intervenção médica imediata</div>}
@@ -1743,12 +1751,42 @@ function Login({ onLogin }) {
    APP PRINCIPAL
 ═══════════════════════════════════════════════ */
 export default function App() {
-  const [ps, setPs] = useState(() => { try { return JSON.parse(localStorage.getItem('sl_ps')) || MOCK_PATIENTS; } catch(e) { return MOCK_PATIENTS; } });
-  const [team, setTeam] = useState(() => { try { return JSON.parse(localStorage.getItem('sl_team')) || MOCK_TEAM; } catch(e) { return MOCK_TEAM; } });
-  const [activityLog, setActivityLog] = useState(() => { try { return JSON.parse(localStorage.getItem('sl_activity')) || MOCK_ACTIVITY; } catch(e) { return MOCK_ACTIVITY; } });
-  useEffect(() => { localStorage.setItem('sl_ps', JSON.stringify(ps)); }, [ps]);
-  useEffect(() => { localStorage.setItem('sl_team', JSON.stringify(team)); }, [team]);
-  useEffect(() => { localStorage.setItem('sl_activity', JSON.stringify(activityLog)); }, [activityLog]);
+  const [ps,          setPs]          = useState(MOCK_PATIENTS);
+  const [team,        setTeam]        = useState(MOCK_TEAM);
+  const [activityLog, setActivityLog] = useState(MOCK_ACTIVITY);
+  const [dbLoaded,    setDbLoaded]    = useState(false);
+  const saveTimer = useRef({});
+
+  // Carrega dados do servidor na inicialização
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/state/patients').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/state/team').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/state/activity').then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([pData, tData, aData]) => {
+      if (Array.isArray(pData) && pData.length > 0) setPs(pData);
+      if (Array.isArray(tData) && tData.length > 0) setTeam(tData);
+      if (Array.isArray(aData) && aData.length > 0) setActivityLog(aData);
+      setDbLoaded(true);
+    }).catch(() => setDbLoaded(true));
+  }, []);
+
+  // Salva no servidor com debounce de 1.5s
+  const saveToApi = useCallback((key, data) => {
+    if (!dbLoaded) return;
+    clearTimeout(saveTimer.current[key]);
+    saveTimer.current[key] = setTimeout(() => {
+      fetch(`/api/state/${key}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }).catch(() => {});
+    }, 1500);
+  }, [dbLoaded]);
+
+  useEffect(() => { saveToApi('patients',  ps);          }, [ps,          saveToApi]);
+  useEffect(() => { saveToApi('team',      team);        }, [team,        saveToApi]);
+  useEffect(() => { saveToApi('activity',  activityLog); }, [activityLog, saveToApi]);
 
   const addLog = ({ action, patientId, patientName, detail }) => {
     const entry = { id: Date.now(), date: new Date().toISOString(), memberId:1, memberName:"Dra. Mariana Wogel", action, patientId, patientName, detail };
@@ -1778,6 +1816,20 @@ export default function App() {
     {k:"alert", l:"Alertas",   i:AlertTriangle},
     {k:"team",  l:"Equipe",    i:Shield},
   ];
+
+  /* ─── Carregando dados do servidor ─── */
+  if (!dbLoaded) return (
+    <div style={{ minHeight:"100vh", background:`linear-gradient(135deg,${G[800]},${G[900]})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ textAlign:"center", color:"#fff" }}>
+        <div style={{ width:48, height:48, borderRadius:"50%", background:`linear-gradient(135deg,${G[400]},${G[600]})`, margin:"0 auto 16px", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Shield size={22} color="#fff"/>
+        </div>
+        <div style={{ fontSize:16, fontWeight:600 }}>Programa Ser Livre</div>
+        <div style={{ fontSize:12, opacity:0.5, marginTop:6 }}>Carregando dados...</div>
+        <div style={{ width:32, height:3, background:G[400], borderRadius:2, margin:"14px auto 0", animation:"pulse 1s infinite" }}/>
+      </div>
+    </div>
+  );
 
   /* ─── Não logado ─── */
   if (!lg) return <Login onLogin={m => { setLg(true); setMode(m); }}/>;
