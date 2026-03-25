@@ -64,9 +64,26 @@ const MOCK_HIST_BASE = [
 ];
 
 const MOCK_PATIENTS = [
-  { id: 1, name: "Ana Carolina Silva", plan: "platinum_plus", cycle: 1, week: 6, birthDate: "1992-05-15", phone: "(24) 99912-3456", sd: "2025-11-01", iw: 89.5, cw: 84.2, history: MOCK_HIST_BASE, nr: addDays(new Date(), 2).toISOString(), eng: 92, pass: "123" },
-  { id: 2, name: "Beatriz Oliveira", plan: "gold", cycle: 1, week: 12, birthDate: "1983-11-20", phone: "(24) 99834-5678", sd: "2025-09-15", iw: 95.0, cw: 86.8, history: MOCK_HIST_BASE.map(h => ({...h, weight: h.weight+5})), nr: addDays(new Date(), 5).toISOString(), eng: 88, pass: "123" },
-  { id: 3, name: "Camila Ferreira", plan: "essential", cycle: 2, week: 3, birthDate: format(addDays(new Date(), 5), "yyyy-MM-dd"), phone: "(24) 99756-7890", sd: "2025-06-01", iw: 78.3, cw: 71.1, history: MOCK_HIST_BASE.map(h => ({...h, weight: h.weight-10, met:12, be:10})), nr: new Date().toISOString(), eng: 95, pass: "123" },
+  { id: 1, name: "Ana Carolina Silva", plan: "platinum_plus", cycle: 1, week: 6, birthDate: "1992-05-15", phone: "(24) 99912-3456", sd: "2025-11-01", iw: 89.5, cw: 84.2, history: MOCK_HIST_BASE, nr: addDays(new Date(), 2).toISOString(), eng: 92, pass: "123", scoreHistory: [
+    { id:1, date: subDays(new Date(), 120).toISOString(), month:"Nov/25", m:{gv:1,mm:2,pcr:2,fer:1,hb:1,au:2,th:1,ca:2}, b:{gi:2,lib:1,dor:2,au:1,en:2,so:2}, n:{co:1,ge:1,mv:2} },
+    { id:2, date: subDays(new Date(), 90).toISOString(),  month:"Dez/25", m:{gv:2,mm:2,pcr:2,fer:2,hb:2,au:2,th:2,ca:2}, b:{gi:2,lib:2,dor:2,au:2,en:2,so:3}, n:{co:2,ge:2,mv:2} },
+    { id:3, date: subDays(new Date(), 60).toISOString(),  month:"Jan/26", m:{gv:2,mm:2,pcr:3,fer:2,hb:2,au:3,th:2,ca:2}, b:{gi:3,lib:2,dor:3,au:2,en:2,so:3}, n:{co:2,ge:2,mv:3} },
+    { id:4, date: subDays(new Date(), 30).toISOString(),  month:"Fev/26", m:{gv:3,mm:2,pcr:3,fer:3,hb:2,au:3,th:2,ca:3}, b:{gi:3,lib:3,dor:3,au:2,en:3,so:3}, n:{co:2,ge:3,mv:2} },
+    { id:5, date: new Date().toISOString(),               month:"Mar/26", m:{gv:3,mm:3,pcr:2,fer:3,hb:3,au:2,th:3,ca:2}, b:{gi:3,lib:2,dor:2,au:3,en:3,so:2}, n:{co:3,ge:2,mv:3} },
+  ] },
+  { id: 2, name: "Beatriz Oliveira", plan: "gold", cycle: 1, week: 12, birthDate: "1983-11-20", phone: "(24) 99834-5678", sd: "2025-09-15", iw: 95.0, cw: 86.8, history: MOCK_HIST_BASE.map(h => ({...h, weight: h.weight+5})), nr: addDays(new Date(), 5).toISOString(), eng: 88, pass: "123", scoreHistory: [
+    { id:1, date: subDays(new Date(), 150).toISOString(), month:"Set/25", m:{gv:1,mm:1,pcr:1,fer:1,hb:1,au:1,th:1,ca:1}, b:{gi:1,lib:1,dor:1,au:1,en:1,so:2}, n:{co:1,ge:1,mv:1} },
+    { id:2, date: subDays(new Date(), 120).toISOString(), month:"Out/25", m:{gv:2,mm:1,pcr:2,fer:2,hb:1,au:2,th:1,ca:2}, b:{gi:2,lib:1,dor:2,au:2,en:1,so:2}, n:{co:2,ge:1,mv:2} },
+    { id:3, date: subDays(new Date(), 90).toISOString(),  month:"Nov/25", m:{gv:2,mm:2,pcr:2,fer:2,hb:2,au:2,th:2,ca:2}, b:{gi:2,lib:2,dor:2,au:2,en:2,so:3}, n:{co:2,ge:2,mv:2} },
+    { id:4, date: subDays(new Date(), 60).toISOString(),  month:"Dez/25", m:{gv:2,mm:2,pcr:3,fer:2,hb:2,au:2,th:2,ca:2}, b:{gi:3,lib:2,dor:2,au:2,en:2,so:3}, n:{co:2,ge:2,mv:2} },
+    { id:5, date: subDays(new Date(), 30).toISOString(),  month:"Jan/26", m:{gv:3,mm:2,pcr:3,fer:3,hb:2,au:3,th:2,ca:3}, b:{gi:3,lib:2,dor:3,au:3,en:3,so:3}, n:{co:3,ge:2,mv:3} },
+    { id:6, date: new Date().toISOString(),               month:"Fev/26", m:{gv:3,mm:3,pcr:3,fer:3,hb:3,au:3,th:3,ca:2}, b:{gi:3,lib:3,dor:3,au:3,en:3,so:3}, n:{co:3,ge:3,mv:2} },
+  ] },
+  { id: 3, name: "Camila Ferreira", plan: "essential", cycle: 2, week: 3, birthDate: format(addDays(new Date(), 5), "yyyy-MM-dd"), phone: "(24) 99756-7890", sd: "2025-06-01", iw: 78.3, cw: 71.1, history: MOCK_HIST_BASE.map(h => ({...h, weight: h.weight-10, met:12, be:10})), nr: new Date().toISOString(), eng: 95, pass: "123", scoreHistory: [
+    { id:1, date: subDays(new Date(), 60).toISOString(),  month:"Jan/26", m:{gv:1,mm:1,pcr:1,fer:1,hb:1,au:1,th:1,ca:1}, b:{gi:1,lib:1,dor:1,au:1,en:1,so:1}, n:{co:1,ge:1,mv:1} },
+    { id:2, date: subDays(new Date(), 30).toISOString(),  month:"Fev/26", m:{gv:2,mm:1,pcr:2,fer:1,hb:2,au:2,th:1,ca:2}, b:{gi:2,lib:1,dor:2,au:2,en:2,so:2}, n:{co:2,ge:1,mv:2} },
+    { id:3, date: new Date().toISOString(),               month:"Mar/26", m:{gv:2,mm:2,pcr:2,fer:2,hb:2,au:2,th:2,ca:2}, b:{gi:2,lib:2,dor:2,au:2,en:2,so:2}, n:{co:2,ge:2,mv:2} },
+  ] },
 ];
 
 const MOCK_TEAM = [
@@ -561,7 +578,7 @@ function PList({  ps, onSel, mob, onAdd }) {
 /* ════════════════════════════════════════════
    DETALHE DO PACIENTE (5 abas)
 ═══════════════════════════════════════════════ */
-function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onLog }) {
+function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onLog, onAddScoreMonth }) {
   const SC = genSC([p]);
   const [tab, setTab]   = useState("ficha");
   const plan = PLANS.find(x=>x.id===p.plan);
@@ -577,11 +594,12 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
   const [showWeighIn, setShowWeighIn] = useState(false);
 
   const tabs = [
-    {k:"ficha",   l:"Ficha",     i:User},
-    {k:"jornada", l:"Jornada",   i:ClipboardCheck},
-    {k:"scores",  l:"Scores",    i:Activity},
-    {k:"graficos",l:"Gráficos",  i:BarChart3},
-    {k:"rel",     l:"Relatório", i:FileText},
+    {k:"ficha",    l:"Ficha",     i:User},
+    {k:"jornada",  l:"Jornada",   i:ClipboardCheck},
+    {k:"scores",   l:"Scores",    i:Activity},
+    {k:"evolucao", l:"Evolução",  i:TrendingUp},
+    {k:"graficos", l:"Gráficos",  i:BarChart3},
+    {k:"rel",      l:"Relatório", i:FileText},
   ];
 
   return (
@@ -703,9 +721,38 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
             })}
           </div>
           {cl[sw] && (
+            <div>
+              {/* Alerta Consulta + Hilab para Platinum Plus e Gold Plus */}
+              {(sw===8||sw===16) && (plan?.id==="platinum_plus"||plan?.id==="gold_plus") && (
+                <div style={{ background:`linear-gradient(135deg,${G[700]},${G[800]})`, borderRadius:10, padding:"14px 16px", marginBottom:10, color:"#fff" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                    <div style={{ width:32, height:32, borderRadius:"50%", background:"rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      <FileText size={16} color={G[300]}/>
+                    </div>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:700 }}>⚕️ Semana {sw} — Protocolo obrigatório</div>
+                      <div style={{ fontSize:10, opacity:0.6 }}>{plan?.name}</div>
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", background:"rgba(255,255,255,0.1)", borderRadius:7 }}>
+                      <Check size={13} color={G[300]}/><span style={{ fontSize:12 }}>Exames Hilab completos</span>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", background:"rgba(255,255,255,0.1)", borderRadius:7 }}>
+                      <Check size={13} color={G[300]}/><span style={{ fontSize:12 }}>Consulta médica com Dra. Mariana</span>
+                    </div>
+                    {sw===16 && <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", background:"rgba(255,255,255,0.1)", borderRadius:7 }}>
+                      <Check size={13} color={G[300]}/><span style={{ fontSize:12 }}>Encerramento e avaliação final do ciclo</span>
+                    </div>}
+                  </div>
+                </div>
+              )}
             <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
-                <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Semana {sw} {(sw===8||sw===16) && <Bg color={G[700]} bg={G[100]}>Exames{sw===16?" + Consulta":""}</Bg>}</span>
+                <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>
+                  Semana {sw}
+                  {(sw===8||sw===16) && tier<=2 && <Bg color={G[700]} bg={G[100]}>{sw===8?"Exames Hilab":"Exames Hilab + Consulta"}</Bg>}
+                </span>
                 {cl[sw].dose && <span style={{ fontSize:11, color:G[600] }}>Dose: {cl[sw].dose}</span>}
               </div>
               <div style={{ display:"grid", gridTemplateColumns:mob?"1fr":"1fr 1fr", gap:"0 16px" }}>
@@ -732,6 +779,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                   </>}
                 </div>
               </div>
+            </div>
             </div>
           )}
         </div>
@@ -775,7 +823,140 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
             <SI label="Movimento"              value={es.n.mv} onChange={v=>setEs(pr=>({...pr,n:{...pr.n,mv:v}}))} opts={[{v:1,l:"Sedentário"},{v:2,l:"Parcial"},{v:3,l:"Completo"}]}/>
             {(()=>{ const t=cN(es.n); const s=sN(t); return <div style={{ marginTop:10, padding:"8px 12px", borderRadius:8, background:s.bg, display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600, color:s.c, fontSize:12 }}>{s.e} {t}/9 — {s.l}</span><span style={{ fontSize:11, color:s.c }}>{s.d}</span></div>; })()}
           </div>
-          <button onClick={()=>{ onSaveScores && onSaveScores(es); alert("✅ Scores salvos!"); }} style={{ width:"100%", padding:"11px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>💾 Salvar scores</button>
+          <button onClick={()=>{ onSaveScores && onSaveScores(es); onAddScoreMonth && onAddScoreMonth({m:es.m,b:es.b,n:es.n}); alert("✅ Scores salvos e registrados na evolução mensal!"); }} style={{ width:"100%", padding:"11px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>💾 Salvar scores (registra no histórico mensal)</button>
+        </div>
+      )}
+
+      {/* ABA EVOLUÇÃO MENSAL */}
+      {tab==="evolucao" && (
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          {(() => {
+            const sh = p.scoreHistory || [];
+            if (sh.length === 0) return (
+              <div style={{ textAlign:"center", padding:40, color:"#ccc" }}>
+                <Activity size={32} color="#ddd" style={{ margin:"0 auto 8px", display:"block" }}/>
+                <div style={{ fontSize:13 }}>Nenhuma avaliação mensal registrada</div>
+                <div style={{ fontSize:11, marginTop:4 }}>Salve os scores mensalmente na aba Scores</div>
+              </div>
+            );
+            // Dados para gráficos
+            const chartData = sh.map(s => ({
+              mo:   s.month,
+              met:  cM(s.m),
+              bem:  cB(s.b),
+              men:  cN(s.n),
+              pctMet: +((cM(s.m)/24*100).toFixed(1)),
+              pctBem: +((cB(s.b)/18*100).toFixed(1)),
+              pctMen: +((cN(s.n)/9*100).toFixed(1)),
+            }));
+            const last   = sh[sh.length-1];
+            const prev   = sh.length>1 ? sh[sh.length-2] : null;
+            const dMet   = prev ? cM(last.m)-cM(prev.m) : 0;
+            const dBem   = prev ? cB(last.b)-cB(prev.b) : 0;
+            const dMen   = prev ? cN(last.n)-cN(prev.n) : 0;
+
+            return (
+              <>
+                {/* Cards resumo último vs anterior */}
+                <div style={{ display:"grid", gridTemplateColumns:mob?"1fr":"1fr 1fr 1fr", gap:8 }}>
+                  {[
+                    { l:"Metabólico", cur:cM(last.m), max:24, fn:sM, d:dMet },
+                    { l:"Bem-estar",  cur:cB(last.b), max:18, fn:sB, d:dBem },
+                    { l:"Mental",     cur:cN(last.n), max:9,  fn:sN, d:dMen },
+                  ].map((s,i) => {
+                    const st = s.fn(s.cur);
+                    return (
+                      <div key={i} style={{ background:st.bg, borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
+                        <div style={{ fontSize:11, color:st.c, fontWeight:600, marginBottom:4 }}>{s.l}</div>
+                        <div style={{ fontSize:28, fontWeight:700, color:st.c }}>{s.cur}</div>
+                        <div style={{ fontSize:9, color:"#aaa" }}>de {s.max}</div>
+                        <div style={{ fontSize:11, fontWeight:600, marginTop:4, color:s.d>0?S.grn:s.d<0?S.red:"#aaa" }}>
+                          {s.d>0?"+":""}{s.d!==0?s.d:"—"} vs mês ant.
+                        </div>
+                        <Bg color={st.c} bg="rgba(255,255,255,0.6)">{st.e} {st.l}</Bg>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Gráfico evolução normalizada (%) */}
+                <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:2 }}>Evolução mensal — % do máximo</div>
+                  <div style={{ fontSize:10, color:"#aaa", marginBottom:8 }}>Comparação normalizada entre os 3 pilares</div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/>
+                      <XAxis dataKey="mo" tick={{fontSize:10,fill:G[700]}}/>
+                      <YAxis domain={[0,100]} unit="%" tick={{fontSize:9,fill:"#bbb"}}/>
+                      <Tooltip contentStyle={{borderRadius:8,fontSize:11}} formatter={(v)=>`${v}%`}/>
+                      <Legend iconType="circle" wrapperStyle={{fontSize:10}}/>
+                      <Line type="monotone" dataKey="pctMet" name="Metabólico" stroke={G[500]}  strokeWidth={2.5} dot={{r:4,fill:G[500]}}  activeDot={{r:6}}/>
+                      <Line type="monotone" dataKey="pctBem" name="Bem-estar"  stroke={S.grn}   strokeWidth={2.5} dot={{r:4,fill:S.grn}}   activeDot={{r:6}}/>
+                      <Line type="monotone" dataKey="pctMen" name="Mental"     stroke={S.pur}   strokeWidth={2.5} dot={{r:4,fill:S.pur}}   activeDot={{r:6}}/>
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Gráfico scores absolutos */}
+                <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:2 }}>Scores absolutos por mês</div>
+                  <div style={{ fontSize:10, color:"#aaa", marginBottom:8 }}>Metabólico (0-24) · Bem-estar (0-18) · Mental (0-9)</div>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={chartData} barCategoryGap="25%">
+                      <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/>
+                      <XAxis dataKey="mo" tick={{fontSize:10,fill:G[700]}}/>
+                      <YAxis tick={{fontSize:9,fill:"#bbb"}}/>
+                      <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/>
+                      <Legend iconType="circle" wrapperStyle={{fontSize:10}}/>
+                      <Bar dataKey="met" name="Metabólico" fill={G[400]}  radius={[4,4,0,0]}/>
+                      <Bar dataKey="bem" name="Bem-estar"  fill={S.grn}   radius={[4,4,0,0]}/>
+                      <Bar dataKey="men" name="Mental"     fill={S.pur}   radius={[4,4,0,0]}/>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Tabela comparativa mensal */}
+                <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Tabela comparativa mensal</div>
+                  <div style={{ overflowX:"auto" }}>
+                    <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:0, fontSize:11, minWidth:520 }}>
+                      <thead>
+                        <tr>{["Mês","Metabólico","Δ","Status Met","Bem-estar","Δ","Mental","Δ","Status Geral"].map(h=>
+                          <th key={h} style={{ textAlign:"left", padding:"6px 8px", borderBottom:`2px solid ${G[300]}`, color:G[700], fontWeight:600, fontSize:9, textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
+                        )}</tr>
+                      </thead>
+                      <tbody>
+                        {sh.map((s,i) => {
+                          const met = cM(s.m), bem = cB(s.b), men = cN(s.n);
+                          const pm_ = i>0 ? sh[i-1] : null;
+                          const dM = pm_ ? met-cM(pm_.m) : null;
+                          const dB = pm_ ? bem-cB(pm_.b) : null;
+                          const dN = pm_ ? men-cN(pm_.n) : null;
+                          const smSt = sM(met), sbSt = sB(bem), snSt = sN(men);
+                          const overall = met>=17&&bem>13&&men>=8?"Elite":met>=13&&bem>=10&&men>=5?"Ok":"Atenção";
+                          const ovColor = overall==="Elite"?S.pur:overall==="Ok"?S.grn:S.red;
+                          const isLast = i===sh.length-1;
+                          return (
+                            <tr key={i} style={{ background:isLast?G[50]:"transparent" }}>
+                              <td style={{ padding:"7px 8px", borderBottom:`1px solid ${G[100]}`, fontWeight:isLast?700:400 }}>{s.month}</td>
+                              <td style={{ padding:"7px 8px", borderBottom:`1px solid ${G[100]}` }}><span style={{ color:smSt.c, fontWeight:600 }}>{met}/24</span></td>
+                              <td style={{ padding:"7px 8px", borderBottom:`1px solid ${G[100]}`, fontSize:10 }}>{dM===null?"—":<span style={{ color:dM>0?S.grn:dM<0?S.red:"#aaa", fontWeight:600 }}>{dM>0?"+":""}{dM}</span>}</td>
+                              <td style={{ padding:"7px 8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={smSt.c} bg={smSt.bg}>{smSt.e}{smSt.l}</Bg></td>
+                              <td style={{ padding:"7px 8px", borderBottom:`1px solid ${G[100]}` }}><span style={{ color:sbSt.c, fontWeight:600 }}>{bem}/18</span></td>
+                              <td style={{ padding:"7px 8px", borderBottom:`1px solid ${G[100]}`, fontSize:10 }}>{dB===null?"—":<span style={{ color:dB>0?S.grn:dB<0?S.red:"#aaa", fontWeight:600 }}>{dB>0?"+":""}{dB}</span>}</td>
+                              <td style={{ padding:"7px 8px", borderBottom:`1px solid ${G[100]}` }}><span style={{ color:snSt.c, fontWeight:600 }}>{men}/9</span></td>
+                              <td style={{ padding:"7px 8px", borderBottom:`1px solid ${G[100]}`, fontSize:10 }}>{dN===null?"—":<span style={{ color:dN>0?S.grn:dN<0?S.red:"#aaa", fontWeight:600 }}>{dN>0?"+":""}{dN}</span>}</td>
+                              <td style={{ padding:"7px 8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={ovColor} bg={ovColor+"22"}>{overall}</Bg></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 
@@ -1384,6 +1565,7 @@ export default function App() {
       {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}
         onSaveScores={scores=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,history:[...x.history.slice(0,-1),{...x.history[x.history.length-1],...scores}]}:x)); addLog({action:"scores",patientId:sp.id,patientName:sp.name,detail:"Scores metabólicos atualizados"}); }}
         onAddWeighIn={entry=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,cw:entry.weight,history:[...x.history,entry]}:x)); }}
+        onAddScoreMonth={({m,b,n})=>{ const mo=format(new Date(),"MMM/yy"); setPs(prev=>prev.map(x=>x.id===sp.id?{...x,scoreHistory:[...(x.scoreHistory||[]),{id:Date.now(),date:new Date().toISOString(),month:mo,m,b,n}]}:x)); }}
         onLog={addLog}/>}
       {page==="alert" && <Alerts ps={ps} onSel={go}/>}
       {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog}/>}
