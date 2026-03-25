@@ -1,4 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import html2pdf from "html2pdf.js";
+import { subDays, isAfter, format, differenceInYears, setYear, isBefore, addDays, parseISO, differenceInDays } from "date-fns";
+import * as Lucide from "lucide-react";
 import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
