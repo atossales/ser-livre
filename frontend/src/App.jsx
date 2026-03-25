@@ -112,8 +112,7 @@ const HIST = id => [1,2,3,4].map((m,i) => ({
   mn:  Math.min(9,  Math.max(3,   4 + id%2   + i  )),
 }));
 
-const genCL = (pid, tier) => {
-  const p = ps.find(x => x.id===pid);
+const genCL = (p, tier) => {
   const w = p?.week || 1;
   const f = TIER[tier];
   const r = {};
@@ -502,7 +501,7 @@ function PList({  ps, onSel, mob }) {
    DETALHE DO PACIENTE (5 abas)
 ═══════════════════════════════════════════════ */
 function PDetail({  p, onBack, mob, avs, setAvs }) {
-  const SC = genSC(ps);
+  const SC = genSC([p]);
   const [tab, setTab]   = useState("ficha");
   const plan = PLANS.find(x=>x.id===p.plan);
   const tier = plan?.tier || 1;
@@ -511,7 +510,7 @@ function PDetail({  p, onBack, mob, avs, setAvs }) {
   const met  = cM(sc?.m); const be = cB(sc?.b); const mn = cN(sc?.n);
   const pm   = sc ? pM(sc.m) : {comp:0,infl:0,glic:0,card:0};
   const hist = HIST(p.id);
-  const [cl, setCl]   = useState(() => genCL(p.id, tier));
+  const [cl, setCl]   = useState(() => genCL(p, tier));
   const [es, setEs]   = useState(sc ? JSON.parse(JSON.stringify(sc)) : null);
   const [sw, setSw]   = useState(p.week);
 
@@ -814,7 +813,7 @@ function TeamP({ ta, setTa }) {
    PORTAL DO PACIENTE (Read-only)
 ═══════════════════════════════════════════════ */
 function Portal({  p, av, setAv }) {
-  const SC = genSC(ps);
+  const SC = genSC([p]);
   const sc   = SC[p.id];
   const met  = cM(sc?.m); const be=cB(sc?.b); const mn=cN(sc?.n);
   const pm   = sc ? pM(sc.m) : {comp:0,infl:0,glic:0,card:0};
