@@ -570,7 +570,7 @@ function PDetail({  p, onBack, mob, avs, setAvs }) {
           <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
             <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Curva de peso</div>
             <ResponsiveContainer width="100%" height={160}>
-              <AreaChart data={p.history.map((h,i)=>({s:`S${i+1}`,w:h.weight}))((w,i)=>({s:`S${i+1}`,w}))}>
+              <AreaChart data={p.history.map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
                 <defs><linearGradient id="gpp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={G[500]} stopOpacity={0.25}/><stop offset="100%" stopColor={G[500]} stopOpacity={0}/></linearGradient></defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis domain={["dataMin-2","dataMax+1"]} tick={{fontSize:9,fill:"#bbb"}}/>
                 <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Area type="monotone" dataKey="w" stroke={G[500]} fill="url(#gpp)" strokeWidth={2}/>
@@ -793,10 +793,10 @@ function Alerts({  ps, onSel }) {
 /* ════════════════════════════════════════════
    EQUIPE
 ═══════════════════════════════════════════════ */
-function TeamP({ ta, setTa }) {
+function TeamP({ team, ta, setTa }) {
   return (
     <div>
-      {TEAM.map(m => (
+      {team.map(m => (
         <div key={m.id} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:12 }}>
           <Av name={m.name} size={46} src={ta[m.id]} onEdit={url=>setTa(pr=>({...pr,[m.id]:url}))}/>
           <div style={{ flex:1, minWidth:0 }}>
@@ -884,7 +884,7 @@ function Portal({  p, av, setAv }) {
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
         <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Curva de peso</div>
         <ResponsiveContainer width="100%" height={160}>
-          <AreaChart data={p.history.map((h,i)=>({s:`S${i+1}`,w:h.weight}))((w,i)=>({s:`S${i+1}`,w}))}>
+          <AreaChart data={p.history.map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
             <defs><linearGradient id="gpt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.grn} stopOpacity={0.2}/><stop offset="100%" stopColor={S.grn} stopOpacity={0}/></linearGradient></defs>
             <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis domain={["dataMin-2","dataMax+1"]} tick={{fontSize:9,fill:"#bbb"}}/>
             <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Area type="monotone" dataKey="w" stroke={S.grn} fill="url(#gpt)" strokeWidth={2}/>
@@ -1025,7 +1025,7 @@ export default function App() {
       {page==="pat"   && <PList ps={ps} onSel={go} mob={mob}/>}
       {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}/>}
       {page==="alert" && <Alerts ps={ps} onSel={go}/>}
-      {page==="team"  && <TeamP ta={ta} setTa={setTa}/>}
+      {page==="team"  && <TeamP team={team} ta={ta} setTa={setTa}/>}
     </>
   );
 
