@@ -103,7 +103,8 @@ const sN = t => t>=8  ? {l:"Elite",      c:S.pur, bg:S.purBg, e:"🟣", d:"Alta"
 /* ════════════════════════════════════════════
    HELPERS GERAIS
 ═══════════════════════════════════════════════ */
-const ini = n => n.split(" ").filter((_,i,a) => i===0||i===a.length-1).map(w=>w[0]).join("").toUpperCase();
+const ini     = n => n.split(" ").filter((_,i,a) => i===0||i===a.length-1).map(w=>w[0]).join("").toUpperCase();
+const calcAge = bd => { try { return differenceInYears(new Date(), parseISO(bd)); } catch { return "?"; } };
 
 const HIST = id => [1,2,3,4].map((m,i) => ({
   mo:`Mês ${m}`,
@@ -458,7 +459,7 @@ function Dash({  ps, onSel, mob }) {
 /* ════════════════════════════════════════════
    LISTA DE PACIENTES
 ═══════════════════════════════════════════════ */
-function PList({  ps, onSel, mob }) {
+function PList({  ps, onSel, mob, onAdd }) {
   const SC = genSC(ps);
   const [q,  setQ]  = useState("");
   const [fp, setFp] = useState("all");
@@ -466,6 +467,9 @@ function PList({  ps, onSel, mob }) {
 
   return (
     <div>
+      <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap", alignItems:"center" }}>
+        <button onClick={onAdd} style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}><Plus size={13}/>Novo paciente</button>
+      </div>
       <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
         <div style={{ flex:1, minWidth:140, position:"relative" }}>
           <Search size={14} color="#bbb" style={{ position:"absolute", left:10, top:10 }}/>
@@ -484,7 +488,7 @@ function PList({  ps, onSel, mob }) {
               <Av name={p.name} size={mob?36:40}/>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
-                <div style={{ fontSize:10, color:"#aaa" }}>{PLANS.find(x=>x.id===p.plan)?.name} • S{p.week}/16 • {p.age}a</div>
+                <div style={{ fontSize:10, color:"#aaa" }}>{PLANS.find(x=>x.id===p.plan)?.name} • S{p.week}/16 • {calcAge(p.birthDate)}a</div>
               </div>
               <div style={{ textAlign:"right" }}>
                 <Bg color={ms.c} bg={ms.bg}>{ms.e}{ms.l}</Bg>
@@ -501,7 +505,7 @@ function PList({  ps, onSel, mob }) {
 /* ════════════════════════════════════════════
    DETALHE DO PACIENTE (5 abas)
 ═══════════════════════════════════════════════ */
-function PDetail({  p, onBack, mob, avs, setAvs }) {
+function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores }) {
   const SC = genSC([p]);
   const [tab, setTab]   = useState("ficha");
   const plan = PLANS.find(x=>x.id===p.plan);
@@ -531,7 +535,7 @@ function PDetail({  p, onBack, mob, avs, setAvs }) {
         <Av name={p.name} size={40} src={avs[p.id]} onEdit={url=>setAvs(prev=>({...prev,[p.id]:url}))}/>
         <div style={{ minWidth:0 }}>
           <div style={{ fontSize:mob?15:17, fontWeight:700, color:G[800], overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
-          <div style={{ fontSize:11, color:"#aaa" }}>{plan?.name} • {p.age}a • C{p.cycle} • S{p.week}/16</div>
+          <div style={{ fontSize:11, color:"#aaa" }}>{plan?.name} • {calcAge(p.birthDate)}a • C{p.cycle} • S{p.week}/16</div>
         </div>
       </div>
 
@@ -613,9 +617,9 @@ function PDetail({  p, onBack, mob, avs, setAvs }) {
                   {cl[sw].tr?.map((t,i) => <CI key={i} checked={t} label={`Treino ${i+1}`} onToggle={()=>{ setCl(pr => { const nt=[...pr[sw].tr]; nt[i]=!nt[i]; return {...pr,[sw]:{...pr[sw],tr:nt}}; }); }}/>)}
                   {cl[sw].nu && <>
                     <div style={{ fontSize:11, fontWeight:600, color:G[700], padding:"5px 0", borderBottom:`1px solid ${G[200]}`, marginTop:4 }}>Nutricionista</div>
-                    <CI checked={cl[sw].nu.av} label={ft.nf?"Avaliação completa":"Controle adesão"} onToggle={()=>{}}/>
-                    {ft.nf && <CI checked={cl[sw].nu.pl} label="Plano alimentar" onToggle={()=>{}}/>}
-                    <CI checked={cl[sw].nu.sc} label="Preencher scores" onToggle={()=>{}}/>
+                    <CI checked={cl[sw].nu.av} label={ft.nf?"Avaliação completa":"Controle adesão"} onToggle={()=>setCl(pr=>({...pr,[sw]:{...pr[sw],nu:{...pr[sw].nu,av:!pr[sw].nu.av}}}))}/>
+                    {ft.nf && <CI checked={cl[sw].nu.pl} label="Plano alimentar" onToggle={()=>setCl(pr=>({...pr,[sw]:{...pr[sw],nu:{...pr[sw].nu,pl:!pr[sw].nu.pl}}}))}/>}
+                    <CI checked={cl[sw].nu.sc} label="Preencher scores" onToggle={()=>setCl(pr=>({...pr,[sw]:{...pr[sw],nu:{...pr[sw].nu,sc:!pr[sw].nu.sc}}}))}/>
                   </>}
                 </div>
               </div>
@@ -662,7 +666,7 @@ function PDetail({  p, onBack, mob, avs, setAvs }) {
             <SI label="Movimento"              value={es.n.mv} onChange={v=>setEs(pr=>({...pr,n:{...pr.n,mv:v}}))} opts={[{v:1,l:"Sedentário"},{v:2,l:"Parcial"},{v:3,l:"Completo"}]}/>
             {(()=>{ const t=cN(es.n); const s=sN(t); return <div style={{ marginTop:10, padding:"8px 12px", borderRadius:8, background:s.bg, display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600, color:s.c, fontSize:12 }}>{s.e} {t}/9 — {s.l}</span><span style={{ fontSize:11, color:s.c }}>{s.d}</span></div>; })()}
           </div>
-          <button onClick={()=>alert("Scores salvos com sucesso!")} style={{ width:"100%", padding:"11px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>Salvar scores</button>
+          <button onClick={()=>{ onSaveScores && onSaveScores(es); alert("✅ Scores salvos!"); }} style={{ width:"100%", padding:"11px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>💾 Salvar scores</button>
         </div>
       )}
 
@@ -704,9 +708,9 @@ function PDetail({  p, onBack, mob, avs, setAvs }) {
         <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:mob?"12px":"18px 22px" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14, flexWrap:"wrap", gap:6 }}>
             <span style={{ fontSize:14, fontWeight:600, color:G[800] }}>Relatório</span>
-            <button style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 16px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}><Download size={13}/>PDF</button>
+            <button onClick={()=>{ const el=document.getElementById(`rel-${p.id}`); if(el) html2pdf().set({margin:10,filename:`relatorio-${p.name}.pdf`,html2canvas:{scale:2},jsPDF:{format:"a4"}}).from(el).save(); }} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 16px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}><Download size={13}/>PDF</button>
           </div>
-          <div style={{ border:`1px solid ${G[200]}`, borderRadius:8, padding:mob?10:16 }}>
+          <div id={`rel-${p.id}`} style={{ border:`1px solid ${G[200]}`, borderRadius:8, padding:mob?10:16 }}>
             <div style={{ textAlign:"center", paddingBottom:12, borderBottom:`2px solid ${G[300]}`, marginBottom:14 }}>
               <div style={{ fontSize:16, fontWeight:700, color:G[800] }}>Relatório de Acompanhamento</div>
               <div style={{ fontSize:11, color:G[600] }}>Programa Ser Livre — Instituto Dra. Mariana Wogel</div>
@@ -917,10 +921,69 @@ function Portal({  p, av, setAv }) {
         </ResponsiveContainer>
       </div>
 
-      <button style={{ width:"100%", padding:"10px", borderRadius:8, background:"transparent", border:`1px solid ${G[300]}`, color:G[700], fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+      <button onClick={()=>{ const el=document.getElementById(`portal-rel-${p.id}`); if(el) html2pdf().set({margin:10,filename:`meu-relatorio.pdf`,html2canvas:{scale:2},jsPDF:{format:"a4"}}).from(el).save(); }} style={{ width:"100%", padding:"10px", borderRadius:8, background:"transparent", border:`1px solid ${G[300]}`, color:G[700], fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
         <Download size={13}/>Baixar relatório PDF
       </button>
       <div style={{ textAlign:"center", fontSize:9, color:"#ccc", padding:"6px 0" }}>Instituto Dra. Mariana Wogel • Dados preenchidos pela equipe clínica</div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
+   MODAL NOVO PACIENTE
+═══════════════════════════════════════════════ */
+function NewLeadModal({ onClose, onSave }) {
+  const [nome, setNome]   = useState("");
+  const [nasc, setNasc]   = useState("");
+  const [peso, setPeso]   = useState("");
+  const [phone, setPhone] = useState("");
+  const [plan, setPlan]   = useState("essential");
+
+  const handleSave = () => {
+    const w = parseFloat(peso);
+    if (!nome.trim() || !nasc || !w) return alert("Preencha nome, nascimento e peso.");
+    const np = {
+      id: Date.now(), name: nome.trim(), plan, cycle: 1, week: 1,
+      birthDate: nasc, phone, sd: new Date().toISOString(),
+      iw: w, cw: w,
+      history: [{ date: new Date().toISOString(), weight: w, m: MOCK_HIST_BASE[0].m, b: MOCK_HIST_BASE[0].b, n: MOCK_HIST_BASE[0].n }],
+      nr: addDays(new Date(), 7).toISOString(), eng: 100, pass: "123"
+    };
+    onSave(np);
+    onClose();
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:420, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+          <span style={{ fontSize:16, fontWeight:700, color:G[800] }}>Novo paciente</span>
+          <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50] }}>✕</div>
+        </div>
+        {[
+          { label:"Nome completo", val:nome, set:setNome, type:"text", ph:"Ana Carolina Silva" },
+          { label:"Data de nascimento", val:nasc, set:setNasc, type:"date", ph:"" },
+          { label:"Peso inicial (kg)", val:peso, set:setPeso, type:"number", ph:"80.5" },
+          { label:"Telefone", val:phone, set:setPhone, type:"tel", ph:"(24) 99999-0000" },
+        ].map(f => (
+          <div key={f.label} style={{ marginBottom:12 }}>
+            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
+            <input type={f.type} value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph}
+              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+          </div>
+        ))}
+        <div style={{ marginBottom:16 }}>
+          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Plano</label>
+          <select value={plan} onChange={e=>setPlan(e.target.value)}
+            style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", background:"#fff" }}>
+            {PLANS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={handleSave} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
+          <button onClick={onClose} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -979,6 +1042,7 @@ export default function App() {
   const [so,   setSo]   = useState(true);
   const [avs,  setAvs]  = useState({});
   const [ta,   setTa]   = useState({});
+  const [nl,   setNl]   = useState(false);
   const mob = useMob();
   const sp  = ps.find(p => p.id===sid);
   const go  = id => { setSid(id); setPage("det"); };
@@ -1022,8 +1086,8 @@ export default function App() {
   const content = (
     <>
       {page==="dash"  && <Dash  ps={ps} onSel={go} mob={mob}/>}
-      {page==="pat"   && <PList ps={ps} onSel={go} mob={mob}/>}
-      {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}/>}
+      {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)}/>}
+      {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs} onSaveScores={scores=>setPs(prev=>prev.map(x=>x.id===sp.id?{...x,history:[...x.history.slice(0,-1),{...x.history[x.history.length-1],...scores}]}:x))}/>}
       {page==="alert" && <Alerts ps={ps} onSel={go}/>}
       {page==="team"  && <TeamP team={team} ta={ta} setTa={setTa}/>}
     </>
@@ -1048,31 +1112,7 @@ export default function App() {
       </div>
       {/* Conteúdo */}
       <div style={{ padding:"10px 12px" }}>
-  {/* MODAL NOVO LEAD */}
-  {mode === "new_lead" && (
-    <div style={{ position:"fixed", top:0, left:0, width:"100vw", height:"100vh", background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <div style={{ background:"#fff", width:400, padding:24, borderRadius:12 }}>
-        <h3 style={{ margin:"0 0 15px", fontSize:18 }}>Novo Lead</h3>
-        <input id="nl_nome" placeholder="Nome Completo" style={{ width:"100%", padding:10, marginBottom:10, borderRadius:6, border:`1px solid ${G[300]}` }}/>
-        <input id="nl_nasc" type="date" style={{ width:"100%", padding:10, marginBottom:10, borderRadius:6, border:`1px solid ${G[300]}` }}/>
-        <input id="nl_peso" type="number" placeholder="Peso Inicial" style={{ width:"100%", padding:10, marginBottom:15, borderRadius:6, border:`1px solid ${G[300]}` }}/>
-        <div style={{ display:"flex", gap:10 }}>
-          <button onClick={()=>{
-            const n = document.getElementById("nl_nome").value;
-            const b = document.getElementById("nl_nasc").value;
-            const w = parseFloat(document.getElementById("nl_peso").value);
-            if(n && b && w){
-              const np = { id: Date.now(), name: n, plan: "essential", cycle: 1, week: 1, birthDate: b, phone: "", sd: new Date().toISOString(), iw: w, cw: w, history: [{date: new Date().toISOString(), weight: w, m:MOCK_HIST_BASE[0].m, b:MOCK_HIST_BASE[0].b, n:MOCK_HIST_BASE[0].n}], nr: addDays(new Date(), 7).toISOString(), eng: 100, pass: "123" };
-              setPs([...ps, np]);
-              setMode("admin");
-            }
-          }} style={{ flex:1, padding:10, background:G[800], color:"#fff", border:"none", borderRadius:6, cursor:"pointer" }}>Salvar</button>
-          <button onClick={()=>setMode("admin")} style={{ flex:1, padding:10, background:G[200], color:G[800], border:"none", borderRadius:6, cursor:"pointer" }}>Cancelar</button>
-        </div>
-      </div>
-    </div>
-  )}
-
+        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>setPs(prev=>[...prev,np])}/>}
         {content}</div>
       {/* Bottom nav */}
       <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:`1px solid ${G[200]}`, display:"flex", justifyContent:"space-around", padding:"6px 0 max(6px,env(safe-area-inset-bottom))", zIndex:50 }}>
@@ -1138,31 +1178,7 @@ export default function App() {
           </div>
         </div>
         
-  {/* MODAL NOVO LEAD */}
-  {mode === "new_lead" && (
-    <div style={{ position:"fixed", top:0, left:0, width:"100vw", height:"100vh", background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <div style={{ background:"#fff", width:400, padding:24, borderRadius:12 }}>
-        <h3 style={{ margin:"0 0 15px", fontSize:18 }}>Novo Lead</h3>
-        <input id="nl_nome" placeholder="Nome Completo" style={{ width:"100%", padding:10, marginBottom:10, borderRadius:6, border:`1px solid ${G[300]}` }}/>
-        <input id="nl_nasc" type="date" style={{ width:"100%", padding:10, marginBottom:10, borderRadius:6, border:`1px solid ${G[300]}` }}/>
-        <input id="nl_peso" type="number" placeholder="Peso Inicial" style={{ width:"100%", padding:10, marginBottom:15, borderRadius:6, border:`1px solid ${G[300]}` }}/>
-        <div style={{ display:"flex", gap:10 }}>
-          <button onClick={()=>{
-            const n = document.getElementById("nl_nome").value;
-            const b = document.getElementById("nl_nasc").value;
-            const w = parseFloat(document.getElementById("nl_peso").value);
-            if(n && b && w){
-              const np = { id: Date.now(), name: n, plan: "essential", cycle: 1, week: 1, birthDate: b, phone: "", sd: new Date().toISOString(), iw: w, cw: w, history: [{date: new Date().toISOString(), weight: w, m:MOCK_HIST_BASE[0].m, b:MOCK_HIST_BASE[0].b, n:MOCK_HIST_BASE[0].n}], nr: addDays(new Date(), 7).toISOString(), eng: 100, pass: "123" };
-              setPs([...ps, np]);
-              setMode("admin");
-            }
-          }} style={{ flex:1, padding:10, background:G[800], color:"#fff", border:"none", borderRadius:6, cursor:"pointer" }}>Salvar</button>
-          <button onClick={()=>setMode("admin")} style={{ flex:1, padding:10, background:G[200], color:G[800], border:"none", borderRadius:6, cursor:"pointer" }}>Cancelar</button>
-        </div>
-      </div>
-    </div>
-  )}
-
+        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>setPs(prev=>[...prev,np])}/>}
         {content}
       </div>
     </div>
