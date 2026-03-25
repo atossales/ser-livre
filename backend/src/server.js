@@ -363,6 +363,59 @@ app.put('/api/users/:id/avatar', authRequired, upload.single('avatar'), async (r
   }
 });
 
+
+// ════════════════════════════════════════════
+//  EQUIPE (STAFF)
+// ════════════════════════════════════════════
+app.get('/api/staff', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
+  try {
+    const staff = await prisma.user.findMany({
+      where: { role: { not: 'PACIENTE' } },
+      select: { id: true, name: true, email: true, role: true, phone: true, avatarUrl: true, active: true }
+    });
+    res.json(staff);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/users/:id/role', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
+  try {
+    const { role, active } = req.body;
+    const user = await prisma.user.update({
+      where: { id: parseInt(req.params.id) },
+      data: { role, active }
+    });
+    res.json({ message: 'Permissões atualizadas' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════
+//  SENHA (PASSWORD)
+// ════════════════════════════════════════════
+app.put('/api/users/:id/password', authRequired, async (req, res) => {
+  try {
+    // Apenas o próprio usuário ou ADMIN pode alterar
+    if (req.user.role !== 'ADMIN' && req.user.id !== parseInt(req.params.id)) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
+    const { password } = req.body;
+    const hashed = await bcrypt.hash(password, 10);
+    
+    await prisma.user.update({
+      where: { id: parseInt(req.params.id) },
+      data: { password: hashed }
+    });
+    
+    res.json({ message: 'Senha atualizada com sucesso' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ════════════════════════════════════════════
 //  SEED INICIAL (cria dados de demo)
 // ════════════════════════════════════════════

@@ -9,7 +9,7 @@ import {
   LogOut, ChevronRight, Search, Bell, TrendingUp, TrendingDown,
   Activity, Shield, User, Lock, Menu, Check, Download,
   ArrowLeft, Camera, Star, Award, Flame, Target, Zap, BarChart3,
-  Trophy, CalendarDays, Weight, Home, Heart, Brain, RefreshCw
+  Trophy, CalendarDays, Weight, Home, Heart, Brain, RefreshCw, Plus, Settings, UserPlus, Cake, FileSignature, Save
 } from "lucide-react";
 
 /* ════════════════════════════════════════════
@@ -52,41 +52,30 @@ const fmt   = d => `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()
 const addD  = (d, n) => { const r = new Date(d); r.setDate(r.getDate()+n); return r; };
 
 /* ════════════════════════════════════════════
-   DADOS MOCK — PACIENTES
+   DADOS INICIAIS (PERSISTENTES)
 ═══════════════════════════════════════════════ */
-const PAT = [
-  { id:1, name:"Ana Carolina Silva",  plan:"platinum_plus",  cycle:1, week:6,  age:34, phone:"(24) 99912-3456", sd:"01/11/2025", iw:89.5,  cw:84.2, ww:[89.5,88.8,87.9,87.1,85.8,84.2], nr:addD(TODAY,2),  eng:92 },
-  { id:2, name:"Beatriz Oliveira",    plan:"gold",           cycle:1, week:12, age:41, phone:"(24) 99834-5678", sd:"15/09/2025", iw:95.0,  cw:86.8, ww:[95,94.1,93,91.8,90.5,89.8,89,88.3,87.9,87.5,87.1,86.8], nr:addD(TODAY,5),  eng:88 },
-  { id:3, name:"Camila Ferreira",     plan:"essential",      cycle:2, week:3,  age:29, phone:"(24) 99756-7890", sd:"01/06/2025", iw:78.3,  cw:71.1, ww:[78.3,76.5,74.2], nr:addD(TODAY,0),  eng:95 },
-  { id:4, name:"Daniela Costa",       plan:"platinum",       cycle:1, week:9,  age:37, phone:"(24) 99678-1234", sd:"01/10/2025", iw:102.0, cw:93.5, ww:[102,100.8,99.5,98.2,97,96.1,95.3,94.5,93.5], nr:addD(TODAY,1),  eng:78 },
-  { id:5, name:"Eduarda Mendes",      plan:"gold_plus",      cycle:1, week:4,  age:45, phone:"(24) 99590-2345", sd:"20/11/2025", iw:88.0,  cw:85.6, ww:[88,87.2,86.5,85.6], nr:addD(TODAY,8),  eng:65 },
-  { id:6, name:"Fernanda Lima",       plan:"essential_plus", cycle:1, week:15, age:33, phone:"(24) 99412-3456", sd:"10/08/2025", iw:74.5,  cw:68.9, ww:[74.5,73.8,73.2,72.5,72,71.4,71,70.6,70.2,69.8,69.5,69.3,69.1,68.9,68.9], nr:addD(TODAY,-1), eng:97 },
-  { id:7, name:"Gabriela Rocha",      plan:"platinum_plus",  cycle:1, week:10, age:38, phone:"(24) 99333-1111", sd:"10/10/2025", iw:91.2,  cw:83.4, ww:[91.2,90.1,89,87.8,86.9,86,85.3,84.5,83.9,83.4], nr:addD(TODAY,3),  eng:91 },
-  { id:8, name:"Helena Martins",      plan:"gold",           cycle:1, week:7,  age:52, phone:"(24) 99222-2222", sd:"05/11/2025", iw:98.7,  cw:93.1, ww:[98.7,97.8,97,96.2,95.3,94.2,93.1], nr:addD(TODAY,4),  eng:72 },
+const MOCK_HIST_BASE = [
+  { date: subDays(new Date(), 42).toISOString(), weight: 89.5, m:{gv:2,mm:2,pcr:3,fer:2,hb:2,au:3,th:2,ca:2}, b:{gi:2,lib:2,dor:3,au:2,en:2,so:3}, n:{co:2,ge:2,mv:3} },
+  { date: subDays(new Date(), 21).toISOString(), weight: 87.1, m:{gv:3,mm:2,pcr:3,fer:3,hb:2,au:3,th:2,ca:3}, b:{gi:3,lib:3,dor:3,au:2,en:2,so:3}, n:{co:2,ge:3,mv:2} },
+  { date: new Date().toISOString(), weight: 84.2, m:{gv:3,mm:3,pcr:2,fer:3,hb:3,au:2,th:3,ca:2}, b:{gi:3,lib:2,dor:2,au:3,en:3,so:2}, n:{co:3,ge:2,mv:3} }
 ];
 
-/* ════════════════════════════════════════════
-   DADOS MOCK — SCORES
-═══════════════════════════════════════════════ */
-const SC = {
-  1:{ m:{gv:2,mm:2,pcr:3,fer:2,hb:2,au:3,th:2,ca:2}, b:{gi:2,lib:2,dor:3,au:2,en:2,so:3}, n:{co:2,ge:2,mv:3} },
-  2:{ m:{gv:3,mm:3,pcr:2,fer:3,hb:3,au:2,th:3,ca:2}, b:{gi:3,lib:2,dor:2,au:3,en:3,so:2}, n:{co:3,ge:2,mv:3} },
-  3:{ m:{gv:1,mm:1,pcr:1,fer:2,hb:1,au:2,th:1,ca:1}, b:{gi:1,lib:1,dor:2,au:1,en:1,so:2}, n:{co:1,ge:1,mv:2} },
-  4:{ m:{gv:2,mm:3,pcr:2,fer:2,hb:2,au:2,th:2,ca:2}, b:{gi:2,lib:3,dor:2,au:2,en:3,so:2}, n:{co:2,ge:2,mv:2} },
-  5:{ m:{gv:3,mm:2,pcr:3,fer:3,hb:2,au:3,th:2,ca:3}, b:{gi:3,lib:3,dor:3,au:2,en:2,so:3}, n:{co:2,ge:3,mv:2} },
-  6:{ m:{gv:2,mm:2,pcr:2,fer:1,hb:3,au:2,th:3,ca:2}, b:{gi:2,lib:2,dor:1,au:2,en:2,so:2}, n:{co:2,ge:1,mv:2} },
-  7:{ m:{gv:3,mm:3,pcr:3,fer:2,hb:3,au:3,th:3,ca:3}, b:{gi:3,lib:3,dor:3,au:3,en:3,so:3}, n:{co:3,ge:3,mv:3} },
-  8:{ m:{gv:2,mm:2,pcr:1,fer:2,hb:2,au:1,th:2,ca:1}, b:{gi:1,lib:2,dor:1,au:2,en:2,so:1}, n:{co:2,ge:1,mv:2} },
-};
-
-const TEAM = [
-  { id:1, name:"Dra. Mariana Wogel", role:"Médica",        color:G[600] },
-  { id:2, name:"Juliana Santos",     role:"Enfermagem",     color:S.grn  },
-  { id:3, name:"Patricia Almeida",   role:"Nutricionista",  color:S.blue },
-  { id:4, name:"Renata Barbosa",     role:"Psicóloga",      color:S.pur  },
-  { id:5, name:"Carlos Silva",       role:"Treinador",      color:"#E67E22" },
+const MOCK_PATIENTS = [
+  { id: 1, name: "Ana Carolina Silva", plan: "platinum_plus", cycle: 1, week: 6, birthDate: "1992-05-15", phone: "(24) 99912-3456", sd: "2025-11-01", iw: 89.5, cw: 84.2, history: MOCK_HIST_BASE, nr: addDays(new Date(), 2).toISOString(), eng: 92, pass: "123" },
+  { id: 2, name: "Beatriz Oliveira", plan: "gold", cycle: 1, week: 12, birthDate: "1983-11-20", phone: "(24) 99834-5678", sd: "2025-09-15", iw: 95.0, cw: 86.8, history: MOCK_HIST_BASE.map(h => ({...h, weight: h.weight+5})), nr: addDays(new Date(), 5).toISOString(), eng: 88, pass: "123" },
+  { id: 3, name: "Camila Ferreira", plan: "essential", cycle: 2, week: 3, birthDate: format(addDays(new Date(), 5), "yyyy-MM-dd"), phone: "(24) 99756-7890", sd: "2025-06-01", iw: 78.3, cw: 71.1, history: MOCK_HIST_BASE.map(h => ({...h, weight: h.weight-10, met:12, be:10})), nr: new Date().toISOString(), eng: 95, pass: "123" },
 ];
 
+const MOCK_TEAM = [
+  { id:1, name:"Dra. Mariana Wogel", role:"Médica", color:G[600], perms: ["admin"] },
+  { id:2, name:"Juliana Santos", role:"Enfermagem", color:S.grn, perms: ["edit"] }
+];
+
+const genSC = (ps) => ps.reduce((acc, p) => {
+  const last = p.history[p.history.length-1];
+  acc[p.id] = { m: last.m, b: last.b, n: last.n };
+  return acc;
+}, {});
 /* ════════════════════════════════════════════
    HELPERS — CÁLCULO DE SCORES
 ═══════════════════════════════════════════════ */
@@ -121,7 +110,7 @@ const HIST = id => [1,2,3,4].map((m,i) => ({
 }));
 
 const genCL = (pid, tier) => {
-  const p = PAT.find(x => x.id===pid);
+  const p = ps.find(x => x.id===pid);
   const w = p?.week || 1;
   const f = TIER[tier];
   const r = {};
@@ -254,7 +243,7 @@ function SI({ label, value, onChange, opts }) {
 /* ════════════════════════════════════════════
    DASHBOARD — Dra. Mariana
 ═══════════════════════════════════════════════ */
-function Dash({ ps, onSel, mob }) {
+function Dash({  ps, onSel, mob }) {
   const [df, setDf] = useState("all");
 
   const tl   = ps.reduce((a,p) => a+(p.iw-p.cw), 0);
@@ -273,7 +262,7 @@ function Dash({ ps, onSel, mob }) {
   const engD = useMemo(() => ps.map(p=>({n:p.name.split(" ")[0],e:p.eng})).sort((a,b)=>b.e-a.e), [ps]);
   const wbw  = useMemo(() => {
     const w=[];
-    for(let i=1;i<=16;i++){let s=0,n=0; ps.forEach(p=>{if(p.ww[i-1]!==undefined){s+=p.iw-p.ww[i-1];n++;}}); w.push({s:`S${i}`,v:n?+(s/n).toFixed(1):0});}
+    for(let i=1;i<=16;i++){let s=0,n=0; ps.forEach(p=>{if(p.history[i-1]!==undefined){s+=p.iw-p.history[i-1];n++;}}); w.push({s:`S${i}`,v:n?+(s/n).toFixed(1):0});}
     return w;
   }, [ps]);
 
@@ -466,7 +455,7 @@ function Dash({ ps, onSel, mob }) {
 /* ════════════════════════════════════════════
    LISTA DE PACIENTES
 ═══════════════════════════════════════════════ */
-function PList({ ps, onSel, mob }) {
+function PList({  ps, onSel, mob }) {
   const [q,  setQ]  = useState("");
   const [fp, setFp] = useState("all");
   const f = ps.filter(p => p.name.toLowerCase().includes(q.toLowerCase()) && (fp==="all"||p.plan===fp));
@@ -508,7 +497,8 @@ function PList({ ps, onSel, mob }) {
 /* ════════════════════════════════════════════
    DETALHE DO PACIENTE (5 abas)
 ═══════════════════════════════════════════════ */
-function PDetail({ p, onBack, mob, avs, setAvs }) {
+function PDetail({  p, onBack, mob, avs, setAvs }) {
+  const SC = genSC(ps);
   const [tab, setTab]   = useState("ficha");
   const plan = PLANS.find(x=>x.id===p.plan);
   const tier = plan?.tier || 1;
@@ -576,7 +566,7 @@ function PDetail({ p, onBack, mob, avs, setAvs }) {
           <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
             <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Curva de peso</div>
             <ResponsiveContainer width="100%" height={160}>
-              <AreaChart data={p.ww.map((w,i)=>({s:`S${i+1}`,w}))}>
+              <AreaChart data={p.history.map((h,i)=>({s:`S${i+1}`,w:h.weight}))((w,i)=>({s:`S${i+1}`,w}))}>
                 <defs><linearGradient id="gpp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={G[500]} stopOpacity={0.25}/><stop offset="100%" stopColor={G[500]} stopOpacity={0}/></linearGradient></defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis domain={["dataMin-2","dataMax+1"]} tick={{fontSize:9,fill:"#bbb"}}/>
                 <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Area type="monotone" dataKey="w" stroke={G[500]} fill="url(#gpp)" strokeWidth={2}/>
@@ -746,7 +736,8 @@ function PDetail({ p, onBack, mob, avs, setAvs }) {
 /* ════════════════════════════════════════════
    ALERTAS
 ═══════════════════════════════════════════════ */
-function Alerts({ ps, onSel }) {
+function Alerts({  ps, onSel }) {
+  const SC = genSC(ps);
   const data = ps.map(p => {
     const sc=SC[p.id]; if(!sc) return null;
     const m=cM(sc.m), b=cB(sc.b), n=cN(sc.n);
@@ -818,7 +809,8 @@ function TeamP({ ta, setTa }) {
 /* ════════════════════════════════════════════
    PORTAL DO PACIENTE (Read-only)
 ═══════════════════════════════════════════════ */
-function Portal({ p, av, setAv }) {
+function Portal({  p, av, setAv }) {
+  const SC = genSC(ps);
   const sc   = SC[p.id];
   const met  = cM(sc?.m); const be=cB(sc?.b); const mn=cN(sc?.n);
   const pm   = sc ? pM(sc.m) : {comp:0,infl:0,glic:0,card:0};
@@ -888,7 +880,7 @@ function Portal({ p, av, setAv }) {
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
         <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Curva de peso</div>
         <ResponsiveContainer width="100%" height={160}>
-          <AreaChart data={p.ww.map((w,i)=>({s:`S${i+1}`,w}))}>
+          <AreaChart data={p.history.map((h,i)=>({s:`S${i+1}`,w:h.weight}))((w,i)=>({s:`S${i+1}`,w}))}>
             <defs><linearGradient id="gpt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.grn} stopOpacity={0.2}/><stop offset="100%" stopColor={S.grn} stopOpacity={0}/></linearGradient></defs>
             <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis domain={["dataMin-2","dataMax+1"]} tick={{fontSize:9,fill:"#bbb"}}/>
             <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Area type="monotone" dataKey="w" stroke={S.grn} fill="url(#gpt)" strokeWidth={2}/>
@@ -970,6 +962,12 @@ function Login({ onLogin }) {
    APP PRINCIPAL
 ═══════════════════════════════════════════════ */
 export default function App() {
+  const [ps, setPs] = useState(() => { try { return JSON.parse(localStorage.getItem('sl_ps')) || MOCK_PATIENTS; } catch(e) { return MOCK_PATIENTS; } });
+  const [team, setTeam] = useState(() => { try { return JSON.parse(localStorage.getItem('sl_team')) || MOCK_TEAM; } catch(e) { return MOCK_TEAM; } });
+  useEffect(() => { localStorage.setItem('sl_ps', JSON.stringify(ps)); }, [ps]);
+  useEffect(() => { localStorage.setItem('sl_team', JSON.stringify(team)); }, [team]);
+  const SC = genSC(ps);
+
   const [lg,   setLg]   = useState(false);
   const [mode, setMode] = useState("admin");
   const [page, setPage] = useState("dash");
@@ -978,11 +976,11 @@ export default function App() {
   const [avs,  setAvs]  = useState({});
   const [ta,   setTa]   = useState({});
   const mob = useMob();
-  const sp  = PAT.find(p => p.id===sid);
+  const sp  = ps.find(p => p.id===sid);
   const go  = id => { setSid(id); setPage("det"); };
 
   /* alertas críticos */
-  const ac = PAT.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); }).length;
+  const ac = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); }).length;
 
   const titles = { dash:"Dashboard", pat:"Pacientes", det:sp?.name||"", alert:"Central de alertas", team:"Equipe" };
   const nav = [
@@ -997,7 +995,7 @@ export default function App() {
 
   /* ─── PORTAL DO PACIENTE ─── */
   if (mode==="paciente") {
-    const pp = PAT[0];
+    const pp = ps[0];
     return (
       <div style={{ fontFamily:"'Outfit','Inter',system-ui,sans-serif", background:W[50], minHeight:"100vh", color:"#2C2C2A" }}>
         <div style={{ maxWidth:480, margin:"0 auto", padding:"10px 12px 40px" }}>
@@ -1019,10 +1017,10 @@ export default function App() {
   /* ─── CONTEÚDO ADMIN ─── */
   const content = (
     <>
-      {page==="dash"  && <Dash  ps={PAT} onSel={go} mob={mob}/>}
-      {page==="pat"   && <PList ps={PAT} onSel={go} mob={mob}/>}
+      {page==="dash"  && <Dash  ps={ps} onSel={go} mob={mob}/>}
+      {page==="pat"   && <PList ps={ps} onSel={go} mob={mob}/>}
       {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}/>}
-      {page==="alert" && <Alerts ps={PAT} onSel={go}/>}
+      {page==="alert" && <Alerts ps={ps} onSel={go}/>}
       {page==="team"  && <TeamP ta={ta} setTa={setTa}/>}
     </>
   );
@@ -1045,7 +1043,33 @@ export default function App() {
         </div>
       </div>
       {/* Conteúdo */}
-      <div style={{ padding:"10px 12px" }}>{content}</div>
+      <div style={{ padding:"10px 12px" }}>
+  {/* MODAL NOVO LEAD */}
+  {mode === "new_lead" && (
+    <div style={{ position:"fixed", top:0, left:0, width:"100vw", height:"100vh", background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ background:"#fff", width:400, padding:24, borderRadius:12 }}>
+        <h3 style={{ margin:"0 0 15px", fontSize:18 }}>Novo Lead</h3>
+        <input id="nl_nome" placeholder="Nome Completo" style={{ width:"100%", padding:10, marginBottom:10, borderRadius:6, border:`1px solid ${G[300]}` }}/>
+        <input id="nl_nasc" type="date" style={{ width:"100%", padding:10, marginBottom:10, borderRadius:6, border:`1px solid ${G[300]}` }}/>
+        <input id="nl_peso" type="number" placeholder="Peso Inicial" style={{ width:"100%", padding:10, marginBottom:15, borderRadius:6, border:`1px solid ${G[300]}` }}/>
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={()=>{
+            const n = document.getElementById("nl_nome").value;
+            const b = document.getElementById("nl_nasc").value;
+            const w = parseFloat(document.getElementById("nl_peso").value);
+            if(n && b && w){
+              const np = { id: Date.now(), name: n, plan: "essential", cycle: 1, week: 1, birthDate: b, phone: "", sd: new Date().toISOString(), iw: w, cw: w, history: [{date: new Date().toISOString(), weight: w, m:MOCK_HIST_BASE[0].m, b:MOCK_HIST_BASE[0].b, n:MOCK_HIST_BASE[0].n}], nr: addDays(new Date(), 7).toISOString(), eng: 100, pass: "123" };
+              setPs([...ps, np]);
+              setMode("admin");
+            }
+          }} style={{ flex:1, padding:10, background:G[800], color:"#fff", border:"none", borderRadius:6, cursor:"pointer" }}>Salvar</button>
+          <button onClick={()=>setMode("admin")} style={{ flex:1, padding:10, background:G[200], color:G[800], border:"none", borderRadius:6, cursor:"pointer" }}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  )}
+
+        {content}</div>
       {/* Bottom nav */}
       <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:`1px solid ${G[200]}`, display:"flex", justifyContent:"space-around", padding:"6px 0 max(6px,env(safe-area-inset-bottom))", zIndex:50 }}>
         {nav.map(n => {
@@ -1109,6 +1133,32 @@ export default function App() {
             {ac>0 && <div style={{ position:"absolute", top:-3, right:-3, width:12, height:12, borderRadius:"50%", background:S.red, color:"#fff", fontSize:8, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>{ac}</div>}
           </div>
         </div>
+        
+  {/* MODAL NOVO LEAD */}
+  {mode === "new_lead" && (
+    <div style={{ position:"fixed", top:0, left:0, width:"100vw", height:"100vh", background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ background:"#fff", width:400, padding:24, borderRadius:12 }}>
+        <h3 style={{ margin:"0 0 15px", fontSize:18 }}>Novo Lead</h3>
+        <input id="nl_nome" placeholder="Nome Completo" style={{ width:"100%", padding:10, marginBottom:10, borderRadius:6, border:`1px solid ${G[300]}` }}/>
+        <input id="nl_nasc" type="date" style={{ width:"100%", padding:10, marginBottom:10, borderRadius:6, border:`1px solid ${G[300]}` }}/>
+        <input id="nl_peso" type="number" placeholder="Peso Inicial" style={{ width:"100%", padding:10, marginBottom:15, borderRadius:6, border:`1px solid ${G[300]}` }}/>
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={()=>{
+            const n = document.getElementById("nl_nome").value;
+            const b = document.getElementById("nl_nasc").value;
+            const w = parseFloat(document.getElementById("nl_peso").value);
+            if(n && b && w){
+              const np = { id: Date.now(), name: n, plan: "essential", cycle: 1, week: 1, birthDate: b, phone: "", sd: new Date().toISOString(), iw: w, cw: w, history: [{date: new Date().toISOString(), weight: w, m:MOCK_HIST_BASE[0].m, b:MOCK_HIST_BASE[0].b, n:MOCK_HIST_BASE[0].n}], nr: addDays(new Date(), 7).toISOString(), eng: 100, pass: "123" };
+              setPs([...ps, np]);
+              setMode("admin");
+            }
+          }} style={{ flex:1, padding:10, background:G[800], color:"#fff", border:"none", borderRadius:6, cursor:"pointer" }}>Salvar</button>
+          <button onClick={()=>setMode("admin")} style={{ flex:1, padding:10, background:G[200], color:G[800], border:"none", borderRadius:6, cursor:"pointer" }}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  )}
+
         {content}
       </div>
     </div>
