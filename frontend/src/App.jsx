@@ -248,6 +248,7 @@ function SI({ label, value, onChange, opts }) {
 ═══════════════════════════════════════════════ */
 function Dash({  ps, onSel, mob }) {
   const [df, setDf] = useState("all");
+  const SC = genSC(ps);
 
   const tl   = ps.reduce((a,p) => a+(p.iw-p.cw), 0);
   const ae   = Math.round(ps.reduce((a,p) => a+p.eng, 0)/ps.length);
