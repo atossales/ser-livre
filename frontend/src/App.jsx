@@ -34,6 +34,18 @@ const S = {
 };
 
 /* ════════════════════════════════════════════
+   HELPER: fetch autenticado com JWT
+   Todas as chamadas à API precisam do token;
+   este helper adiciona Authorization automaticamente.
+═══════════════════════════════════════════════ */
+const authFetch = (url, opts = {}) => {
+  const token = localStorage.getItem('serlivre_token');
+  const headers = { ...(opts.headers || {}) };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return fetch(url, { ...opts, headers });
+};
+
+/* ════════════════════════════════════════════
    CONSTANTES
 ═══════════════════════════════════════════════ */
 const PLANS = [
@@ -1741,7 +1753,7 @@ function WeighInModal({ p, onClose, onSave, onLog }) {
     if (sendWa && hasPhone) {
       setSending(true);
       try {
-        const res = await fetch('/api/whatsapp/send-report', {
+        const res = await authFetch('/api/whatsapp/send-report', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2087,7 +2099,7 @@ function NewApptModal({ ps, team, onClose, onSave, initial }) {
     try {
       const url    = initial ? `/api/appointments/${initial.id}` : '/api/appointments';
       const method = initial ? 'PUT' : 'POST';
-      const res    = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const res    = await authFetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
       const data   = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro');
       onSave(data);
@@ -2203,7 +2215,7 @@ function CalendarPage({ ps, team, onSel, mob }) {
   const loadAppts = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/appointments');
+      const res = await authFetch('/api/appointments');
       if (res.ok) setAppts(await res.json());
     } catch { /* usa array vazio */ }
     finally { setLoading(false); }
@@ -2256,7 +2268,7 @@ function CalendarPage({ ps, team, onSel, mob }) {
 
   const deleteAppt = async (id) => {
     if (!confirm("Remover este evento?")) return;
-    await fetch(`/api/appointments/${id}`, { method:'DELETE' });
+    await authFetch(`/api/appointments/${id}`, { method:'DELETE' });
     setAppts(prev => prev.filter(a => a.id !== id));
   };
 
@@ -2399,7 +2411,7 @@ function TemplateEditor({ initial, onSave, onClose }) {
     try {
       const url    = initial ? `/api/templates/${initial.id}` : '/api/templates';
       const method = initial ? 'PUT' : 'POST';
-      const res    = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, category: categ, body }) });
+      const res    = await authFetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, category: categ, body }) });
       const data   = await res.json();
       if (!res.ok) throw new Error(data.error);
       onSave(data);
@@ -2487,7 +2499,7 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
     try {
       let rendered = body;
       if (firstPat && tmplId && !useCustom) {
-        const res = await fetch(`/api/templates/${tmplId}/preview`, {
+        const res = await authFetch(`/api/templates/${tmplId}/preview`, {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ patientId: firstPat, extraVars })
         });
@@ -2514,7 +2526,7 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
     if (!body) return alert("Selecione ou escreva uma mensagem.");
     setSending(true);
     try {
-      const res = await fetch('/api/messages/send', {
+      const res = await authFetch('/api/messages/send', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ templateId: useCustom?null:tmplId, patientIds: selPats, customBody: useCustom?body:null, extraVars })
       });
@@ -2699,8 +2711,8 @@ function CommsPage({ ps, team, mob }) {
     setLoading(true);
     try {
       const [tr, hr] = await Promise.all([
-        fetch('/api/templates').then(r=>r.ok?r.json():[]),
-        fetch('/api/messages/history?limit=30').then(r=>r.ok?r.json():[]),
+        authFetch('/api/templates').then(r=>r.ok?r.json():[]),
+        authFetch('/api/messages/history?limit=30').then(r=>r.ok?r.json():[]),
       ]);
       setTemplates(Array.isArray(tr)?tr:[]);
       setHistory(Array.isArray(hr)?hr:[]);
@@ -2711,13 +2723,13 @@ function CommsPage({ ps, team, mob }) {
   useEffect(()=>{ load(); },[load]);
 
   const duplicate = async (id) => {
-    const res = await fetch(`/api/templates/${id}/duplicate`, { method:'POST' });
+    const res = await authFetch(`/api/templates/${id}/duplicate`, { method:'POST' });
     if (res.ok) { const t = await res.json(); setTemplates(prev=>[...prev,t]); }
   };
 
   const deleteT = async (id) => {
     if (!confirm("Remover template?")) return;
-    const res = await fetch(`/api/templates/${id}`, { method:'DELETE' });
+    const res = await authFetch(`/api/templates/${id}`, { method:'DELETE' });
     if (res.ok) setTemplates(prev=>prev.filter(t=>t.id!==id));
   };
 
@@ -2821,8 +2833,8 @@ function PatientCommsTab({ p, mob }) {
     setLoading(true);
     try {
       const [hr, tr] = await Promise.all([
-        fetch(`/api/messages/history?patientId=${p.id}&limit=20`).then(r=>r.ok?r.json():[]),
-        fetch('/api/templates').then(r=>r.ok?r.json():[]),
+        authFetch(`/api/messages/history?patientId=${p.id}&limit=20`).then(r=>r.ok?r.json():[]),
+        authFetch('/api/templates').then(r=>r.ok?r.json():[]),
       ]);
       setHistory(Array.isArray(hr)?hr:[]);
       setTemplates(Array.isArray(tr)?tr:[]);
@@ -2876,9 +2888,9 @@ export default function App() {
   // Carrega dados do servidor na inicialização
   useEffect(() => {
     Promise.all([
-      fetch('/api/state/patients').then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch('/api/state/team').then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch('/api/state/activity').then(r => r.ok ? r.json() : null).catch(() => null),
+      authFetch('/api/state/patients').then(r => r.ok ? r.json() : null).catch(() => null),
+      authFetch('/api/state/team').then(r => r.ok ? r.json() : null).catch(() => null),
+      authFetch('/api/state/activity').then(r => r.ok ? r.json() : null).catch(() => null),
     ]).then(([pData, tData, aData]) => {
       if (Array.isArray(pData) && pData.length > 0) setPs(pData);
       if (Array.isArray(tData) && tData.length > 0) setTeam(tData);
@@ -2892,7 +2904,7 @@ export default function App() {
     if (!dbLoaded) return;
     clearTimeout(saveTimer.current[key]);
     saveTimer.current[key] = setTimeout(() => {
-      fetch(`/api/state/${key}`, {
+      authFetch(`/api/state/${key}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -2995,8 +3007,8 @@ export default function App() {
           onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(err=>console.warn('API delete failed:', err.message)); }}
           onBulkDelete={ids=>{ setPs(prev=>prev.filter(x=>!ids.includes(x.id))); ids.forEach(id=>apiDeletePatient(id).catch(err=>console.warn('API bulk delete failed:', err.message))); }}/>}
       {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}
-        onSaveScores={scores=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,history:[...x.history.slice(0,-1),{...x.history[x.history.length-1],...scores}]}:x)); addLog({action:"scores",patientId:sp.id,patientName:sp.name,detail:"Scores metabólicos atualizados"}); }}
-        onAddWeighIn={entry=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,cw:entry.weight,history:[...x.history,entry]}:x)); }}
+        onSaveScores={scores=>{ setPs(prev=>prev.map(x=>{ if(x.id!==sp.id) return x; const h=x.history||[]; return {...x,history:h.length>0?[...h.slice(0,-1),{...h[h.length-1],...scores}]:[{...scores}]}; })); addLog({action:"scores",patientId:sp.id,patientName:sp.name,detail:"Scores metabólicos atualizados"}); }}
+        onAddWeighIn={entry=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,cw:entry.weight,history:[...(x.history||[]),entry]}:x)); }}
         onAddScoreMonth={({m,b,n})=>{ const mo=format(new Date(),"MMM/yy"); setPs(prev=>prev.map(x=>x.id===sp.id?{...x,scoreHistory:[...(x.scoreHistory||[]),{id:Date.now(),date:new Date().toISOString(),month:mo,m,b,n}]}:x)); }}
         onChangePlan={newPlan=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,plan:newPlan}:x)); }}
         activityLog={activityLog}
