@@ -1207,6 +1207,50 @@ app.post('/api/whatsapp/send-custom', authRequired, requireRole('ADMIN', 'MEDICA
   }
 });
 
+// Enviar mídia (imagem/PDF) junto com mensagem para paciente
+app.post('/api/whatsapp/send-media', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM', 'NUTRICIONISTA'), async (req, res) => {
+  try {
+    const { patientId, base64, mimeType, fileName, caption, textMessage } = req.body;
+    if (!patientId || !base64) return res.status(400).json({ error: 'patientId e base64 são obrigatórios' });
+
+    // Busca telefone do paciente
+    const patient = await prisma.patient.findUnique({
+      where: { id: parseInt(patientId) },
+      include: { user: { select: { name: true, phone: true } } }
+    });
+    const phone = patient?.user?.phone;
+    if (!phone) return res.status(400).json({ error: 'Paciente sem telefone cadastrado' });
+
+    const { sendMedia, sendWhatsApp } = require('./utils/whatsapp');
+    const results = {};
+
+    // Envia texto primeiro (se houver)
+    if (textMessage) {
+      results.text = await sendWhatsApp(phone, textMessage);
+    }
+
+    // Envia a mídia
+    results.media = await sendMedia(phone, { base64, mimeType, fileName, caption });
+
+    // Registra no histórico
+    await prisma.messageLog.create({
+      data: {
+        patientId:  parseInt(patientId),
+        sentById:   req.user?.id || null,
+        phone,
+        body:       caption || fileName || 'Arquivo enviado',
+        channel:    'whatsapp',
+        status:     results.media.ok ? 'sent' : 'failed',
+        error:      results.media.ok ? null : results.media.reason,
+      }
+    });
+
+    res.json({ ok: results.media.ok, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Middleware de tratamento de erros
 app.use((err, req, res, next) => {
   console.error('[ERROR]', err.message);

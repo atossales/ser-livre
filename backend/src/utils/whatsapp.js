@@ -76,7 +76,7 @@ Regras obrigatórias:
   const prompts = {
     welcome: `Crie uma mensagem de boas-vindas ao programa. Dados: ${JSON.stringify(data)}. Informe: que foi cadastrada no programa, o plano contratado, que receberá acesso ao app, e o próximo passo (aguardar contato da equipe).`,
     week_start: `Crie uma mensagem de início de semana do programa. Dados: ${JSON.stringify(data)}. Informe: número da semana que inicia, o que está previsto para esta semana (pesagem, consulta se houver).`,
-    weighin_report: `Crie uma mensagem com o resultado da pesagem semanal. Dados: ${JSON.stringify(data)}. Informe: semana de referência, peso atual, variação em relação à semana anterior, composição corporal (massa magra e gorda se disponível). Felicite pelo resultado se houver perda de peso.`,
+    weighin_report: `Crie uma mensagem com o resultado da pesagem semanal. Dados: ${JSON.stringify(data)}. Informe: semana de referência, peso atual, variação de peso em relação à semana anterior SEMPRE com sinal (use "-" para perda de peso e "+" para ganho, ex: "-1.5kg" ou "+0.3kg"), composição corporal se disponível. Felicite com discrição se houver perda.`,
     consulta_reminder: `Crie uma mensagem de lembrete de consulta. Dados: ${JSON.stringify(data)}. Informe: que tem consulta amanhã, data e horário se disponível, para levar exames se necessário.`,
     exam_reminder: `Crie uma mensagem lembrando sobre exames laboratoriais. Dados: ${JSON.stringify(data)}. Informe: que é o momento de realizar exames de acompanhamento (conforme protocolo da semana ${data.weekNum}). Liste os principais: hemograma, glicemia, perfil lipídico, TSH.`,
     completion: `Crie uma mensagem de conclusão do programa de 16 semanas. Dados: ${JSON.stringify(data)}. Informe: parabéns pela conclusão, resultados alcançados (peso perdido, composição), próximos passos.`,
@@ -85,7 +85,7 @@ Regras obrigatórias:
   try {
     const prompt = prompts[type] || `Crie uma mensagem informativa. Dados: ${JSON.stringify(data)}`;
     const response = await httpRequest(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -119,9 +119,12 @@ function defaultTemplate(type, data) {
       return `Olá ${n},\n\nSemana ${data.weekNum} do programa iniciada.\n\n- Pesagem desta semana: ${data.weighDate || 'a combinar com a equipe'}\n- Mantenha o protocolo em dia\n\nQualquer dúvida, fale com a equipe.`;
 
     case 'weighin_report': {
-      const diff = data.previousWeight ? (data.previousWeight - data.currentWeight).toFixed(1) : null;
-      const diffText = diff ? (diff > 0 ? `- ${diff}kg em relação à semana anterior` : `+ ${Math.abs(diff)}kg em relação à semana anterior`) : '';
-      return `Olá ${n},\n\nResultado da pesagem — Semana ${data.weekNum}:\n\n- Peso atual: ${data.currentWeight}kg${diffText ? '\n' + diffText : ''}${data.massaMagra ? `\n- Massa magra: ${data.massaMagra}kg` : ''}${data.massaGordura ? `\n- Massa gorda: ${data.massaGordura}kg` : ''}\n\nAcompanhe sua evolução pelo aplicativo.`;
+      const diff = data.previousWeight ? +(data.previousWeight - data.currentWeight).toFixed(1) : null;
+      // diff > 0 = perdeu peso (bom), diff < 0 = ganhou peso
+      const sign = diff !== null ? (diff >= 0 ? '-' : '+') : null;
+      const absDiff = diff !== null ? Math.abs(diff).toFixed(1) : null;
+      const diffText = diff !== null ? `- Variação: ${sign}${absDiff}kg em relação à semana anterior` : '';
+      return `Olá ${n},\n\nResultado da pesagem — Semana ${data.weekNum}:\n\n- Peso atual: ${data.currentWeight}kg\n${diffText}${data.massaMagra ? `\n- Massa magra: ${data.massaMagra}kg` : ''}${data.massaGordura ? `\n- Massa gorda: ${data.massaGordura}kg` : ''}\n\nAcompanhe sua evolução pelo aplicativo.`;
     }
 
     case 'consulta_reminder':
@@ -233,6 +236,53 @@ async function sendProgramCompletion(patient) {
   return sendWhatsApp(patient.phone, msg);
 }
 
+// ── Envia mídia (imagem ou PDF) via Evolution API ─────────
+// mediaData: { base64, mimeType, fileName, caption }
+
+async function sendMedia(phone, mediaData) {
+  const BASE = process.env.EVOLUTION_API_URL;
+  const KEY  = process.env.EVOLUTION_API_KEY;
+  const INST = process.env.EVOLUTION_INSTANCE;
+
+  if (!BASE || !KEY || !INST) return { ok: false, reason: 'not_configured' };
+
+  const number = formatPhoneBR(phone);
+  if (!number) return { ok: false, reason: 'invalid_phone' };
+
+  // Determina o tipo de mídia
+  const isImage = mediaData.mimeType?.startsWith('image/');
+  const mediatype = isImage ? 'image' : 'document';
+
+  try {
+    const res = await httpRequest(
+      `${BASE}/message/sendMedia/${INST}`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': KEY },
+      },
+      {
+        number,
+        mediatype,
+        mimetype: mediaData.mimeType || 'image/png',
+        caption:  mediaData.caption || '',
+        media:    mediaData.base64,
+        fileName: mediaData.fileName || (isImage ? 'imagem.png' : 'documento.pdf'),
+      }
+    );
+
+    if (res.status >= 200 && res.status < 300) {
+      console.log(`[WHATSAPP] Mídia enviada para ${number}`);
+      return { ok: true, data: res.data };
+    } else {
+      console.error(`[WHATSAPP] Erro mídia ${res.status}:`, res.data);
+      return { ok: false, reason: `http_${res.status}`, data: res.data };
+    }
+  } catch (err) {
+    console.error('[WHATSAPP] Erro de rede (mídia):', err.message);
+    return { ok: false, reason: err.message };
+  }
+}
+
 // ── Verifica status da instância ───────────────────────────
 
 async function checkStatus() {
@@ -256,6 +306,7 @@ async function checkStatus() {
 
 module.exports = {
   sendWhatsApp,
+  sendMedia,
   sendWelcome,
   sendWeekStart,
   sendWeighInReport,

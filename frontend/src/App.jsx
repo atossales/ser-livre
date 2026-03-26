@@ -1707,6 +1707,79 @@ function Portal({  p, av, setAv }) {
   );
 }
 
+// Gera card visual de pesagem usando Canvas API → retorna base64 PNG
+function generateWeighInCard({ name, weekNum, currentWeight, previousWeight, massaMagra, massaGordura }) {
+  const W = 600, H = 300;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // Fundo gradiente dourado suave
+  const grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, '#FBF7EE'); grad.addColorStop(1, '#F5ECDA');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+
+  // Barra lateral dourada
+  ctx.fillStyle = '#A8872E'; ctx.fillRect(0, 0, 6, H);
+
+  // Logo texto
+  ctx.fillStyle = '#C4A44E'; ctx.font = 'bold 11px sans-serif';
+  ctx.fillText('INSTITUTO DRA. MARIANA WOGEL — PROGRAMA SER LIVRE', 22, 24);
+
+  // Nome do paciente
+  ctx.fillStyle = '#6E5517'; ctx.font = '14px sans-serif';
+  ctx.fillText(name, 22, 50);
+
+  // Semana
+  ctx.fillStyle = '#8B6D1E'; ctx.font = 'bold 13px sans-serif';
+  ctx.fillText(`Semana ${weekNum}`, 22, 72);
+
+  // Separador
+  ctx.strokeStyle = '#EBDAB5'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(22, 84); ctx.lineTo(W-22, 84); ctx.stroke();
+
+  // Peso atual — grande
+  ctx.fillStyle = '#4E3D12'; ctx.font = 'bold 58px sans-serif';
+  ctx.fillText(`${currentWeight}kg`, 22, 158);
+
+  // Label peso
+  ctx.fillStyle = '#aaa'; ctx.font = '12px sans-serif';
+  ctx.fillText('PESO ATUAL', 22, 175);
+
+  // Variação de peso
+  if (previousWeight) {
+    const diff = +(previousWeight - currentWeight).toFixed(1);
+    const sign = diff >= 0 ? '-' : '+';
+    const color = diff >= 0 ? '#27AE60' : '#C0392B';
+    ctx.fillStyle = color; ctx.font = 'bold 22px sans-serif';
+    ctx.fillText(`${sign}${Math.abs(diff).toFixed(1)}kg`, 22, 215);
+    ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif';
+    ctx.fillText('em relação à semana anterior', 22, 230);
+  }
+
+  // Composição corporal (coluna direita)
+  if (massaMagra || massaGordura) {
+    const x = W - 180;
+    ctx.fillStyle = '#E8DFC8'; ctx.fillRect(x-14, 90, 174, 140);
+    ctx.fillStyle = '#8B6D1E'; ctx.font = 'bold 10px sans-serif';
+    ctx.fillText('COMPOSIÇÃO CORPORAL', x-4, 108);
+    ctx.fillStyle = '#2980B9'; ctx.font = 'bold 24px sans-serif';
+    ctx.fillText(`${massaMagra||'—'}kg`, x, 142);
+    ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif';
+    ctx.fillText('MASSA MAGRA', x, 157);
+    ctx.fillStyle = '#F39C12'; ctx.font = 'bold 24px sans-serif';
+    ctx.fillText(`${massaGordura||'—'}kg`, x, 192);
+    ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif';
+    ctx.fillText('MASSA GORDA', x, 207);
+  }
+
+  // Rodapé
+  ctx.fillStyle = '#D4B978'; ctx.font = '10px sans-serif';
+  ctx.fillText('Acompanhe sua evolução no aplicativo Programa Ser Livre', 22, H-14);
+
+  return canvas.toDataURL('image/png').split(',')[1];
+}
+
 /* ════════════════════════════════════════════
    MODAL REGISTRO DE PESAGEM
 ═══════════════════════════════════════════════ */
@@ -1716,6 +1789,7 @@ function WeighInModal({ p, onClose, onSave, onLog }) {
   const [mm,       setMm]       = useState("");
   const [mg,       setMg]       = useState("");
   const [sendWa,   setSendWa]   = useState(true);
+  const [sendCard, setSendCard] = useState(false); // enviar card visual
   const [sending,  setSending]  = useState(false);
   const [waStatus, setWaStatus] = useState(null); // null | 'ok' | 'err'
 
@@ -1770,7 +1844,30 @@ function WeighInModal({ p, onClose, onSave, onLog }) {
             massaGordura:   gVal || null,
           }),
         });
-        setWaStatus(res.ok ? 'ok' : 'err');
+        const ok1 = res.ok;
+
+        // Enviar card visual se marcado
+        if (sendCard) {
+          try {
+            const base64 = generateWeighInCard({
+              name: p.name, weekNum, currentWeight: w,
+              previousWeight: prevWeight, massaMagra: mVal||null, massaGordura: gVal||null,
+            });
+            await authFetch('/api/whatsapp/send-media', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                patientId: p.id,
+                base64,
+                mimeType:  'image/png',
+                fileName:  `pesagem-semana${weekNum}.png`,
+                caption:   `📊 Resultado visual — Semana ${weekNum}`,
+              }),
+            });
+          } catch (e) { console.warn('Erro ao enviar card:', e); }
+        }
+
+        setWaStatus(ok1 ? 'ok' : 'err');
         setTimeout(onClose, 1200);
       } catch {
         setWaStatus('err');
@@ -1836,16 +1933,30 @@ function WeighInModal({ p, onClose, onSave, onLog }) {
           </div>
         )}
 
-        {/* Opção WhatsApp */}
-        <div onClick={()=>hasPhone&&setSendWa(v=>!v)}
-          style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:9, border:`1.5px solid ${sendWa&&hasPhone?S.grn:G[200]}`, background:sendWa&&hasPhone?S.grnBg:"#fafafa", marginBottom:14, cursor:hasPhone?"pointer":"default", opacity:hasPhone?1:0.5 }}>
-          <div style={{ width:20, height:20, borderRadius:5, border:`2px solid ${sendWa&&hasPhone?S.grn:G[300]}`, background:sendWa&&hasPhone?S.grn:"#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-            {sendWa && hasPhone && <Check size={11} color="#fff"/>}
+        {/* Opções WhatsApp */}
+        <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:14, opacity:hasPhone?1:0.5 }}>
+          <div onClick={()=>hasPhone&&setSendWa(v=>!v)}
+            style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:9, border:`1.5px solid ${sendWa&&hasPhone?S.grn:G[200]}`, background:sendWa&&hasPhone?S.grnBg:"#fafafa", cursor:hasPhone?"pointer":"default" }}>
+            <div style={{ width:18, height:18, borderRadius:4, border:`2px solid ${sendWa&&hasPhone?S.grn:G[300]}`, background:sendWa&&hasPhone?S.grn:"#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              {sendWa && hasPhone && <Check size={10} color="#fff"/>}
+            </div>
+            <div>
+              <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>Enviar relatório por WhatsApp</div>
+              <div style={{ fontSize:10, color:"#aaa" }}>{hasPhone ? `Texto formatado por IA → ${p.phone}` : "Sem telefone cadastrado"}</div>
+            </div>
           </div>
-          <div>
-            <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>Enviar relatório por WhatsApp</div>
-            <div style={{ fontSize:10, color:"#aaa" }}>{hasPhone ? `Relatório formatado por IA → ${p.phone}` : "Sem telefone cadastrado"}</div>
-          </div>
+          {sendWa && hasPhone && (
+            <div onClick={()=>setSendCard(v=>!v)}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:9, border:`1.5px solid ${sendCard?S.blue:G[200]}`, background:sendCard?S.blueBg:"#fafafa", cursor:"pointer", marginLeft:8 }}>
+              <div style={{ width:18, height:18, borderRadius:4, border:`2px solid ${sendCard?S.blue:G[300]}`, background:sendCard?S.blue:"#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                {sendCard && <Check size={10} color="#fff"/>}
+              </div>
+              <div>
+                <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>Incluir card visual 📊</div>
+                <div style={{ fontSize:10, color:"#aaa" }}>Envia imagem com peso + composição corporal</div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Feedback status WhatsApp */}
@@ -2480,6 +2591,106 @@ function TemplateEditor({ initial, onSave, onClose }) {
   );
 }
 
+/// Gera cards visuais do sistema a partir dos dados reais do paciente
+function generateSystemCard(type, p) {
+  const W = 600, H = type === 'scores' ? 380 : 300;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // Fundo
+  const grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, '#FBF7EE'); grad.addColorStop(1, '#F5ECDA');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#A8872E'; ctx.fillRect(0, 0, 6, H);
+
+  // Cabeçalho
+  ctx.fillStyle = '#C4A44E'; ctx.font = 'bold 10px sans-serif';
+  ctx.fillText('INSTITUTO DRA. MARIANA WOGEL — PROGRAMA SER LIVRE', 22, 20);
+  ctx.fillStyle = '#4E3D12'; ctx.font = 'bold 18px sans-serif';
+  const titles = { weight:'Evolução de Peso', composition:'Composição Corporal', scores:'Scores Clínicos', progress:'Progresso do Programa' };
+  ctx.fillText(titles[type] || type, 22, 44);
+  ctx.fillStyle = '#8B6D1E'; ctx.font = '12px sans-serif';
+  ctx.fillText(p.name, 22, 62);
+  ctx.strokeStyle = '#EBDAB5'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(22, 74); ctx.lineTo(W-22, 74); ctx.stroke();
+
+  const hist = p.history || [];
+  const lastH = hist[hist.length-1] || {};
+
+  if (type === 'weight') {
+    const perdido = Math.max(0, (p.iw||0) - (p.cw||0));
+    ctx.fillStyle = '#4E3D12'; ctx.font = 'bold 52px sans-serif';
+    ctx.fillText(`${p.cw || '—'}kg`, 22, 148);
+    ctx.fillStyle = '#aaa'; ctx.font = '12px sans-serif'; ctx.fillText('PESO ATUAL', 22, 165);
+    ctx.fillStyle = S.grn; ctx.font = 'bold 22px sans-serif';
+    ctx.fillText(`-${perdido.toFixed(1)}kg total perdido`, 22, 205);
+    ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif';
+    ctx.fillText(`Peso inicial: ${p.iw||'—'}kg   Semana: ${p.week||'—'}/16   Ciclo: ${p.cycle||1}`, 22, 228);
+    ctx.fillStyle = '#D4B978'; ctx.font = '10px sans-serif';
+    ctx.fillText('Acompanhe sua evolução no app Programa Ser Livre', 22, H-14);
+  }
+
+  if (type === 'composition') {
+    const mm = lastH.massaMagra || 0;
+    const mg = lastH.massaGordura || 0;
+    const tot = mm + mg || 1;
+    ctx.fillStyle = '#2980B9'; ctx.font = 'bold 44px sans-serif'; ctx.fillText(`${mm||'—'}kg`, 30, 148);
+    ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif'; ctx.fillText('MASSA MAGRA', 30, 165);
+    ctx.fillStyle = '#F39C12'; ctx.font = 'bold 44px sans-serif'; ctx.fillText(`${mg||'—'}kg`, 310, 148);
+    ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif'; ctx.fillText('MASSA GORDA', 310, 165);
+    if (mm || mg) {
+      const barY = 185, barH = 18, barW = W - 44;
+      ctx.fillStyle = '#2980B9'; ctx.fillRect(22, barY, barW*(mm/tot), barH);
+      ctx.fillStyle = '#F39C12'; ctx.fillRect(22 + barW*(mm/tot), barY, barW*(mg/tot), barH);
+      ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif';
+      ctx.fillText(`Magra ${(mm/tot*100).toFixed(0)}%   Gorda ${(mg/tot*100).toFixed(0)}%`, 22, 220);
+    }
+    ctx.fillStyle = '#D4B978'; ctx.font = '10px sans-serif';
+    ctx.fillText('Programa Ser Livre — Instituto Dra. Mariana Wogel', 22, H-14);
+  }
+
+  if (type === 'progress') {
+    const pct = Math.round(((p.week||1)/16)*100);
+    ctx.fillStyle = '#E8DFC8'; ctx.fillRect(22, 90, W-44, 22);
+    ctx.fillStyle = '#A8872E'; ctx.fillRect(22, 90, (W-44)*(pct/100), 22);
+    ctx.fillStyle = '#4E3D12'; ctx.font = 'bold 14px sans-serif'; ctx.fillText(`${pct}% concluído — Semana ${p.week||1} de 16`, 22, 82);
+    const plan = PLANS.find(x=>x.id===p.plan);
+    ctx.fillStyle = '#8B6D1E'; ctx.font = '13px sans-serif'; ctx.fillText(`Plano: ${plan?.name||p.plan}   Ciclo: ${p.cycle||1}`, 22, 138);
+    const perdido = Math.max(0, (p.iw||0)-(p.cw||0));
+    ctx.fillStyle = S.grn; ctx.font = 'bold 32px sans-serif'; ctx.fillText(`-${perdido.toFixed(1)}kg`, 22, 188);
+    ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif'; ctx.fillText('perdido até agora', 22, 206);
+    ctx.fillStyle = '#D4B978'; ctx.font = '10px sans-serif';
+    ctx.fillText('Programa Ser Livre — Instituto Dra. Mariana Wogel', 22, H-14);
+  }
+
+  if (type === 'scores') {
+    const sh = p.scoreHistory || [];
+    const last = sh[sh.length-1];
+    if (last) {
+      const cMet = (last.m.gv||0)+(last.m.mm||0)+(last.m.pcr||0)+(last.m.fer||0)+(last.m.hb||0)+(last.m.au||0)+(last.m.th||0)+(last.m.ca||0);
+      const cBe  = (last.b.gi||0)+(last.b.lib||0)+(last.b.dor||0)+(last.b.au||0)+(last.b.en||0)+(last.b.so||0);
+      const cMn  = (last.n.co||0)+(last.n.ge||0)+(last.n.mv||0);
+      const scores = [{l:'Score Metabólico',v:cMet,max:24,c:'#8E44AD'},{l:'Score Bem-Estar',v:cBe,max:18,c:'#27AE60'},{l:'Score Mental',v:cMn,max:9,c:'#2980B9'}];
+      let y = 100;
+      scores.forEach(s => {
+        ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif'; ctx.fillText(s.l, 22, y);
+        ctx.fillStyle = '#E8DFC8'; ctx.fillRect(22, y+6, W-44, 20);
+        ctx.fillStyle = s.c; ctx.fillRect(22, y+6, (W-44)*(s.v/s.max), 20);
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif'; ctx.fillText(`${s.v}/${s.max}`, 30, y+20);
+        y += 50;
+      });
+      ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif'; ctx.fillText(`Avaliação: ${last.month||'—'}`, 22, y+10);
+    } else {
+      ctx.fillStyle = '#ccc'; ctx.font = '14px sans-serif'; ctx.fillText('Sem scores registrados', 22, 140);
+    }
+    ctx.fillStyle = '#D4B978'; ctx.font = '10px sans-serif';
+    ctx.fillText('Programa Ser Livre — Instituto Dra. Mariana Wogel', 22, H-14);
+  }
+
+  return canvas.toDataURL('image/png').split(',')[1];
+}
+
 // ── Composer: seleciona template + paciente(s) + preview + envia
 function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
   const [step,       setStep]       = useState(1); // 1=template 2=pacientes 3=preview
@@ -2490,6 +2701,9 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
   const [preview,    setPreview]    = useState(null);
   const [editedMsg,  setEditedMsg]  = useState(null); // preview editável
   const [extraVars,  setExtraVars]  = useState({});
+  const [attachment,    setAttachment]    = useState(null); // { base64, mimeType, fileName }
+  const [showCardMenu, setShowCardMenu]  = useState(false);
+  const attachRef = useRef();
   const [sending,    setSending]    = useState(false);
   const [result,     setResult]     = useState(null);
   const [categFilter,setCategFilter]= useState("all");
@@ -2549,8 +2763,40 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
       const data = await res.json();
       setResult(data);
       if (data.sent > 0) onSent?.();
+
+      // Envia mídia anexada (se houver) para cada paciente com telefone
+      if (attachment) {
+        for (const patId of selPats) {
+          const pat = ps.find(x => x.id === patId);
+          if (!pat?.phone) continue;
+          try {
+            await authFetch('/api/whatsapp/send-media', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                patientId: patId,
+                base64:    attachment.base64,
+                mimeType:  attachment.mimeType,
+                fileName:  attachment.fileName,
+                caption:   attachment.caption || '',
+              }),
+            });
+          } catch(e) { console.warn('Erro ao enviar mídia:', e); }
+        }
+      }
     } catch(e) { alert(e.message); }
     finally { setSending(false); }
+  };
+
+  const handleFileAttach = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const base64 = ev.target.result.split(',')[1];
+      setAttachment({ base64, mimeType: file.type, fileName: file.name });
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -2678,8 +2924,65 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
                 style={{ width:"100%", padding:"12px 14px", borderRadius:12, border:`1.5px solid ${G[200]}`, fontSize:12, color:"#333", lineHeight:1.7, fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box", background:"#fafafa" }}
               />
 
+              {/* Anexo de arquivo ou card do sistema */}
+              <div style={{ marginTop:10, marginBottom:6 }}>
+                <input ref={attachRef} type="file" accept="image/*,application/pdf" onChange={handleFileAttach} style={{ display:"none" }}/>
+                {!attachment ? (
+                  <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                    {/* Gerar do sistema */}
+                    <div style={{ position:"relative" }}>
+                      <button onClick={()=>setShowCardMenu(v=>!v)}
+                        style={{ width:"100%", padding:"9px", borderRadius:9, border:`1.5px solid ${G[300]}`, background:G[50], color:G[700], fontSize:11, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6, fontWeight:600 }}>
+                        📊 Gerar card do sistema
+                      </button>
+                      {showCardMenu && (() => {
+                        const firstPat = ps.find(x => x.id === selPats[0]);
+                        const cardOpts = [
+                          { k:'weight',      l:'Card de Peso',              emoji:'⚖️' },
+                          { k:'composition', l:'Card de Composição Corporal', emoji:'💪' },
+                          { k:'progress',    l:'Card de Progresso do Programa', emoji:'📈' },
+                          { k:'scores',      l:'Card de Scores Clínicos',   emoji:'🧬' },
+                        ];
+                        return (
+                          <div style={{ position:"absolute", top:"100%", left:0, right:0, zIndex:10, background:"#fff", border:`1px solid ${G[200]}`, borderRadius:10, boxShadow:"0 8px 24px rgba(0,0,0,0.12)", overflow:"hidden", marginTop:3 }}>
+                            {!firstPat ? (
+                              <div style={{ padding:"12px 14px", fontSize:11, color:"#aaa" }}>Selecione ao menos 1 paciente no passo 2</div>
+                            ) : cardOpts.map(opt => (
+                              <div key={opt.k} onClick={()=>{
+                                const b64 = generateSystemCard(opt.k, firstPat);
+                                setAttachment({ base64:b64, mimeType:'image/png', fileName:`${opt.k}-${firstPat.name.split(' ')[0]}.png`, caption:opt.l });
+                                setShowCardMenu(false);
+                              }} style={{ padding:"10px 14px", display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:12, color:G[800], borderBottom:`1px solid ${G[50]}` }}
+                              onMouseEnter={e=>e.currentTarget.style.background=G[50]}
+                              onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                                <span>{opt.emoji}</span>{opt.l}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    {/* Upload manual */}
+                    <button onClick={()=>attachRef.current?.click()}
+                      style={{ width:"100%", padding:"7px", borderRadius:9, border:`1.5px dashed ${G[300]}`, background:"#fafafa", color:"#aaa", fontSize:10, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                      📎 Ou anexar arquivo do dispositivo
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px", borderRadius:9, border:`1.5px solid ${S.blue}`, background:S.blueBg }}>
+                    <span style={{ fontSize:13 }}>{attachment.mimeType?.startsWith('image') ? '🖼️' : '📄'}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:11, fontWeight:600, color:G[800], overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{attachment.fileName}</div>
+                      <input value={attachment.caption||''} onChange={e=>setAttachment(a=>({...a,caption:e.target.value}))}
+                        placeholder="Legenda (opcional)" style={{ marginTop:3, width:"100%", padding:"4px 0", border:"none", background:"transparent", fontSize:10, color:"#aaa", fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+                    </div>
+                    <div onClick={()=>setAttachment(null)} style={{ cursor:"pointer", color:"#ccc", fontSize:14, flexShrink:0 }}>✕</div>
+                  </div>
+                )}
+              </div>
+
               <div style={{ background:G[50], borderRadius:9, padding:"10px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
-                <span style={{ fontSize:12, color:G[700] }}>Enviar para <strong>{selPats.length}</strong> paciente(s)</span>
+                <span style={{ fontSize:12, color:G[700] }}>Enviar para <strong>{selPats.length}</strong> paciente(s){attachment ? ' + anexo' : ''}</span>
                 <span style={{ fontSize:11, color:S.grn }}>{selPats.filter(id=>ps.find(p=>p.id===id)?.phone).length} com WhatsApp</span>
               </div>
 
