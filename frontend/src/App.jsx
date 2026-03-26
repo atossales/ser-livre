@@ -2050,87 +2050,222 @@ function Login({ onLogin }) {
 /* ════════════════════════════════════════════
    CALENDÁRIO GERAL
 ═══════════════════════════════════════════════ */
-function CalendarPage({ ps, onSel, mob }) {
-  const [view, setView] = useState("week"); // day | week | biweek | month
-  const [anchor, setAnchor] = useState(new Date());
+// Tipo → cor / label / ícone do agendamento
+const APPT_TYPES = {
+  CONSULTA_MEDICA: { label:"Consulta médica",       color:"#2980B9", icon:Heart,       reminder:true  },
+  CONSULTA_NUTRI:  { label:"Consulta nutricionista",color:S.pur,     icon:Activity,    reminder:true  },
+  EXAME:           { label:"Exame laboratorial",    color:S.yel,     icon:FileText,    reminder:true  },
+  OUTRO:           { label:"Evento interno",        color:G[500],    icon:CalendarDays,reminder:false },
+};
 
-  // Generate all events from patient data
-  const events = useMemo(() => {
+/* ── Modal novo/editar evento ─── */
+function NewApptModal({ ps, team, onClose, onSave, initial }) {
+  const [patId,  setPatId]  = useState(initial?.patientId  || "");
+  const [staffId,setStaff]  = useState(initial?.staffId    || "");
+  const [type,   setType]   = useState(initial?.type       || "CONSULTA_MEDICA");
+  const [title,  setTitle]  = useState(initial?.title      || "");
+  const [date,   setDate]   = useState(initial?.date ? format(new Date(initial.date),"yyyy-MM-dd") : format(new Date(),"yyyy-MM-dd"));
+  const [time,   setTime]   = useState(initial?.date ? format(new Date(initial.date),"HH:mm") : "09:00");
+  const [notes,  setNotes]  = useState(initial?.notes      || "");
+  const [saving, setSaving] = useState(false);
+
+  const typeInfo = APPT_TYPES[type];
+
+  const handleSave = async () => {
+    if (!date) return alert("Selecione a data.");
+    setSaving(true);
+    const dt = new Date(`${date}T${time||"09:00"}:00`);
+    const body = {
+      patientId: patId  ? parseInt(patId)  : null,
+      staffId:   staffId? parseInt(staffId): null,
+      type, title: title||null, date: dt.toISOString(), notes: notes||null,
+    };
+    try {
+      const url    = initial ? `/api/appointments/${initial.id}` : '/api/appointments';
+      const method = initial ? 'PUT' : 'POST';
+      const res    = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const data   = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro');
+      onSave(data);
+    } catch(e) { alert(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const staffTeam = team.filter(m => m.role !== 'PACIENTE');
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:440, borderRadius:16, padding:24, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", maxHeight:"90vh", overflowY:"auto" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>{initial?"Editar evento":"Novo evento"}</span>
+          <div onClick={onClose} style={{ cursor:"pointer", padding:"4px 8px", borderRadius:6, background:G[50], fontSize:13, color:"#aaa" }}>✕</div>
+        </div>
+
+        {/* Tipo */}
+        <div style={{ marginBottom:14 }}>
+          <label style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:6, display:"block" }}>Tipo de evento</label>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+            {Object.entries(APPT_TYPES).map(([k,v]) => {
+              const Ic = v.icon;
+              return (
+                <div key={k} onClick={()=>setType(k)} style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px", borderRadius:9, border:`1.5px solid ${type===k?v.color:G[200]}`, background:type===k?`${v.color}12`:"#fafafa", cursor:"pointer", transition:"all 0.15s" }}>
+                  <Ic size={13} color={type===k?v.color:G[400]}/>
+                  <div>
+                    <div style={{ fontSize:11, fontWeight:type===k?600:400, color:type===k?v.color:G[700] }}>{v.label}</div>
+                    {v.reminder && <div style={{ fontSize:9, color:"#aaa" }}>· lembrete WhatsApp</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Data e hora */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+          <div>
+            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Data</label>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)}
+              style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+          </div>
+          <div>
+            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Horário</label>
+            <input type="time" value={time} onChange={e=>setTime(e.target.value)}
+              style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+          </div>
+        </div>
+
+        {/* Paciente */}
+        <div style={{ marginBottom:12 }}>
+          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Paciente</label>
+          <select value={patId} onChange={e=>setPatId(e.target.value)}
+            style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", background:"#fff", outline:"none" }}>
+            <option value="">— Sem paciente específico —</option>
+            {ps.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+
+        {/* Profissional */}
+        <div style={{ marginBottom:12 }}>
+          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Profissional</label>
+          <select value={staffId} onChange={e=>setStaff(e.target.value)}
+            style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", background:"#fff", outline:"none" }}>
+            <option value="">— Selecione —</option>
+            {staffTeam.map(m => <option key={m.id} value={m.id}>{m.name} ({m.label||m.role})</option>)}
+          </select>
+        </div>
+
+        {/* Descrição */}
+        <div style={{ marginBottom:14 }}>
+          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Descrição (opcional)</label>
+          <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ex: Avaliação de exames mês 2"
+            style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+        </div>
+
+        {/* Observações */}
+        <div style={{ marginBottom:18 }}>
+          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Observações</label>
+          <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={2} placeholder="Informações adicionais..."
+            style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box" }}/>
+        </div>
+
+        {/* Aviso de lembrete */}
+        {APPT_TYPES[type]?.reminder && (
+          <div style={{ background:S.blueBg, border:`1px solid ${S.blue}30`, borderRadius:8, padding:"8px 12px", marginBottom:14, display:"flex", alignItems:"center", gap:8, fontSize:11, color:S.blue }}>
+            <Bell size={12}/> Lembrete automático por WhatsApp será enviado 1 dia antes.
+          </div>
+        )}
+
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={handleSave} disabled={saving}
+            style={{ flex:1, padding:11, background:saving?G[400]:G[600], color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:saving?"not-allowed":"pointer", fontFamily:"inherit" }}>
+            {saving?"Salvando...":"Salvar evento"}
+          </button>
+          <button onClick={onClose} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:9, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalendarPage({ ps, team, onSel, mob }) {
+  const [view,      setView]      = useState("week");
+  const [anchor,    setAnchor]    = useState(new Date());
+  const [appts,     setAppts]     = useState([]);
+  const [showNew,   setShowNew]   = useState(false);
+  const [editAppt,  setEditAppt]  = useState(null);
+  const [loading,   setLoading]   = useState(false);
+
+  // Carrega agendamentos da API
+  const loadAppts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/appointments');
+      if (res.ok) setAppts(await res.json());
+    } catch { /* usa array vazio */ }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { loadAppts(); }, [loadAppts]);
+
+  // Eventos gerados do programa (pesagens previstas, avaliações)
+  const programEvents = useMemo(() => {
     const evs = [];
     ps.forEach(p => {
       if (!p.sd) return;
       const sd = new Date(p.sd + 'T12:00:00');
-      // Weekly weighings for 16 weeks
       for (let w = 1; w <= 16; w++) {
-        const d = addDays(sd, (w-1)*7);
-        evs.push({ id:`${p.id}-w${w}`, date:d, type:"pesagem", label:`Semana ${w} — Pesagem`, patient:p, color:S.blue });
+        evs.push({ id:`${p.id}-w${w}`, date: addDays(sd,(w-1)*7), type:"pesagem", label:`Sem. ${w} — Pesagem`, patient:p, color:S.blue, isProgram:true });
       }
-      // Monthly score assessments (every 4 weeks)
       for (let m = 1; m <= 4; m++) {
-        const d = addDays(sd, (m-1)*28);
-        evs.push({ id:`${p.id}-m${m}`, date:d, type:"score", label:`Mês ${m} — Avaliação`, patient:p, color:S.pur });
-      }
-      // Return appointment
-      if (p.nr) {
-        const d = new Date(p.nr);
-        evs.push({ id:`${p.id}-ret`, date:d, type:"retorno", label:"Retorno consulta", patient:p, color:S.grn });
+        evs.push({ id:`${p.id}-m${m}`, date: addDays(sd,(m-1)*28), type:"avaliacao", label:`Mês ${m} — Avaliação`, patient:p, color:S.pur, isProgram:true });
       }
     });
     return evs;
   }, [ps]);
 
-  const viewDays = view === "day" ? 1 : view === "week" ? 7 : view === "biweek" ? 14 : 30;
+  // Agendamentos reais da API
+  const apptEvents = useMemo(() => appts.map(a => {
+    const t = APPT_TYPES[a.type] || APPT_TYPES.OUTRO;
+    const patName = a.patient?.user?.name || a.title || "Evento";
+    return { id:`appt-${a.id}`, date: new Date(a.date), type:a.type, label: a.title || t.label, patient: a.patient ? { id: a.patientId, name: patName } : null, color: t.color, isProgram:false, raw:a };
+  }), [appts]);
 
+  const allEvents = [...programEvents, ...apptEvents];
+
+  // Cálculo do período exibido
+  const viewDays = view==="day"?1:view==="week"?7:view==="biweek"?14:30;
   const startDate = (() => {
-    if (view === "day") return anchor;
-    if (view === "week") {
-      const d = new Date(anchor);
-      d.setDate(d.getDate() - d.getDay());
-      return d;
-    }
-    if (view === "biweek") {
-      const d = new Date(anchor);
-      d.setDate(d.getDate() - d.getDay());
-      return d;
-    }
-    // month
-    const d = new Date(anchor);
-    d.setDate(1);
-    return d;
+    if (view==="day") return anchor;
+    if (view==="month") { const d=new Date(anchor); d.setDate(1); return d; }
+    const d=new Date(anchor); d.setDate(d.getDate()-d.getDay()); return d;
   })();
+  const numDays = view==="month" ? new Date(anchor.getFullYear(),anchor.getMonth()+1,0).getDate() : viewDays;
+  const days = Array.from({length:numDays},(_,i)=>{ const d=new Date(startDate); d.setDate(d.getDate()+i); return d; });
 
-  const days = Array.from({length: view==="month" ? new Date(anchor.getFullYear(), anchor.getMonth()+1, 0).getDate() : viewDays}, (_, i) => {
-    const d = new Date(startDate);
-    d.setDate(d.getDate() + i);
-    return d;
-  });
-
-  const eventsOnDay = d => events.filter(e => {
+  const eventsOnDay = d => allEvents.filter(e => {
     const ed = new Date(e.date);
     return ed.getFullYear()===d.getFullYear() && ed.getMonth()===d.getMonth() && ed.getDate()===d.getDate();
-  });
+  }).sort((a,b)=>new Date(a.date)-new Date(b.date));
 
-  const prev = () => {
-    const d = new Date(anchor);
-    d.setDate(d.getDate() - viewDays);
-    setAnchor(d);
-  };
-  const next = () => {
-    const d = new Date(anchor);
-    d.setDate(d.getDate() + viewDays);
-    setAnchor(d);
+  const isToday = d => { const t=new Date(); return d.getFullYear()===t.getFullYear()&&d.getMonth()===t.getMonth()&&d.getDate()===t.getDate(); };
+  const move = n => { const d=new Date(anchor); d.setDate(d.getDate()+n*viewDays); setAnchor(d); };
+
+  const deleteAppt = async (id) => {
+    if (!confirm("Remover este evento?")) return;
+    await fetch(`/api/appointments/${id}`, { method:'DELETE' });
+    setAppts(prev => prev.filter(a => a.id !== id));
   };
 
-  const isToday = d => {
-    const t = new Date();
-    return d.getFullYear()===t.getFullYear() && d.getMonth()===t.getMonth() && d.getDate()===t.getDate();
-  };
+  const cols = view==="day"?"1fr":mob?"repeat(2,1fr)":view==="month"?"repeat(7,1fr)":`repeat(${Math.min(viewDays,7)},1fr)`;
 
-  const typeIcon = { pesagem: Weight, score: Activity, retorno: CalendarDays };
+  const monthLabel = format(anchor, "MMMM yyyy");
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-      {/* Header controls */}
+      {showNew && <NewApptModal ps={ps} team={team} onClose={()=>setShowNew(false)} onSave={a=>{ setAppts(prev=>[...prev,a]); setShowNew(false); }} />}
+      {editAppt && <NewApptModal ps={ps} team={team} initial={editAppt} onClose={()=>setEditAppt(null)} onSave={a=>{ setAppts(prev=>prev.map(x=>x.id===a.id?a:x)); setEditAppt(null); }} />}
+
+      {/* Cabeçalho */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
         <div style={{ display:"flex", gap:4 }}>
           {[["day","Dia"],["week","Semana"],["biweek","Quinzena"],["month","Mês"]].map(([k,l])=>(
@@ -2138,48 +2273,66 @@ function CalendarPage({ ps, onSel, mob }) {
           ))}
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <div onClick={prev} style={{ cursor:"pointer", padding:"6px 10px", borderRadius:7, background:"#fff", border:`1px solid ${G[200]}` }}>‹</div>
-          <div onClick={()=>setAnchor(new Date())} style={{ cursor:"pointer", padding:"6px 12px", borderRadius:7, background:G[50], border:`1px solid ${G[200]}`, fontSize:11, color:G[700] }}>Hoje</div>
-          <div onClick={next} style={{ cursor:"pointer", padding:"6px 10px", borderRadius:7, background:"#fff", border:`1px solid ${G[200]}` }}>›</div>
+          <div onClick={()=>move(-1)} style={{ cursor:"pointer", padding:"6px 10px", borderRadius:7, background:"#fff", border:`1px solid ${G[200]}`, fontSize:14 }}>‹</div>
+          <span style={{ fontSize:12, fontWeight:600, color:G[800], minWidth:110, textAlign:"center", textTransform:"capitalize" }}>{monthLabel}</span>
+          <div onClick={()=>setAnchor(new Date())} style={{ cursor:"pointer", padding:"6px 10px", borderRadius:7, background:G[50], border:`1px solid ${G[200]}`, fontSize:11, color:G[700] }}>Hoje</div>
+          <div onClick={()=>move(1)} style={{ cursor:"pointer", padding:"6px 10px", borderRadius:7, background:"#fff", border:`1px solid ${G[200]}`, fontSize:14 }}>›</div>
+          <button onClick={()=>setShowNew(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+            <Plus size={12}/>Novo evento
+          </button>
         </div>
       </div>
 
-      {/* Legend */}
+      {/* Legenda */}
       <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
-        {[{c:S.blue,l:"Pesagem"},{c:S.pur,l:"Avaliação mensal"},{c:S.grn,l:"Retorno consulta"}].map(({c,l})=>(
-          <div key={l} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:G[700] }}>
-            <div style={{ width:10, height:10, borderRadius:3, background:c }}/>
+        {[{c:S.blue,l:"Pesagem prevista"},{c:S.pur,l:"Avaliação mensal"},{c:"#2980B9",l:"Consulta médica"},{c:S.pur,l:"Consulta nutri"},{c:S.yel,l:"Exame"},{c:G[500],l:"Evento interno"}].filter((v,i,a)=>a.findIndex(x=>x.l===v.l)===i).map(({c,l})=>(
+          <div key={l} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, color:G[600] }}>
+            <div style={{ width:8, height:8, borderRadius:2, background:c }}/>
             {l}
           </div>
         ))}
       </div>
 
-      {/* Calendar grid */}
-      <div style={{ display:"grid", gridTemplateColumns: view==="day" ? "1fr" : mob ? "repeat(2,1fr)" : view==="month" ? "repeat(7,1fr)" : `repeat(${Math.min(viewDays,7)},1fr)`, gap:6 }}>
+      {/* Grid */}
+      <div style={{ display:"grid", gridTemplateColumns:cols, gap:6 }}>
+        {/* Cabeçalho dias da semana no modo mês */}
+        {view==="month" && ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map(d=>(
+          <div key={d} style={{ textAlign:"center", fontSize:9, fontWeight:600, color:G[500], padding:"4px 0", textTransform:"uppercase", letterSpacing:"0.05em" }}>{d}</div>
+        ))}
         {days.map((d, i) => {
           const devs = eventsOnDay(d);
           const today = isToday(d);
+          const maxShow = view==="month"?2:6;
           return (
-            <div key={i} style={{ background:"#fff", borderRadius:10, border:`1.5px solid ${today?G[400]:G[100]}`, padding:"8px 10px", minHeight:view==="month"?80:100 }}>
-              <div style={{ fontSize:10, fontWeight:today?700:500, color:today?G[600]:"#aaa", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.04em" }}>
-                {format(d, "EEE")} <span style={{ fontSize:13, fontWeight:today?800:600, color:today?G[700]:G[800] }}>{format(d,"dd")}</span>
-                {today && <span style={{ marginLeft:4, background:G[500], color:"#fff", fontSize:8, padding:"1px 5px", borderRadius:8, fontWeight:700 }}>Hoje</span>}
+            <div key={i} style={{ background:"#fff", borderRadius:10, border:`1.5px solid ${today?G[400]:G[100]}`, padding:"8px 10px", minHeight:view==="month"?72:110, position:"relative" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:5 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                  <span style={{ fontSize:view==="month"?12:13, fontWeight:today?800:600, color:today?G[700]:G[800], lineHeight:1 }}>{format(d,"dd")}</span>
+                  {view!=="month" && <span style={{ fontSize:9, color:"#bbb", textTransform:"uppercase" }}>{format(d,"EEE")}</span>}
+                  {today && <span style={{ background:G[500], color:"#fff", fontSize:8, padding:"1px 5px", borderRadius:6, fontWeight:700 }}>Hoje</span>}
+                </div>
+                <div onClick={()=>{ setShowNew(true); }} style={{ opacity:0, cursor:"pointer", fontSize:14, color:G[400] }} className="add-ev">+</div>
               </div>
-              {devs.length === 0 && <div style={{ fontSize:9, color:"#ddd", textAlign:"center", marginTop:8 }}>—</div>}
-              {devs.slice(0, view==="month"?2:5).map(ev => {
-                const Ic = typeIcon[ev.type] || CalendarDays;
+              {devs.length===0 && view!=="month" && <div style={{ fontSize:9, color:"#e0e0e0", textAlign:"center", marginTop:12 }}>—</div>}
+              {devs.slice(0,maxShow).map(ev => {
+                const Ic = (APPT_TYPES[ev.type]?.icon) || CalendarDays;
                 return (
-                  <div key={ev.id} onClick={()=>onSel(ev.patient.id)}
-                    style={{ display:"flex", alignItems:"flex-start", gap:4, padding:"4px 6px", borderRadius:6, marginBottom:3, cursor:"pointer", background:`${ev.color}15`, border:`1px solid ${ev.color}30` }}>
+                  <div key={ev.id}
+                    style={{ display:"flex", alignItems:"flex-start", gap:4, padding:"3px 6px", borderRadius:6, marginBottom:3, cursor:"pointer", background:`${ev.color}14`, border:`1px solid ${ev.color}28`, position:"relative" }}
+                    onClick={()=>{ if(ev.patient) onSel(ev.patient.id); }}>
                     <Ic size={9} color={ev.color} style={{ marginTop:2, flexShrink:0 }}/>
-                    <div>
-                      <div style={{ fontSize:9, fontWeight:600, color:ev.color }}>{ev.label}</div>
-                      <div style={{ fontSize:9, color:"#aaa", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:90 }}>{ev.patient.name.split(" ")[0]}</div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:9, fontWeight:600, color:ev.color, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{ev.label}</div>
+                      {ev.patient && <div style={{ fontSize:9, color:"#aaa", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{ev.patient.name?.split(" ")[0]}</div>}
                     </div>
+                    {!ev.isProgram && ev.raw && (
+                      <div onClick={e=>{ e.stopPropagation(); deleteAppt(ev.raw.id); }}
+                        style={{ fontSize:10, color:"#ccc", cursor:"pointer", padding:"0 2px", flexShrink:0 }} title="Remover">✕</div>
+                    )}
                   </div>
                 );
               })}
-              {devs.length > (view==="month"?2:5) && <div style={{ fontSize:9, color:G[500], marginTop:2 }}>+{devs.length-(view==="month"?2:5)} mais</div>}
+              {devs.length>maxShow && <div style={{ fontSize:9, color:G[500], marginTop:2, cursor:"pointer" }} onClick={()=>setView("day")}>+{devs.length-maxShow} mais</div>}
             </div>
           );
         })}
@@ -2314,7 +2467,7 @@ export default function App() {
   const content = (
     <>
       {page==="dash"  && <Dash  ps={ps} onSel={go} mob={mob}/>}
-      {page==="cal"   && <CalendarPage ps={ps} onSel={go} mob={mob}/>}
+      {page==="cal"   && <CalendarPage ps={ps} team={team} onSel={go} mob={mob}/>}
       {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)}
           onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(err=>console.warn('API delete failed:', err.message)); }}
           onBulkDelete={ids=>{ setPs(prev=>prev.filter(x=>!ids.includes(x.id))); ids.forEach(id=>apiDeletePatient(id).catch(err=>console.warn('API bulk delete failed:', err.message))); }}/>}

@@ -831,6 +831,105 @@ app.put('/api/state/:key', express.json({ limit: '20mb' }), async (req, res) => 
 });
 
 // ════════════════════════════════════════════
+//  AGENDAMENTOS (APPOINTMENTS)
+// ════════════════════════════════════════════
+
+// Lista agendamentos (filtro por data opcional)
+app.get('/api/appointments', authRequired, async (req, res) => {
+  try {
+    const { from, to, patientId } = req.query;
+    const where = {};
+    if (from || to) {
+      where.date = {};
+      if (from) where.date.gte = new Date(from);
+      if (to)   where.date.lte = new Date(to);
+    }
+    if (patientId) where.patientId = parseInt(patientId);
+
+    const appointments = await prisma.appointment.findMany({
+      where,
+      include: {
+        patient: { include: { user: { select: { name: true, phone: true, avatarUrl: true } } } },
+        staff:   { select: { id: true, name: true, role: true, avatarUrl: true } },
+      },
+      orderBy: { date: 'asc' }
+    });
+    res.json(appointments);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Criar agendamento
+app.post('/api/appointments', authRequired, async (req, res) => {
+  try {
+    const { patientId, staffId, type, title, date, notes } = req.body;
+    if (!type || !date) return res.status(400).json({ error: 'type e date são obrigatórios' });
+
+    // Só envia lembrete para consultas e exames
+    const sendReminder = ['CONSULTA_MEDICA', 'CONSULTA_NUTRI', 'EXAME'].includes(type);
+
+    const appt = await prisma.appointment.create({
+      data: {
+        patientId:   patientId ? parseInt(patientId) : null,
+        staffId:     staffId   ? parseInt(staffId)   : null,
+        createdById: req.user.id,
+        type,
+        title:       title || null,
+        date:        new Date(date),
+        notes:       notes || null,
+        sendReminder,
+      },
+      include: {
+        patient: { include: { user: { select: { name: true, phone: true } } } },
+        staff:   { select: { id: true, name: true, role: true } },
+      }
+    });
+    res.status(201).json(appt);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Atualizar agendamento
+app.put('/api/appointments/:id', authRequired, async (req, res) => {
+  try {
+    const { patientId, staffId, type, title, date, notes } = req.body;
+    const sendReminder = type ? ['CONSULTA_MEDICA', 'CONSULTA_NUTRI', 'EXAME'].includes(type) : undefined;
+
+    const appt = await prisma.appointment.update({
+      where: { id: parseInt(req.params.id) },
+      data: {
+        ...(patientId !== undefined && { patientId: patientId ? parseInt(patientId) : null }),
+        ...(staffId   !== undefined && { staffId:   staffId   ? parseInt(staffId)   : null }),
+        ...(type  && { type, sendReminder }),
+        ...(title !== undefined && { title }),
+        ...(date  && { date: new Date(date) }),
+        ...(notes !== undefined && { notes }),
+        reminderSent: false, // reseta para reenviar no novo horário
+      },
+      include: {
+        patient: { include: { user: { select: { name: true, phone: true } } } },
+        staff:   { select: { id: true, name: true, role: true } },
+      }
+    });
+    res.json(appt);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Excluir agendamento
+app.delete('/api/appointments/:id', authRequired, async (req, res) => {
+  try {
+    await prisma.appointment.delete({ where: { id: parseInt(req.params.id) } });
+    res.json({ message: 'Agendamento removido.' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════
 //  WHATSAPP
 // ════════════════════════════════════════════
 

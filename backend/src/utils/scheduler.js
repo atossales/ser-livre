@@ -91,33 +91,54 @@ async function jobWeekStart(prisma) {
   console.log(`[SCHEDULER] Week start: ${sent}/${patients.length} enviados`);
 }
 
-// ── Job 2: Lembrete de consulta — todo dia às 09:00 ───────
+// ── Job 2: Lembrete de consulta/exame — todo dia às 09:00 ─
 
 async function jobConsultaReminder(prisma) {
-  console.log('[SCHEDULER] Rodando job lembrete de consulta...');
+  console.log('[SCHEDULER] Rodando job lembrete de consulta/exame...');
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStart = new Date(tomorrow); tomorrowStart.setHours(0,0,0,0);
+  const tomorrowEnd   = new Date(tomorrow); tomorrowEnd.setHours(23,59,59,999);
 
-  const patients = await getActivePatients(prisma);
+  // Busca agendamentos de amanhã que precisam de lembrete e ainda não foram enviados
+  let appointments = [];
+  try {
+    appointments = await prisma.appointment.findMany({
+      where: {
+        date:         { gte: tomorrowStart, lte: tomorrowEnd },
+        sendReminder: true,
+        reminderSent: false,
+        patientId:    { not: null },
+      },
+      include: {
+        patient: { include: { user: { select: { name: true, phone: true } } } }
+      }
+    });
+  } catch (err) {
+    console.error('[SCHEDULER] Erro ao buscar appointments:', err.message);
+    return;
+  }
+
   let sent = 0;
-
-  for (const p of patients) {
-    const phone = p.user?.phone;
-    if (!phone) continue;
-    if (!p.nextReturn) continue;
-
-    const returnDate = new Date(p.nextReturn);
-    if (!sameDay(returnDate, tomorrow)) continue;
+  for (const appt of appointments) {
+    const phone = appt.patient?.user?.phone;
+    const name  = appt.patient?.user?.name;
+    if (!phone || !name) continue;
 
     try {
-      await sendConsultaReminder({ name: p.user.name, phone });
+      await sendConsultaReminder({ name, phone });
+      // Marca como enviado para não reenviar
+      await prisma.appointment.update({
+        where: { id: appt.id },
+        data:  { reminderSent: true }
+      });
       sent++;
       await new Promise(r => setTimeout(r, 1500));
     } catch (err) {
-      console.error(`[SCHEDULER] Erro ao enviar consulta_reminder para ${p.user.name}:`, err.message);
+      console.error(`[SCHEDULER] Erro ao enviar lembrete para ${name}:`, err.message);
     }
   }
-  console.log(`[SCHEDULER] Consulta reminder: ${sent} enviados`);
+  console.log(`[SCHEDULER] Consulta/exame reminder: ${sent}/${appointments.length} enviados`);
 }
 
 // ── Job 3: Lembrete de exames — todo dia às 08:30 ─────────

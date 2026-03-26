@@ -49,6 +49,10 @@ model User {
 
   inviteTokens    InviteToken[]
   resetTokens     ResetToken[]
+
+  // Agendamentos (como profissional ou como criador)
+  appointmentsAsStaff    Appointment[] @relation("appointmentStaff")
+  appointmentsCreated    Appointment[] @relation("appointmentCreator")
 }
 
 // Papéis possíveis no sistema
@@ -83,8 +87,9 @@ model Patient {
   startDate     DateTime    @default(now())
 
   // Relacionamentos
-  cycles        Cycle[]     // Ciclos de tratamento
-  alerts        Alert[]     // Alertas gerados
+  cycles        Cycle[]         // Ciclos de tratamento
+  alerts        Alert[]         // Alertas gerados
+  appointments  Appointment[]   // Agendamentos
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -278,6 +283,41 @@ model StateBlob {
   key       String   @id
   value     Json
   updatedAt DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────────
+// AGENDAMENTOS — Eventos da equipe com pacientes
+// Tipos com lembrete WhatsApp automático:
+//   CONSULTA_MEDICA, CONSULTA_NUTRI, EXAME
+// Tipo apenas visual para equipe:
+//   OUTRO
+// ──────────────────────────────────────────────
+model Appointment {
+  id          Int             @id @default(autoincrement())
+  patientId   Int?
+  patient     Patient?        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  staffId     Int?
+  staff       User?           @relation("appointmentStaff", fields: [staffId], references: [id], onDelete: SetNull)
+  createdById Int?
+  createdBy   User?           @relation("appointmentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  type        AppointmentType
+  title       String?         // descrição / nome do evento
+  date        DateTime        // data e hora
+  notes       String?
+
+  sendReminder  Boolean  @default(false) // true para CONSULTA e EXAME
+  reminderSent  Boolean  @default(false) // evita reenvio duplo
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum AppointmentType {
+  CONSULTA_MEDICA   // Consulta com a médica
+  CONSULTA_NUTRI    // Consulta com nutricionista
+  EXAME             // Exame laboratorial
+  OUTRO             // Evento interno (só equipe)
 }
 
 model InviteToken {
