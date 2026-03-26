@@ -36,6 +36,7 @@ model User {
   avatarUrl String?  // URL da foto de perfil
   phone     String?
   active    Boolean  @default(true)
+  emailVerified   Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -45,6 +46,9 @@ model User {
   // Relação: quem da equipe preencheu os dados
   weekChecks  WeekCheck[]  @relation("filledBy")
   scoresFilled ScoreEntry[] @relation("filledBy")
+
+  inviteTokens    InviteToken[]
+  resetTokens     ResetToken[]
 }
 
 // Papéis possíveis no sistema
@@ -66,7 +70,7 @@ enum Role {
 model Patient {
   id            Int      @id @default(autoincrement())
   userId        Int      @unique
-  user          User     @relation(fields: [userId], references: [id])
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Dados clínicos
   birthDate     DateTime?
@@ -104,7 +108,7 @@ enum Plan {
 model Cycle {
   id          Int      @id @default(autoincrement())
   patientId   Int
-  patient     Patient  @relation(fields: [patientId], references: [id])
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   number      Int      // Número do ciclo (1, 2, 3...)
   currentWeek Int      @default(1)  // Semana atual (1 a 16)
@@ -136,8 +140,9 @@ enum CycleStatus {
 model WeekCheck {
   id          Int      @id @default(autoincrement())
   cycleId     Int
-  cycle       Cycle    @relation(fields: [cycleId], references: [id])
+  cycle       Cycle    @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   weekNumber  Int      // 1 a 16
+  weekDate    DateTime?
 
   // Enfermagem
   tirzepatida       Boolean  @default(false)
@@ -181,7 +186,7 @@ model WeekCheck {
 model ScoreEntry {
   id          Int      @id @default(autoincrement())
   cycleId     Int
-  cycle       Cycle    @relation(fields: [cycleId], references: [id])
+  cycle       Cycle    @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   month       Int      // Mês dentro do ciclo (1, 2, 3, 4)
 
   // ── SCORE METABÓLICO (8 a 24 pts) ──
@@ -239,7 +244,7 @@ model ScoreEntry {
 model Alert {
   id          Int      @id @default(autoincrement())
   patientId   Int
-  patient     Patient  @relation(fields: [patientId], references: [id])
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   type        AlertType
   severity    AlertSeverity
@@ -261,4 +266,36 @@ enum AlertType {
 enum AlertSeverity {
   RED     // Vermelho — avisar Dra. Mariana
   YELLOW  // Amarelo — equipe ficar atenta
+}
+
+// ──────────────────────────────────────────────
+// STATE BLOB — Persistência do estado do frontend
+// Armazena JSON arbitrário indexado por chave.
+// Permite que múltiplos usuários compartilhem os
+// mesmos dados independente do dispositivo/browser.
+// ──────────────────────────────────────────────
+model StateBlob {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model InviteToken {
+  id          Int      @id @default(autoincrement())
+  tokenHash   String   @unique
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  used        Boolean  @default(false)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+}
+
+model ResetToken {
+  id          Int      @id @default(autoincrement())
+  tokenHash   String   @unique
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  used        Boolean  @default(false)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
 }
