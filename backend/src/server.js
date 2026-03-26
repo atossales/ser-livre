@@ -78,7 +78,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type','Authorization']
 }));
 app.options('*', cors());
-app.use(express.json());
+app.use(express.json({ limit: '15mb' })); // limite aumentado para suportar base64 de imagens
 
 // Rate limiter para rotas de autenticação (evita força bruta)
 const authLimiter = rateLimit({
@@ -1212,6 +1212,7 @@ app.post('/api/whatsapp/send-custom', authRequired, requireRole('ADMIN', 'MEDICA
 app.post('/api/whatsapp/send-media', express.json({ limit: '15mb' }), authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM', 'NUTRICIONISTA'), async (req, res) => {
   try {
     const { patientId, base64, mimeType, fileName, caption, textMessage } = req.body;
+    console.log(`[MEDIA ROUTE] patientId=${patientId}, mimeType=${mimeType}, fileName=${fileName}, base64 length=${base64?.length}`);
     if (!patientId || !base64) return res.status(400).json({ error: 'patientId e base64 são obrigatórios' });
 
     // Busca telefone do paciente
