@@ -1690,62 +1690,96 @@ function Portal({  p, av, setAv }) {
    MODAL REGISTRO DE PESAGEM
 ═══════════════════════════════════════════════ */
 function WeighInModal({ p, onClose, onSave, onLog }) {
-  const [data,    setData]    = useState(format(new Date(), "yyyy-MM-dd"));
+  const [weekNum, setWeekNum] = useState(p.week || 1);
   const [peso,    setPeso]    = useState(p.cw || "");
   const [mm,      setMm]      = useState("");
   const [mg,      setMg]      = useState("");
 
-  const tot = parseFloat(mm||0) + parseFloat(mg||0);
+  const sd = p.sd ? new Date(p.sd + 'T12:00:00') : new Date();
+  const weekStart = addDays(sd, (weekNum - 1) * 7);
+  const weekEnd   = addDays(sd, weekNum * 7 - 1);
+  const fmtFull   = d => format(d, "dd/MM/yyyy");
+
+  const tot   = parseFloat(mm||0) + parseFloat(mg||0);
   const pctMM = tot > 0 ? (parseFloat(mm||0)/tot*100).toFixed(1) : "—";
   const pctMG = tot > 0 ? (parseFloat(mg||0)/tot*100).toFixed(1) : "—";
 
   const handleSave = () => {
-    const w = parseFloat(peso);
+    const w    = parseFloat(peso);
     const mVal = parseFloat(mm||0);
     const gVal = parseFloat(mg||0);
     if (!w) return alert("Informe o peso.");
     const entry = {
-      date: new Date(data).toISOString(),
-      weight: w,
+      date:       weekStart.toISOString(),
+      weekStart:  weekStart.toISOString(),
+      weekEnd:    weekEnd.toISOString(),
+      weekNum,
+      weight:     w,
       massaMagra: mVal,
       massaGordura: gVal,
-      m: p.history[p.history.length-1].m,
-      b: p.history[p.history.length-1].b,
-      n: p.history[p.history.length-1].n,
+      m: p.history[p.history.length-1]?.m || {},
+      b: p.history[p.history.length-1]?.b || {},
+      n: p.history[p.history.length-1]?.n || {},
     };
     onSave(entry);
-    onLog && onLog({ action:"pesagem", patientId:p.id, patientName:p.name, detail:`Peso: ${w}kg | MM: ${mVal}kg | MG: ${gVal}kg` });
+    onLog && onLog({ action:"pesagem", patientId:p.id, patientName:p.name, detail:`Semana ${weekNum} | Peso: ${w}kg | MM: ${mVal}kg | MG: ${gVal}kg` });
   };
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"#fff", width:"100%", maxWidth:380, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:420, borderRadius:16, padding:24, boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
           <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>Registrar pesagem</span>
-          <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50], fontSize:13, color:"#aaa" }}>✕</div>
+          <div onClick={onClose} style={{ cursor:"pointer", padding:"4px 8px", borderRadius:6, background:G[50], fontSize:13, color:"#aaa" }}>✕</div>
         </div>
-        <div style={{ fontSize:11, color:"#aaa", marginBottom:14 }}>{p.name}</div>
+        <div style={{ fontSize:11, color:"#aaa", marginBottom:18 }}>{p.name}</div>
+
+        {/* Week grid */}
+        <div style={{ marginBottom:16 }}>
+          <label style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:8, display:"block" }}>A qual semana se refere?</label>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(8,1fr)", gap:4, marginBottom:10 }}>
+            {Array.from({length:16},(_,i)=>i+1).map(n=>(
+              <div key={n} onClick={()=>setWeekNum(n)}
+                style={{ height:32, borderRadius:7, border:`1.5px solid ${weekNum===n?G[500]:G[200]}`,
+                  background:weekNum===n?G[600]:"#fff", color:weekNum===n?"#fff":"#aaa",
+                  fontSize:11, fontWeight:weekNum===n?700:400,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  cursor:"pointer", transition:"all 0.15s" }}>
+                {n}
+              </div>
+            ))}
+          </div>
+          <div style={{ background:`linear-gradient(135deg,${G[50]},${G[100]})`, borderRadius:9, padding:"10px 14px", display:"flex", alignItems:"center", gap:8, border:`1px solid ${G[200]}` }}>
+            <CalendarDays size={15} color={G[500]}/>
+            <div>
+              <div style={{ fontSize:10, color:G[500], fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em" }}>Semana {weekNum}</div>
+              <div style={{ fontSize:13, fontWeight:700, color:G[800] }}>{fmtFull(weekStart)} → {fmtFull(weekEnd)}</div>
+            </div>
+          </div>
+        </div>
+
         {[
-          { label:"Data da pesagem", val:data, set:setData, type:"date" },
-          { label:"Peso total (kg)", val:peso, set:setPeso, type:"number", ph:"84.2" },
-          { label:"Massa magra (kg)", val:mm, set:setMm, type:"number", ph:"56.8" },
-          { label:"Massa gorda (kg)", val:mg, set:setMg, type:"number", ph:"27.4" },
+          { label:"Peso total (kg)",  val:peso, set:setPeso, type:"number", ph:"84.2" },
+          { label:"Massa magra (kg)", val:mm,   set:setMm,   type:"number", ph:"56.8" },
+          { label:"Massa gorda (kg)", val:mg,   set:setMg,   type:"number", ph:"27.4" },
         ].map(f => (
           <div key={f.label} style={{ marginBottom:12 }}>
             <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
             <input type={f.type} value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph||""}
-              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+              style={{ width:"100%", padding:"9px 11px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", transition:"border-color 0.15s" }}
+              onFocus={e=>e.target.style.borderColor=G[400]} onBlur={e=>e.target.style.borderColor=G[200]}/>
           </div>
         ))}
+
         {tot > 0 && (
           <div style={{ background:G[50], borderRadius:8, padding:"8px 12px", marginBottom:14, display:"flex", gap:16, fontSize:11 }}>
             <span style={{ color:S.blue }}>Magra: <strong>{pctMM}%</strong></span>
             <span style={{ color:S.yel }}>Gorda: <strong>{pctMG}%</strong></span>
           </div>
         )}
-        <div style={{ display:"flex", gap:8 }}>
-          <button onClick={handleSave} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar pesagem</button>
-          <button onClick={onClose} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+        <div style={{ display:"flex", gap:8, marginTop:4 }}>
+          <button onClick={handleSave} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar pesagem</button>
+          <button onClick={onClose}   style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:9, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
         </div>
       </div>
     </div>
@@ -1894,9 +1928,7 @@ function Login({ onLogin }) {
     <div style={{ minHeight:"100vh", background:`linear-gradient(135deg,${G[800]},${G[900]} 50%,#1a1a2e)`, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
       <div style={{ width:"100%", maxWidth:360, background:"#fff", borderRadius:18, padding:"32px 24px", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
         <div style={{ textAlign:"center", marginBottom:24 }}>
-          <div style={{ width:52, height:52, borderRadius:"50%", background:`linear-gradient(135deg,${G[400]},${G[600]})`, margin:"0 auto 10px", display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <Shield size={22} color="#fff"/>
-          </div>
+          <img src="http://dramarianawogel.com.br/wp-content/uploads/2026/03/INSTITUTO-PNG-BRANCO.webp" alt="Instituto" style={{ height:56, objectFit:"contain", margin:"0 auto 10px", display:"block", filter:"invert(1)" }} onError={e=>{e.target.style.display="none";}}/>
           <div style={{ fontSize:19, fontWeight:700, color:G[800] }}>Programa Ser Livre</div>
           <div style={{ fontSize:11, color:"#bbb", marginTop:2 }}>Instituto Dra. Mariana Wogel</div>
         </div>
@@ -1953,6 +1985,147 @@ function Login({ onLogin }) {
             <div style={{ textAlign:"center", marginTop:6, fontSize:10, color:"#ccc" }}>Demo: clique Entrar com qualquer dado</div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
+   CALENDÁRIO GERAL
+═══════════════════════════════════════════════ */
+function CalendarPage({ ps, onSel, mob }) {
+  const [view, setView] = useState("week"); // day | week | biweek | month
+  const [anchor, setAnchor] = useState(new Date());
+
+  // Generate all events from patient data
+  const events = useMemo(() => {
+    const evs = [];
+    ps.forEach(p => {
+      if (!p.sd) return;
+      const sd = new Date(p.sd + 'T12:00:00');
+      // Weekly weighings for 16 weeks
+      for (let w = 1; w <= 16; w++) {
+        const d = addDays(sd, (w-1)*7);
+        evs.push({ id:`${p.id}-w${w}`, date:d, type:"pesagem", label:`Semana ${w} — Pesagem`, patient:p, color:S.blue });
+      }
+      // Monthly score assessments (every 4 weeks)
+      for (let m = 1; m <= 4; m++) {
+        const d = addDays(sd, (m-1)*28);
+        evs.push({ id:`${p.id}-m${m}`, date:d, type:"score", label:`Mês ${m} — Avaliação`, patient:p, color:S.pur });
+      }
+      // Return appointment
+      if (p.nr) {
+        const d = new Date(p.nr);
+        evs.push({ id:`${p.id}-ret`, date:d, type:"retorno", label:"Retorno consulta", patient:p, color:S.grn });
+      }
+    });
+    return evs;
+  }, [ps]);
+
+  const viewDays = view === "day" ? 1 : view === "week" ? 7 : view === "biweek" ? 14 : 30;
+
+  const startDate = (() => {
+    if (view === "day") return anchor;
+    if (view === "week") {
+      const d = new Date(anchor);
+      d.setDate(d.getDate() - d.getDay());
+      return d;
+    }
+    if (view === "biweek") {
+      const d = new Date(anchor);
+      d.setDate(d.getDate() - d.getDay());
+      return d;
+    }
+    // month
+    const d = new Date(anchor);
+    d.setDate(1);
+    return d;
+  })();
+
+  const days = Array.from({length: view==="month" ? new Date(anchor.getFullYear(), anchor.getMonth()+1, 0).getDate() : viewDays}, (_, i) => {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+
+  const eventsOnDay = d => events.filter(e => {
+    const ed = new Date(e.date);
+    return ed.getFullYear()===d.getFullYear() && ed.getMonth()===d.getMonth() && ed.getDate()===d.getDate();
+  });
+
+  const prev = () => {
+    const d = new Date(anchor);
+    d.setDate(d.getDate() - viewDays);
+    setAnchor(d);
+  };
+  const next = () => {
+    const d = new Date(anchor);
+    d.setDate(d.getDate() + viewDays);
+    setAnchor(d);
+  };
+
+  const isToday = d => {
+    const t = new Date();
+    return d.getFullYear()===t.getFullYear() && d.getMonth()===t.getMonth() && d.getDate()===t.getDate();
+  };
+
+  const typeIcon = { pesagem: Weight, score: Activity, retorno: CalendarDays };
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+      {/* Header controls */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+        <div style={{ display:"flex", gap:4 }}>
+          {[["day","Dia"],["week","Semana"],["biweek","Quinzena"],["month","Mês"]].map(([k,l])=>(
+            <div key={k} onClick={()=>setView(k)} style={{ padding:"6px 14px", borderRadius:20, fontSize:11, cursor:"pointer", fontWeight:view===k?600:400, background:view===k?G[600]:"#fff", color:view===k?"#fff":G[700], border:`1px solid ${view===k?G[600]:G[300]}`, transition:"all 0.15s" }}>{l}</div>
+          ))}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <div onClick={prev} style={{ cursor:"pointer", padding:"6px 10px", borderRadius:7, background:"#fff", border:`1px solid ${G[200]}` }}>‹</div>
+          <div onClick={()=>setAnchor(new Date())} style={{ cursor:"pointer", padding:"6px 12px", borderRadius:7, background:G[50], border:`1px solid ${G[200]}`, fontSize:11, color:G[700] }}>Hoje</div>
+          <div onClick={next} style={{ cursor:"pointer", padding:"6px 10px", borderRadius:7, background:"#fff", border:`1px solid ${G[200]}` }}>›</div>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+        {[{c:S.blue,l:"Pesagem"},{c:S.pur,l:"Avaliação mensal"},{c:S.grn,l:"Retorno consulta"}].map(({c,l})=>(
+          <div key={l} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:G[700] }}>
+            <div style={{ width:10, height:10, borderRadius:3, background:c }}/>
+            {l}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div style={{ display:"grid", gridTemplateColumns: view==="day" ? "1fr" : mob ? "repeat(2,1fr)" : view==="month" ? "repeat(7,1fr)" : `repeat(${Math.min(viewDays,7)},1fr)`, gap:6 }}>
+        {days.map((d, i) => {
+          const devs = eventsOnDay(d);
+          const today = isToday(d);
+          return (
+            <div key={i} style={{ background:"#fff", borderRadius:10, border:`1.5px solid ${today?G[400]:G[100]}`, padding:"8px 10px", minHeight:view==="month"?80:100 }}>
+              <div style={{ fontSize:10, fontWeight:today?700:500, color:today?G[600]:"#aaa", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.04em" }}>
+                {format(d, "EEE")} <span style={{ fontSize:13, fontWeight:today?800:600, color:today?G[700]:G[800] }}>{format(d,"dd")}</span>
+                {today && <span style={{ marginLeft:4, background:G[500], color:"#fff", fontSize:8, padding:"1px 5px", borderRadius:8, fontWeight:700 }}>Hoje</span>}
+              </div>
+              {devs.length === 0 && <div style={{ fontSize:9, color:"#ddd", textAlign:"center", marginTop:8 }}>—</div>}
+              {devs.slice(0, view==="month"?2:5).map(ev => {
+                const Ic = typeIcon[ev.type] || CalendarDays;
+                return (
+                  <div key={ev.id} onClick={()=>onSel(ev.patient.id)}
+                    style={{ display:"flex", alignItems:"flex-start", gap:4, padding:"4px 6px", borderRadius:6, marginBottom:3, cursor:"pointer", background:`${ev.color}15`, border:`1px solid ${ev.color}30` }}>
+                    <Ic size={9} color={ev.color} style={{ marginTop:2, flexShrink:0 }}/>
+                    <div>
+                      <div style={{ fontSize:9, fontWeight:600, color:ev.color }}>{ev.label}</div>
+                      <div style={{ fontSize:9, color:"#aaa", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:90 }}>{ev.patient.name.split(" ")[0]}</div>
+                    </div>
+                  </div>
+                );
+              })}
+              {devs.length > (view==="month"?2:5) && <div style={{ fontSize:9, color:G[500], marginTop:2 }}>+{devs.length-(view==="month"?2:5)} mais</div>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -2020,24 +2193,38 @@ export default function App() {
   /* alertas críticos */
   const ac = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); }).length;
 
-  const titles = { dash:"Dashboard", pat:"Pacientes", det:sp?.name||"", alert:"Central de alertas", team:"Equipe" };
+  const titles = { dash:"Dashboard", pat:"Pacientes", det:sp?.name||"", alert:"Central de alertas", team:"Equipe", cal:"Calendário" };
   const nav = [
     {k:"dash",  l:"Dashboard", i:LayoutDashboard},
     {k:"pat",   l:"Pacientes", i:Users},
+    {k:"cal",   l:"Calendário",i:CalendarDays},
     {k:"alert", l:"Alertas",   i:AlertTriangle},
     {k:"team",  l:"Equipe",    i:Shield},
   ];
 
   /* ─── Carregando dados do servidor ─── */
   if (!dbLoaded) return (
-    <div style={{ minHeight:"100vh", background:`linear-gradient(135deg,${G[800]},${G[900]})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <div style={{ textAlign:"center", color:"#fff" }}>
-        <div style={{ width:48, height:48, borderRadius:"50%", background:`linear-gradient(135deg,${G[400]},${G[600]})`, margin:"0 auto 16px", display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <Shield size={22} color="#fff"/>
+    <div style={{ minHeight:"100vh", background:`linear-gradient(135deg,${G[800]},${G[900]} 50%,#1a1a2e)`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.6; transform:scale(0.95); } }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+      `}</style>
+      <div style={{ textAlign:"center", color:"#fff", animation:"fadeUp 0.6s ease both" }}>
+        <div style={{ position:"relative", width:72, height:72, margin:"0 auto 20px" }}>
+          <div style={{ position:"absolute", inset:0, borderRadius:"50%", border:`3px solid ${G[700]}` }}/>
+          <div style={{ position:"absolute", inset:0, borderRadius:"50%", border:`3px solid transparent`, borderTopColor:G[300], animation:"spin 1s linear infinite" }}/>
+          <div style={{ position:"absolute", inset:8, borderRadius:"50%", background:`linear-gradient(135deg,${G[500]},${G[700]})`, display:"flex", alignItems:"center", justifyContent:"center", animation:"pulse 2s ease infinite" }}>
+            <Shield size={22} color="#fff"/>
+          </div>
         </div>
-        <div style={{ fontSize:16, fontWeight:600 }}>Programa Ser Livre</div>
-        <div style={{ fontSize:12, opacity:0.5, marginTop:6 }}>Carregando dados...</div>
-        <div style={{ width:32, height:3, background:G[400], borderRadius:2, margin:"14px auto 0", animation:"pulse 1s infinite" }}/>
+        <img src="http://dramarianawogel.com.br/wp-content/uploads/2026/03/INSTITUTO-PNG-BRANCO.webp" alt="" style={{ height:36, objectFit:"contain", marginBottom:12, opacity:0.9 }} onError={e=>e.target.style.display="none"}/>
+        <div style={{ fontSize:14, fontWeight:600, opacity:0.9 }}>Programa Ser Livre</div>
+        <div style={{ fontSize:11, opacity:0.45, marginTop:6, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+          <div style={{ width:4, height:4, borderRadius:"50%", background:G[300], animation:"pulse 1s ease infinite" }}/>
+          <div style={{ width:4, height:4, borderRadius:"50%", background:G[300], animation:"pulse 1s ease 0.2s infinite" }}/>
+          <div style={{ width:4, height:4, borderRadius:"50%", background:G[300], animation:"pulse 1s ease 0.4s infinite" }}/>
+        </div>
       </div>
     </div>
   );
@@ -2070,6 +2257,7 @@ export default function App() {
   const content = (
     <>
       {page==="dash"  && <Dash  ps={ps} onSel={go} mob={mob}/>}
+      {page==="cal"   && <CalendarPage ps={ps} onSel={go} mob={mob}/>}
       {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)}
           onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(err=>console.warn('API delete failed:', err.message)); }}
           onBulkDelete={ids=>{ setPs(prev=>prev.filter(x=>!ids.includes(x.id))); ids.forEach(id=>apiDeletePatient(id).catch(err=>console.warn('API bulk delete failed:', err.message))); }}/>}
@@ -2132,12 +2320,15 @@ export default function App() {
       {/* Sidebar */}
       <div style={{ width:220, background:`linear-gradient(180deg,${G[800]},${G[900]})`, color:"#fff", position:"fixed", top:0, left:0, height:"100vh", zIndex:100, display:"flex", flexDirection:"column", transform:so?"none":"translateX(-220px)", transition:"transform 0.3s" }}>
         <div style={{ padding:"16px 14px", borderBottom:`1px solid ${G[700]}` }}>
-          <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+          <img
+            src="http://dramarianawogel.com.br/wp-content/uploads/2026/03/INSTITUTO-PNG-BRANCO.webp"
+            alt="Instituto Dra. Mariana Wogel"
+            style={{ height:40, maxWidth:"100%", objectFit:"contain", display:"block" }}
+            onError={e=>{ e.target.style.display="none"; e.target.nextSibling.style.display="flex"; }}
+          />
+          <div style={{ display:"none", alignItems:"center", gap:7 }}>
             <Shield size={18} color={G[300]}/>
-            <div>
-              <div style={{ fontSize:14, fontWeight:600 }}>Ser Livre</div>
-              <div style={{ fontSize:9, opacity:0.4 }}>Dra. Mariana Wogel</div>
-            </div>
+            <div style={{ fontSize:14, fontWeight:600 }}>Ser Livre</div>
           </div>
         </div>
         <div style={{ flex:1, paddingTop:8 }}>
