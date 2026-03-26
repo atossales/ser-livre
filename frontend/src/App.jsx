@@ -122,8 +122,10 @@ const MOCK_ACTIVITY = [
 ];
 
 const genSC = (ps) => ps.reduce((acc, p) => {
-  const last = p.history[p.history.length-1];
-  acc[p.id] = { m: last.m, b: last.b, n: last.n };
+  const hist = p.history || [];
+  const last = hist[hist.length - 1];
+  if (!last) return acc; // paciente sem histórico — ignora
+  acc[p.id] = { m: last.m || {}, b: last.b || {}, n: last.n || {} };
   return acc;
 }, {});
 /* ════════════════════════════════════════════
@@ -305,9 +307,10 @@ function Dash({  ps, onSel, mob }) {
     :                  subDays(new Date(), 120);
 
   // Para cada paciente, filtra o histórico pelo período
-  const filtHist = (p) => cutoff
-    ? p.history.filter(h => isAfter(new Date(h.date), cutoff))
-    : p.history;
+  const filtHist = (p) => {
+    const hist = p.history || [];
+    return cutoff ? hist.filter(h => isAfter(new Date(h.date), cutoff)) : hist;
+  };
 
   // Peso no início do período (primeiro registro após cutoff) vs. atual
   const periodWeightLoss = (p) => {
@@ -317,9 +320,9 @@ function Dash({  ps, onSel, mob }) {
   };
 
   // Composição corporal média (filtrada pelo período — usa último registro no período)
-  const avgMM = ps.length ? +(ps.reduce((a,p)=>{ const fh=filtHist(p); const last=fh[fh.length-1]||p.history[p.history.length-1]; return a+(last?.massaMagra||0); },0)/ps.length).toFixed(1) : 0;
-  const avgMG = ps.length ? +(ps.reduce((a,p)=>{ const fh=filtHist(p); const last=fh[fh.length-1]||p.history[p.history.length-1]; return a+(last?.massaGordura||0); },0)/ps.length).toFixed(1) : 0;
-  const avgPctMM = ps.length ? +(ps.reduce((a,p)=>{ const fh=filtHist(p); const last=fh[fh.length-1]||p.history[p.history.length-1]; const tot=(last?.massaMagra||0)+(last?.massaGordura||0); return a+(tot>0?(last?.massaMagra/tot*100):0); },0)/ps.length).toFixed(1) : 0;
+  const avgMM = ps.length ? +(ps.reduce((a,p)=>{ const fh=filtHist(p); const hist=p.history||[]; const last=fh[fh.length-1]||hist[hist.length-1]; return a+(last?.massaMagra||0); },0)/ps.length).toFixed(1) : 0;
+  const avgMG = ps.length ? +(ps.reduce((a,p)=>{ const fh=filtHist(p); const hist=p.history||[]; const last=fh[fh.length-1]||hist[hist.length-1]; return a+(last?.massaGordura||0); },0)/ps.length).toFixed(1) : 0;
+  const avgPctMM = ps.length ? +(ps.reduce((a,p)=>{ const fh=filtHist(p); const hist=p.history||[]; const last=fh[fh.length-1]||hist[hist.length-1]; const tot=(last?.massaMagra||0)+(last?.massaGordura||0); return a+(tot>0?(last?.massaMagra/tot*100):0); },0)/ps.length).toFixed(1) : 0;
   const avgPctMG = ps.length ? +(100-avgPctMM).toFixed(1) : 0;
 
   // Histórico de composição (para gráfico — filtrado pelo período)
@@ -353,7 +356,7 @@ function Dash({  ps, onSel, mob }) {
   const engD = useMemo(() => ps.map(p=>({n:p.name.split(" ")[0],e:p.eng})).sort((a,b)=>b.e-a.e), [ps]);
   const wbw  = useMemo(() => {
     const w=[];
-    for(let i=1;i<=16;i++){let s=0,n=0; ps.forEach(p=>{if(p.history[i-1]!==undefined){s+=p.iw-p.history[i-1];n++;}}); w.push({s:`S${i}`,v:n?+(s/n).toFixed(1):0});}
+    for(let i=1;i<=16;i++){let s=0,n=0; ps.forEach(p=>{const h=p.history||[];if(h[i-1]!==undefined){s+=p.iw-(h[i-1]?.weight||0);n++;}}); w.push({s:`S${i}`,v:n?+(s/n).toFixed(1):0});}
     return w;
   }, [ps]);
 
@@ -666,16 +669,17 @@ function RelTab({ p, mob, plan, met, be, mn }) {
     if(relAte && d > new Date(relAte)) return false;
     return true;
   }) : sh;
-  const histFilt = relDe||relAte ? p.history.filter(h => {
+  const _pHist = p.history || [];
+  const histFilt = relDe||relAte ? _pHist.filter(h => {
     const d = new Date(h.date);
     if(relDe && d < new Date(relDe)) return false;
     if(relAte && d > new Date(relAte)) return false;
     return true;
-  }) : p.history;
+  }) : _pHist;
 
   const comp1 = shFilt[0];
   const comp2 = shFilt[shFilt.length-1];
-  const lastH = p.history[p.history.length-1];
+  const lastH = _pHist[_pHist.length-1];
   const mmLast = lastH?.massaMagra||0;
   const mgLast = lastH?.massaGordura||0;
   const totComp = mmLast+mgLast||1;
@@ -973,7 +977,8 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
           )}
           {/* Composição corporal */}
           {(() => {
-            const last = p.history[p.history.length-1];
+            const _h = p.history || [];
+            const last = _h[_h.length-1] || {};
             const mm = last.massaMagra || 0;
             const mg = last.massaGordura || 0;
             const tot = mm + mg || 1;
@@ -1007,13 +1012,13 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                   <span style={{ color:S.yel }}>■ Gorda {pctMG}%</span>
                 </div>
                 {/* Histórico de pesagens */}
-                {p.history.length > 1 && (
+                {(p.history||[]).length > 1 && (
                   <div style={{ marginTop:12 }}>
                     <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:6 }}>Histórico de pesagens</div>
                     <div style={{ overflowX:"auto" }}>
                       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:320 }}>
                         <thead><tr>{["Data","Peso","MM (kg)","%MM","MG (kg)","%MG"].map(h=><th key={h} style={{ textAlign:"left", padding:"4px 6px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600, textTransform:"uppercase" }}>{h}</th>)}</tr></thead>
-                        <tbody>{[...p.history].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{format(new Date(h.date),"dd/MM/yy")}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{h.weight.toFixed(1)}kg</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
+                        <tbody>{[...(p.history||[])].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{format(new Date(h.date),"dd/MM/yy")}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{h.weight.toFixed(1)}kg</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
                         </tbody>
                       </table>
                     </div>
@@ -1054,7 +1059,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
           <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
             <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Curva de peso</div>
             <ResponsiveContainer width="100%" height={160}>
-              <AreaChart data={p.history.map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
+              <AreaChart data={(p.history||[]).map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
                 <defs><linearGradient id="gpp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={G[500]} stopOpacity={0.25}/><stop offset="100%" stopColor={G[500]} stopOpacity={0}/></linearGradient></defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis domain={["dataMin-2","dataMax+1"]} tick={{fontSize:9,fill:"#bbb"}}/>
                 <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Area type="monotone" dataKey="w" stroke={G[500]} fill="url(#gpp)" strokeWidth={2}/>
@@ -2483,6 +2488,7 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
   const [useCustom,  setUseCustom]  = useState(false);
   const [selPats,    setSelPats]    = useState(initialPatientId ? [initialPatientId] : []);
   const [preview,    setPreview]    = useState(null);
+  const [editedMsg,  setEditedMsg]  = useState(null); // preview editável
   const [extraVars,  setExtraVars]  = useState({});
   const [sending,    setSending]    = useState(false);
   const [result,     setResult]     = useState(null);
@@ -2514,7 +2520,8 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
         }
       }
       setPreview(rendered);
-    } catch { setPreview(body); }
+      setEditedMsg(rendered); // inicializa o textarea editável com o preview
+    } catch { setPreview(body); setEditedMsg(body); }
   };
 
   useEffect(() => { if (step===3) loadPreview(); }, [step]);
@@ -2526,9 +2533,18 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
     if (!body) return alert("Selecione ou escreva uma mensagem.");
     setSending(true);
     try {
+      // Usa o texto editado no preview como customBody (inclui variáveis já substituídas)
+      // Se o usuário editou, envia como mensagem custom; senão usa template normal
+      const finalBody = editedMsg || body;
+      const isEdited = editedMsg && editedMsg !== preview;
       const res = await authFetch('/api/messages/send', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ templateId: useCustom?null:tmplId, patientIds: selPats, customBody: useCustom?body:null, extraVars })
+        body: JSON.stringify({
+          templateId: (!useCustom && tmplId && !isEdited) ? tmplId : null,
+          patientIds: selPats,
+          customBody: finalBody,
+          extraVars
+        })
       });
       const data = await res.json();
       setResult(data);
@@ -2632,27 +2648,35 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
           {/* Step 3: Preview + envio */}
           {step===3 && (
             <div>
-              <div style={{ fontSize:12, fontWeight:600, color:G[700], marginBottom:8 }}>
-                Preview — dados do primeiro paciente selecionado
-              </div>
-              <div style={{ background:"#f0f0f0", borderRadius:12, padding:16, fontSize:12, color:"#333", lineHeight:1.7, whiteSpace:"pre-wrap", marginBottom:14, fontFamily:"inherit" }}>
-                {preview || "Carregando preview..."}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                <div style={{ fontSize:12, fontWeight:600, color:G[700] }}>
+                  Mensagem — edite antes de enviar
+                </div>
+                <button onClick={()=>loadPreview()}
+                  style={{ fontSize:10, padding:"4px 10px", borderRadius:7, background:G[50], border:`1px solid ${G[200]}`, color:G[600], cursor:"pointer", fontFamily:"inherit" }}>
+                  ↻ Recarregar variáveis
+                </button>
               </div>
 
-              {/* Variáveis extras manuais */}
-              <div style={{ marginBottom:14 }}>
-                <div style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:6 }}>Sobrescrever variáveis (opcional):</div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
-                  {["data_evento","profissional","semana"].map(k=>(
-                    <div key={k}>
-                      <label style={{ fontSize:10, color:"#aaa", display:"block", marginBottom:2 }}>{`{{${k}}}`}</label>
-                      <input value={extraVars[k]||""} onChange={e=>setExtraVars(v=>({...v,[k]:e.target.value}))}
-                        placeholder="valor customizado"
-                        style={{ width:"100%", padding:"7px 9px", borderRadius:7, border:`1px solid ${G[200]}`, fontSize:11, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
-                    </div>
-                  ))}
-                </div>
+              {/* Variáveis extras para recarregar */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:10 }}>
+                {["data_evento","profissional","semana"].map(k=>(
+                  <div key={k}>
+                    <label style={{ fontSize:9, color:"#bbb", display:"block", marginBottom:2 }}>{`{{${k}}}`}</label>
+                    <input value={extraVars[k]||""} onChange={e=>setExtraVars(v=>({...v,[k]:e.target.value}))}
+                      placeholder="preencher"
+                      style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:`1px solid ${G[200]}`, fontSize:10, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+                  </div>
+                ))}
               </div>
+
+              {/* Textarea editável */}
+              <textarea
+                value={editedMsg ?? preview ?? "Carregando..."}
+                onChange={e=>setEditedMsg(e.target.value)}
+                rows={10}
+                style={{ width:"100%", padding:"12px 14px", borderRadius:12, border:`1.5px solid ${G[200]}`, fontSize:12, color:"#333", lineHeight:1.7, fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box", background:"#fafafa" }}
+              />
 
               <div style={{ background:G[50], borderRadius:9, padding:"10px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
                 <span style={{ fontSize:12, color:G[700] }}>Enviar para <strong>{selPats.length}</strong> paciente(s)</span>
