@@ -1208,7 +1208,8 @@ app.post('/api/whatsapp/send-custom', authRequired, requireRole('ADMIN', 'MEDICA
 });
 
 // Enviar mídia (imagem/PDF) junto com mensagem para paciente
-app.post('/api/whatsapp/send-media', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM', 'NUTRICIONISTA'), async (req, res) => {
+// Usa limite aumentado pois base64 de imagens pode ultrapassar 100kb padrão
+app.post('/api/whatsapp/send-media', express.json({ limit: '15mb' }), authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM', 'NUTRICIONISTA'), async (req, res) => {
   try {
     const { patientId, base64, mimeType, fileName, caption, textMessage } = req.body;
     if (!patientId || !base64) return res.status(400).json({ error: 'patientId e base64 são obrigatórios' });

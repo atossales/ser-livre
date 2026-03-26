@@ -253,30 +253,52 @@ async function sendMedia(phone, mediaData) {
   const isImage = mediaData.mimeType?.startsWith('image/');
   const mediatype = isImage ? 'image' : 'document';
 
+  const mimeType = mediaData.mimeType || 'image/png';
+  const fileName = mediaData.fileName || (isImage ? 'imagem.png' : 'documento.pdf');
+
+  // Evolution API aceita base64 puro OU com prefixo data URI
+  // Garante que o base64 é puro (sem prefixo)
+  const pureBase64 = mediaData.base64.replace(/^data:[^;]+;base64,/, '');
+
   try {
+    const body = {
+      number,
+      mediatype,
+      mimetype:  mimeType,
+      caption:   mediaData.caption || '',
+      media:     pureBase64,
+      fileName,
+    };
+    console.log(`[WHATSAPP MEDIA] Enviando ${mediatype} (${fileName}) para ${number}, tamanho base64: ${pureBase64.length} chars`);
+
     const res = await httpRequest(
       `${BASE}/message/sendMedia/${INST}`,
-      {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': KEY },
-      },
-      {
-        number,
-        mediatype,
-        mimetype: mediaData.mimeType || 'image/png',
-        caption:  mediaData.caption || '',
-        media:    mediaData.base64,
-        fileName: mediaData.fileName || (isImage ? 'imagem.png' : 'documento.pdf'),
-      }
+      { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': KEY } },
+      body
     );
+
+    console.log(`[WHATSAPP MEDIA] Resposta ${res.status}:`, JSON.stringify(res.data).slice(0, 200));
 
     if (res.status >= 200 && res.status < 300) {
       console.log(`[WHATSAPP] Mídia enviada para ${number}`);
       return { ok: true, data: res.data };
-    } else {
-      console.error(`[WHATSAPP] Erro mídia ${res.status}:`, res.data);
-      return { ok: false, reason: `http_${res.status}`, data: res.data };
     }
+
+    // Tenta com prefixo data URI (algumas versões da Evolution API exigem isso)
+    console.warn(`[WHATSAPP MEDIA] Tentando com prefixo data URI...`);
+    const res2 = await httpRequest(
+      `${BASE}/message/sendMedia/${INST}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': KEY } },
+      { ...body, media: `data:${mimeType};base64,${pureBase64}` }
+    );
+
+    console.log(`[WHATSAPP MEDIA] Resposta 2 ${res2.status}:`, JSON.stringify(res2.data).slice(0, 200));
+
+    if (res2.status >= 200 && res2.status < 300) {
+      return { ok: true, data: res2.data };
+    }
+    return { ok: false, reason: `http_${res2.status}`, data: res2.data };
+
   } catch (err) {
     console.error('[WHATSAPP] Erro de rede (mídia):', err.message);
     return { ok: false, reason: err.message };

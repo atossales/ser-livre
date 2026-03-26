@@ -1777,7 +1777,7 @@ function generateWeighInCard({ name, weekNum, currentWeight, previousWeight, mas
   ctx.fillStyle = '#D4B978'; ctx.font = '10px sans-serif';
   ctx.fillText('Acompanhe sua evolução no aplicativo Programa Ser Livre', 22, H-14);
 
-  return canvas.toDataURL('image/png').split(',')[1];
+  return canvas.toDataURL('image/jpeg', 0.88).split(',')[1]; // JPEG para menor tamanho
 }
 
 /* ════════════════════════════════════════════
@@ -1853,17 +1853,20 @@ function WeighInModal({ p, onClose, onSave, onLog }) {
               name: p.name, weekNum, currentWeight: w,
               previousWeight: prevWeight, massaMagra: mVal||null, massaGordura: gVal||null,
             });
-            await authFetch('/api/whatsapp/send-media', {
+            const mRes = await authFetch('/api/whatsapp/send-media', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 patientId: p.id,
                 base64,
-                mimeType:  'image/png',
-                fileName:  `pesagem-semana${weekNum}.png`,
+                mimeType:  'image/jpeg',
+                fileName:  `pesagem-semana${weekNum}.jpg`,
                 caption:   `📊 Resultado visual — Semana ${weekNum}`,
               }),
             });
+            if (!mRes.ok) console.warn('[Card] falha HTTP:', mRes.status);
+            const mData = await mRes.json().catch(()=>({}));
+            if (!mData.ok) console.warn('[Card] Evolution API rejeitou:', mData);
           } catch (e) { console.warn('Erro ao enviar card:', e); }
         }
 
@@ -2950,7 +2953,7 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
                             ) : cardOpts.map(opt => (
                               <div key={opt.k} onClick={()=>{
                                 const b64 = generateSystemCard(opt.k, firstPat);
-                                setAttachment({ base64:b64, mimeType:'image/png', fileName:`${opt.k}-${firstPat.name.split(' ')[0]}.png`, caption:opt.l });
+                                setAttachment({ base64:b64, mimeType:'image/jpeg', fileName:`${opt.k}-${firstPat.name.split(' ')[0]}.jpg`, caption:opt.l });
                                 setShowCardMenu(false);
                               }} style={{ padding:"10px 14px", display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:12, color:G[800], borderBottom:`1px solid ${G[50]}` }}
                               onMouseEnter={e=>e.currentTarget.style.background=G[50]}
