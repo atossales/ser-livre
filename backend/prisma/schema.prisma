@@ -51,8 +51,12 @@ model User {
   resetTokens     ResetToken[]
 
   // Agendamentos (como profissional ou como criador)
-  appointmentsAsStaff    Appointment[] @relation("appointmentStaff")
-  appointmentsCreated    Appointment[] @relation("appointmentCreator")
+  appointmentsAsStaff    Appointment[]    @relation("appointmentStaff")
+  appointmentsCreated    Appointment[]    @relation("appointmentCreator")
+
+  // Comunicação
+  templatesCreated       MessageTemplate[] @relation("templateCreator")
+  messagesSent           MessageLog[]      @relation("messageSender")
 }
 
 // Papéis possíveis no sistema
@@ -90,6 +94,7 @@ model Patient {
   cycles        Cycle[]         // Ciclos de tratamento
   alerts        Alert[]         // Alertas gerados
   appointments  Appointment[]   // Agendamentos
+  messageLogs   MessageLog[]    // Histórico de mensagens
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -318,6 +323,47 @@ enum AppointmentType {
   CONSULTA_NUTRI    // Consulta com nutricionista
   EXAME             // Exame laboratorial
   OUTRO             // Evento interno (só equipe)
+}
+
+// ──────────────────────────────────────────────
+// TEMPLATES DE MENSAGEM
+// Templates reutilizáveis com variáveis {{nome}},
+// {{peso_atual}}, {{semana}}, etc.
+// ──────────────────────────────────────────────
+model MessageTemplate {
+  id          Int      @id @default(autoincrement())
+  name        String   // Nome interno do template
+  category    String   // boas_vindas | resultado | conquista | lembrete | agendamento | custom
+  body        String   // Texto com variáveis {{nome}}, {{peso_atual}}, etc.
+  isSystem    Boolean  @default(false) // templates padrão do sistema
+  active      Boolean  @default(true)
+  createdById Int?
+  createdBy   User?    @relation("templateCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  logs        MessageLog[]
+}
+
+// ──────────────────────────────────────────────
+// HISTÓRICO DE MENSAGENS ENVIADAS
+// ──────────────────────────────────────────────
+model MessageLog {
+  id          Int      @id @default(autoincrement())
+  patientId   Int?
+  patient     Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  templateId  Int?
+  template    MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  sentById    Int?
+  sentBy      User?    @relation("messageSender", fields: [sentById], references: [id], onDelete: SetNull)
+
+  phone       String   // número que recebeu
+  body        String   // texto final enviado (após substituição de variáveis)
+  channel     String   @default("whatsapp") // whatsapp | email
+  status      String   @default("sent")     // sent | failed | pending
+  error       String?
+
+  createdAt   DateTime @default(now())
 }
 
 model InviteToken {

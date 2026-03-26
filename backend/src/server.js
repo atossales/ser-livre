@@ -831,6 +831,221 @@ app.put('/api/state/:key', express.json({ limit: '20mb' }), async (req, res) => 
 });
 
 // ════════════════════════════════════════════
+//  COMUNICAÇÃO — TEMPLATES E HISTÓRICO
+// ════════════════════════════════════════════
+
+// Templates padrão do sistema (criados uma vez se não existirem)
+const SYSTEM_TEMPLATES = [
+  { name:"Boas-vindas ao programa",       category:"boas_vindas",  isSystem:true, body:`Olá {{nome}},\n\nSeu cadastro no Programa Ser Livre foi realizado.\n\n- Plano: {{plano}}\n- Início: {{data_inicio}}\n- Acesso ao app em breve\n\nQualquer dúvida, fale com a equipe.\n\nInstituto Dra. Mariana Wogel` },
+  { name:"Resultado de pesagem",           category:"resultado",    isSystem:true, body:`Olá {{nome}},\n\nResultado — Semana {{semana}}:\n\n- Peso atual: {{peso_atual}}kg\n- Variação: {{variacao_peso}}kg\n- Massa magra: {{massa_magra}}kg\n- Massa gorda: {{massa_gorda}}kg\n\nAcompanhe sua evolução no app.` },
+  { name:"Parabéns pela perda de peso",   category:"conquista",    isSystem:true, body:`Olá {{nome}},\n\nSemana {{semana}} concluída.\n\n- Total perdido até agora: {{peso_perdido}}kg\n- Peso inicial: {{peso_inicial}}kg\n- Peso atual: {{peso_atual}}kg\n\nContinue com o protocolo.` },
+  { name:"Lembrete de consulta",           category:"lembrete",    isSystem:true, body:`Olá {{nome}},\n\nLembrete: você tem consulta amanhã.\n\n- Leve seus exames caso tenha realizado\n- Registre seu peso antes da consulta\n\nInstituto Dra. Mariana Wogel` },
+  { name:"Lembrete de exames",             category:"lembrete",    isSystem:true, body:`Olá {{nome}},\n\nSemana {{semana}} — momento de realizar exames laboratoriais.\n\nExames solicitados:\n- Hemograma completo\n- Glicemia em jejum\n- Perfil lipídico\n- TSH\n\nAgende com antecedência.` },
+  { name:"Início de semana",               category:"agendamento", isSystem:true, body:`Olá {{nome}},\n\nSemana {{semana}} do programa iniciada.\n\n- Mantenha o protocolo alimentar\n- Pesagem desta semana: conforme agendado\n\nQualquer dúvida, fale com a equipe.` },
+  { name:"Conclusão do programa",          category:"conquista",   isSystem:true, body:`Olá {{nome}},\n\n16 semanas concluídas.\n\n- Peso inicial: {{peso_inicial}}kg\n- Peso final: {{peso_atual}}kg\n- Total perdido: {{peso_perdido}}kg\n\nNossa equipe entrará em contato para as próximas orientações.\n\nInstituto Dra. Mariana Wogel` },
+  { name:"Confirmação de agendamento",     category:"agendamento", isSystem:true, body:`Olá {{nome}},\n\nSua consulta foi agendada.\n\n- Data: {{data_evento}}\n- Profissional: {{profissional}}\n\nEm caso de impedimento, entre em contato com antecedência.\n\nInstituto Dra. Mariana Wogel` },
+  { name:"Reativação — novo ciclo",        category:"boas_vindas", isSystem:true, body:`Olá {{nome}},\n\nNovo ciclo iniciado.\n\n- Ciclo: {{ciclo}}\n- Plano: {{plano}}\n- Peso atual: {{peso_atual}}kg\n\nNossa equipe está aqui para acompanhar sua evolução.` },
+];
+
+// Garante que templates do sistema existam no banco
+async function ensureSystemTemplates() {
+  try {
+    for (const t of SYSTEM_TEMPLATES) {
+      const exists = await prisma.messageTemplate.findFirst({ where: { name: t.name, isSystem: true } });
+      if (!exists) await prisma.messageTemplate.create({ data: t });
+    }
+  } catch (err) {
+    console.warn('[TEMPLATES] Não foi possível criar templates padrão:', err.message);
+  }
+}
+
+// Substitui variáveis no template
+function renderTemplate(body, vars) {
+  let text = body;
+  for (const [k, v] of Object.entries(vars)) {
+    text = text.replaceAll(`{{${k}}}`, v ?? '—');
+  }
+  return text;
+}
+
+// Monta variáveis de um paciente
+async function buildPatientVars(patientId) {
+  const p = await prisma.patient.findUnique({
+    where: { id: parseInt(patientId) },
+    include: {
+      user: { select: { name: true, phone: true } },
+      cycles: { where: { status: 'ACTIVE' }, include: { weekChecks: { orderBy: { weekNumber: 'desc' }, take: 1 } }, take: 1 },
+    }
+  });
+  if (!p) return null;
+  const cycle = p.cycles?.[0];
+  const lastCheck = cycle?.weekChecks?.[0];
+  const weekNum = cycle?.currentWeek || 1;
+  const perdido = Math.max(0, (p.initialWeight - p.currentWeight)).toFixed(1);
+  return {
+    nome:          p.user.name,
+    plano:         p.plan,
+    peso_inicial:  p.initialWeight,
+    peso_atual:    p.currentWeight,
+    peso_perdido:  perdido,
+    variacao_peso: lastCheck?.pesoRegistrado ? (lastCheck.pesoRegistrado - p.currentWeight).toFixed(1) : '—',
+    massa_magra:   '—',
+    massa_gorda:   '—',
+    semana:        weekNum,
+    ciclo:         cycle?.number || 1,
+    data_inicio:   p.startDate ? new Date(p.startDate).toLocaleDateString('pt-BR') : '—',
+    data_evento:   '—',
+    profissional:  '—',
+    _phone:        p.user.phone,
+    _name:         p.user.name,
+  };
+}
+
+// ── Listar templates
+app.get('/api/templates', authRequired, async (req, res) => {
+  try {
+    await ensureSystemTemplates();
+    const templates = await prisma.messageTemplate.findMany({
+      where: { active: true },
+      include: { createdBy: { select: { name: true } } },
+      orderBy: [{ isSystem: 'desc' }, { category: 'asc' }, { name: 'asc' }]
+    });
+    res.json(templates);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Criar template
+app.post('/api/templates', authRequired, requireRole('ADMIN','MEDICA','NUTRICIONISTA'), async (req, res) => {
+  try {
+    const { name, category, body } = req.body;
+    if (!name || !body) return res.status(400).json({ error: 'name e body são obrigatórios' });
+    const t = await prisma.messageTemplate.create({
+      data: { name, category: category||'custom', body, createdById: req.user.id }
+    });
+    res.status(201).json(t);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// ── Atualizar template
+app.put('/api/templates/:id', authRequired, requireRole('ADMIN','MEDICA','NUTRICIONISTA'), async (req, res) => {
+  try {
+    const { name, category, body, active } = req.body;
+    const t = await prisma.messageTemplate.findUnique({ where: { id: parseInt(req.params.id) } });
+    if (!t) return res.status(404).json({ error: 'Template não encontrado' });
+    if (t.isSystem) return res.status(403).json({ error: 'Templates do sistema não podem ser editados. Duplique-o primeiro.' });
+    const updated = await prisma.messageTemplate.update({
+      where: { id: parseInt(req.params.id) },
+      data: { ...(name&&{name}), ...(category&&{category}), ...(body&&{body}), ...(active!==undefined&&{active}) }
+    });
+    res.json(updated);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// ── Duplicar template (para customizar um sistema)
+app.post('/api/templates/:id/duplicate', authRequired, async (req, res) => {
+  try {
+    const orig = await prisma.messageTemplate.findUnique({ where: { id: parseInt(req.params.id) } });
+    if (!orig) return res.status(404).json({ error: 'Template não encontrado' });
+    const copy = await prisma.messageTemplate.create({
+      data: { name:`${orig.name} (cópia)`, category: orig.category, body: orig.body, isSystem: false, createdById: req.user.id }
+    });
+    res.status(201).json(copy);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// ── Excluir template (apenas não-sistema)
+app.delete('/api/templates/:id', authRequired, requireRole('ADMIN','MEDICA'), async (req, res) => {
+  try {
+    const t = await prisma.messageTemplate.findUnique({ where: { id: parseInt(req.params.id) } });
+    if (!t) return res.status(404).json({ error: 'Não encontrado' });
+    if (t.isSystem) return res.status(403).json({ error: 'Templates do sistema não podem ser excluídos.' });
+    await prisma.messageTemplate.delete({ where: { id: parseInt(req.params.id) } });
+    res.json({ message: 'Removido.' });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// ── Preview: renderiza template com dados reais do paciente
+app.post('/api/templates/:id/preview', authRequired, async (req, res) => {
+  try {
+    const { patientId, extraVars } = req.body;
+    const tmpl = await prisma.messageTemplate.findUnique({ where: { id: parseInt(req.params.id) } });
+    if (!tmpl) return res.status(404).json({ error: 'Template não encontrado' });
+    const vars = patientId ? await buildPatientVars(patientId) : {};
+    const merged = { ...vars, ...(extraVars||{}) };
+    const rendered = renderTemplate(tmpl.body, merged);
+    res.json({ rendered, vars: merged });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Enviar mensagem (1 ou N pacientes)
+app.post('/api/messages/send', authRequired, async (req, res) => {
+  try {
+    const { templateId, patientIds, customBody, extraVars, channel } = req.body;
+    if (!patientIds?.length) return res.status(400).json({ error: 'patientIds é obrigatório' });
+
+    let templateBody = customBody || null;
+    if (templateId && !customBody) {
+      const tmpl = await prisma.messageTemplate.findUnique({ where: { id: parseInt(templateId) } });
+      if (!tmpl) return res.status(404).json({ error: 'Template não encontrado' });
+      templateBody = tmpl.body;
+    }
+    if (!templateBody) return res.status(400).json({ error: 'templateId ou customBody são obrigatórios' });
+
+    const { sendWhatsApp } = require('./utils/whatsapp');
+    const results = [];
+
+    for (const pid of patientIds) {
+      const vars = await buildPatientVars(pid);
+      if (!vars) { results.push({ patientId: pid, ok: false, reason: 'not_found' }); continue; }
+      const phone = vars._phone;
+      if (!phone) { results.push({ patientId: pid, ok: false, reason: 'no_phone' }); continue; }
+
+      const merged  = { ...vars, ...(extraVars||{}) };
+      const body    = renderTemplate(templateBody, merged);
+      const waResult = await sendWhatsApp(phone, body);
+
+      // Salva no histórico
+      await prisma.messageLog.create({
+        data: {
+          patientId:  parseInt(pid),
+          templateId: templateId ? parseInt(templateId) : null,
+          sentById:   req.user.id,
+          phone,
+          body,
+          channel:    channel || 'whatsapp',
+          status:     waResult.ok ? 'sent' : 'failed',
+          error:      waResult.ok ? null : waResult.reason,
+        }
+      });
+
+      results.push({ patientId: pid, ok: waResult.ok, name: vars._name });
+      if (patientIds.length > 1) await new Promise(r => setTimeout(r, 1000));
+    }
+
+    res.json({ results, total: results.length, sent: results.filter(r=>r.ok).length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Histórico de mensagens
+app.get('/api/messages/history', authRequired, async (req, res) => {
+  try {
+    const { patientId, limit } = req.query;
+    const where = patientId ? { patientId: parseInt(patientId) } : {};
+    const logs = await prisma.messageLog.findMany({
+      where,
+      include: {
+        patient:  { include: { user: { select: { name: true } } } },
+        template: { select: { name: true, category: true } },
+        sentBy:   { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(limit) || 50
+    });
+    res.json(logs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ════════════════════════════════════════════
 //  AGENDAMENTOS (APPOINTMENTS)
 // ════════════════════════════════════════════
 

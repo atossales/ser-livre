@@ -859,6 +859,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
     {k:"evolucao", l:"Evolução",  i:TrendingUp},
     {k:"graficos", l:"Gráficos",  i:BarChart3},
     {k:"rel",      l:"Relatório", i:FileText},
+    {k:"comms",    l:"Mensagens", i:Zap},
   ];
 
   return (
@@ -1396,6 +1397,9 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
 
       {/* ABA RELATÓRIO */}
       {tab==="rel" && <RelTab p={p} mob={mob} plan={plan} met={met} be={be} mn={mn}/>}
+
+      {/* ABA MENSAGENS */}
+      {tab==="comms" && <PatientCommsTab p={p} mob={mob}/>}
     </div>
   );
 }
@@ -2342,6 +2346,524 @@ function CalendarPage({ ps, team, onSel, mob }) {
 }
 
 /* ════════════════════════════════════════════
+   MÓDULO DE COMUNICAÇÃO
+═══════════════════════════════════════════════ */
+
+// Variáveis disponíveis para uso nos templates
+const TEMPLATE_VARS = [
+  { key:"nome",          label:"Nome do paciente" },
+  { key:"plano",         label:"Plano" },
+  { key:"peso_inicial",  label:"Peso inicial (kg)" },
+  { key:"peso_atual",    label:"Peso atual (kg)" },
+  { key:"peso_perdido",  label:"Total perdido (kg)" },
+  { key:"variacao_peso", label:"Variação semana (kg)" },
+  { key:"massa_magra",   label:"Massa magra (kg)" },
+  { key:"massa_gorda",   label:"Massa gorda (kg)" },
+  { key:"semana",        label:"Semana atual" },
+  { key:"ciclo",         label:"Ciclo atual" },
+  { key:"data_inicio",   label:"Data de início" },
+  { key:"data_evento",   label:"Data do evento" },
+  { key:"profissional",  label:"Nome do profissional" },
+];
+
+const CATEG_LABELS = {
+  boas_vindas:"Boas-vindas", resultado:"Resultado", conquista:"Conquista",
+  lembrete:"Lembrete", agendamento:"Agendamento", custom:"Personalizado"
+};
+const CATEG_COLORS = {
+  boas_vindas:S.grn, resultado:S.blue, conquista:S.pur,
+  lembrete:S.yel, agendamento:"#2980B9", custom:G[500]
+};
+
+// ── Editor / Criador de template
+function TemplateEditor({ initial, onSave, onClose }) {
+  const [name,   setName]   = useState(initial?.name    || "");
+  const [categ,  setCateg]  = useState(initial?.category|| "custom");
+  const [body,   setBody]   = useState(initial?.body    || "");
+  const [saving, setSaving] = useState(false);
+  const textRef = useRef();
+
+  const insertVar = (key) => {
+    const el = textRef.current;
+    if (!el) return;
+    const start = el.selectionStart, end = el.selectionEnd;
+    const tag = `{{${key}}}`;
+    const newBody = body.slice(0,start) + tag + body.slice(end);
+    setBody(newBody);
+    setTimeout(() => { el.selectionStart = el.selectionEnd = start + tag.length; el.focus(); }, 0);
+  };
+
+  const handleSave = async () => {
+    if (!name.trim() || !body.trim()) return alert("Preencha nome e texto.");
+    setSaving(true);
+    try {
+      const url    = initial ? `/api/templates/${initial.id}` : '/api/templates';
+      const method = initial ? 'PUT' : 'POST';
+      const res    = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, category: categ, body }) });
+      const data   = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      onSave(data);
+    } catch(e) { alert(e.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:560, borderRadius:16, padding:24, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", maxHeight:"92vh", overflowY:"auto" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+          <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>{initial?"Editar template":"Novo template"}</span>
+          <div onClick={onClose} style={{ cursor:"pointer", padding:"4px 8px", borderRadius:6, background:G[50], color:"#aaa" }}>✕</div>
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+          <div>
+            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Nome do template</label>
+            <input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex: Parabéns semana X"
+              style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+          </div>
+          <div>
+            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Categoria</label>
+            <select value={categ} onChange={e=>setCateg(e.target.value)}
+              style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", background:"#fff", outline:"none" }}>
+              {Object.entries(CATEG_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Inserir variáveis */}
+        <div style={{ marginBottom:8 }}>
+          <div style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:5 }}>Inserir variável no cursor:</div>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+            {TEMPLATE_VARS.map(v=>(
+              <div key={v.key} onClick={()=>insertVar(v.key)}
+                style={{ padding:"3px 9px", borderRadius:14, fontSize:10, cursor:"pointer", background:G[100], color:G[700], border:`1px solid ${G[200]}`, fontFamily:"monospace" }}>
+                {`{{${v.key}}}`}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom:16 }}>
+          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Texto da mensagem</label>
+          <textarea ref={textRef} value={body} onChange={e=>setBody(e.target.value)} rows={10}
+            placeholder={`Olá {{nome}},\n\nSua mensagem aqui...`}
+            style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box", lineHeight:1.6 }}/>
+          <div style={{ fontSize:10, color:"#bbb", marginTop:3 }}>{body.length} caracteres</div>
+        </div>
+
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={handleSave} disabled={saving}
+            style={{ flex:1, padding:11, background:saving?G[400]:G[600], color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:saving?"not-allowed":"pointer", fontFamily:"inherit" }}>
+            {saving?"Salvando...":"Salvar template"}
+          </button>
+          <button onClick={onClose} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:9, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Composer: seleciona template + paciente(s) + preview + envia
+function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
+  const [step,       setStep]       = useState(1); // 1=template 2=pacientes 3=preview
+  const [tmplId,     setTmplId]     = useState(null);
+  const [customBody, setCustomBody] = useState("");
+  const [useCustom,  setUseCustom]  = useState(false);
+  const [selPats,    setSelPats]    = useState(initialPatientId ? [initialPatientId] : []);
+  const [preview,    setPreview]    = useState(null);
+  const [extraVars,  setExtraVars]  = useState({});
+  const [sending,    setSending]    = useState(false);
+  const [result,     setResult]     = useState(null);
+  const [categFilter,setCategFilter]= useState("all");
+
+  const selTmpl = templates.find(t=>t.id===tmplId);
+  const body = useCustom ? customBody : (selTmpl?.body || "");
+
+  const filteredTmpls = categFilter==="all" ? templates : templates.filter(t=>t.category===categFilter);
+
+  const loadPreview = async () => {
+    if (!body) return;
+    const firstPat = selPats[0];
+    try {
+      let rendered = body;
+      if (firstPat && tmplId && !useCustom) {
+        const res = await fetch(`/api/templates/${tmplId}/preview`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ patientId: firstPat, extraVars })
+        });
+        if (res.ok) { const d = await res.json(); rendered = d.rendered; }
+      } else {
+        // Preview local com dados do paciente do mock
+        const p = ps.find(x=>x.id===firstPat);
+        if (p) {
+          const perdido = Math.max(0,(p.iw||0)-(p.cw||0)).toFixed(1);
+          const vars = { nome:p.name, plano:p.plan, peso_inicial:p.iw||'—', peso_atual:p.cw||'—', peso_perdido:perdido, semana:p.week||1, ciclo:p.cycle||1, variacao_peso:'—', massa_magra:'—', massa_gorda:'—', data_inicio:'—', data_evento:'—', profissional:'—', ...extraVars };
+          rendered = body.replace(/{{(\w+)}}/g, (_,k)=>vars[k]??`{{${k}}}`);
+        }
+      }
+      setPreview(rendered);
+    } catch { setPreview(body); }
+  };
+
+  useEffect(() => { if (step===3) loadPreview(); }, [step]);
+
+  const togglePat = (id) => setSelPats(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
+
+  const handleSend = async () => {
+    if (!selPats.length) return alert("Selecione ao menos um paciente.");
+    if (!body) return alert("Selecione ou escreva uma mensagem.");
+    setSending(true);
+    try {
+      const res = await fetch('/api/messages/send', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ templateId: useCustom?null:tmplId, patientIds: selPats, customBody: useCustom?body:null, extraVars })
+      });
+      const data = await res.json();
+      setResult(data);
+      if (data.sent > 0) onSent?.();
+    } catch(e) { alert(e.message); }
+    finally { setSending(false); }
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:640, borderRadius:16, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", maxHeight:"94vh", display:"flex", flexDirection:"column" }}>
+        {/* Header */}
+        <div style={{ padding:"18px 24px", borderBottom:`1px solid ${G[100]}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700, color:G[800] }}>Disparar mensagem</div>
+            <div style={{ display:"flex", gap:6, marginTop:6 }}>
+              {["Template","Pacientes","Preview"].map((l,i)=>(
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:4, fontSize:11 }}>
+                  <div style={{ width:18, height:18, borderRadius:"50%", background:step>i+1?S.grn:step===i+1?G[600]:G[200], color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:700 }}>
+                    {step>i+1?<Check size={9}/>:i+1}
+                  </div>
+                  <span style={{ color:step===i+1?G[800]:"#bbb", fontWeight:step===i+1?600:400 }}>{l}</span>
+                  {i<2 && <span style={{ color:"#ddd" }}>›</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div onClick={onClose} style={{ cursor:"pointer", padding:"4px 8px", borderRadius:6, background:G[50], color:"#aaa" }}>✕</div>
+        </div>
+
+        <div style={{ flex:1, overflowY:"auto", padding:"18px 24px" }}>
+          {/* Step 1: Template */}
+          {step===1 && (
+            <div>
+              {/* Filtro por categoria */}
+              <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:14 }}>
+                <div onClick={()=>setCategFilter("all")} style={{ padding:"4px 12px", borderRadius:16, fontSize:10, cursor:"pointer", fontWeight:categFilter==="all"?600:400, background:categFilter==="all"?G[600]:"#fff", color:categFilter==="all"?"#fff":G[600], border:`1px solid ${G[300]}` }}>Todos</div>
+                {Object.entries(CATEG_LABELS).map(([k,v])=>(
+                  <div key={k} onClick={()=>setCategFilter(k)} style={{ padding:"4px 12px", borderRadius:16, fontSize:10, cursor:"pointer", fontWeight:categFilter===k?600:400, background:categFilter===k?CATEG_COLORS[k]:"#fff", color:categFilter===k?"#fff":CATEG_COLORS[k]||G[600], border:`1px solid ${CATEG_COLORS[k]||G[300]}` }}>{v}</div>
+                ))}
+              </div>
+
+              {/* Toggle mensagem custom */}
+              <div onClick={()=>setUseCustom(v=>!v)} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 12px", borderRadius:9, border:`1.5px solid ${useCustom?G[500]:G[200]}`, background:useCustom?G[50]:"#fafafa", cursor:"pointer", marginBottom:12 }}>
+                <div style={{ width:18, height:18, borderRadius:4, border:`2px solid ${useCustom?G[500]:G[300]}`, background:useCustom?G[600]:"#fff", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  {useCustom&&<Check size={10} color="#fff"/>}
+                </div>
+                <span style={{ fontSize:12, fontWeight:500, color:G[700] }}>Escrever mensagem personalizada</span>
+              </div>
+
+              {useCustom ? (
+                <textarea value={customBody} onChange={e=>setCustomBody(e.target.value)} rows={10} placeholder={`Olá {{nome}},\n\nEscreva sua mensagem...`}
+                  style={{ width:"100%", padding:"10px 12px", borderRadius:9, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box", lineHeight:1.6 }}/>
+              ) : (
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  {filteredTmpls.map(t=>(
+                    <div key={t.id} onClick={()=>setTmplId(t.id)}
+                      style={{ padding:"10px 14px", borderRadius:10, border:`1.5px solid ${tmplId===t.id?(CATEG_COLORS[t.category]||G[500]):G[100]}`, background:tmplId===t.id?`${CATEG_COLORS[t.category]||G[500]}0A`:"#fafafa", cursor:"pointer", transition:"all 0.15s" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                        <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{t.name}</div>
+                        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                          {t.isSystem && <span style={{ fontSize:9, padding:"2px 6px", borderRadius:8, background:G[100], color:G[600] }}>sistema</span>}
+                          <span style={{ fontSize:10, padding:"2px 8px", borderRadius:8, background:`${CATEG_COLORS[t.category]||G[500]}20`, color:CATEG_COLORS[t.category]||G[600] }}>{CATEG_LABELS[t.category]||t.category}</span>
+                        </div>
+                      </div>
+                      <div style={{ fontSize:10, color:"#aaa", marginTop:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.body.replace(/\n/g," ")}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 2: Pacientes */}
+          {step===2 && (
+            <div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                <div style={{ fontSize:12, color:G[700] }}><strong>{selPats.length}</strong> selecionado(s)</div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <span onClick={()=>setSelPats(ps.map(p=>p.id))} style={{ fontSize:11, color:G[600], cursor:"pointer", textDecoration:"underline" }}>Todos</span>
+                  <span onClick={()=>setSelPats([])} style={{ fontSize:11, color:"#aaa", cursor:"pointer", textDecoration:"underline" }}>Limpar</span>
+                </div>
+              </div>
+              {ps.map(p=>(
+                <div key={p.id} onClick={()=>togglePat(p.id)}
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:9, marginBottom:5, cursor:"pointer", border:`1.5px solid ${selPats.includes(p.id)?G[400]:G[100]}`, background:selPats.includes(p.id)?G[50]:"#fafafa" }}>
+                  <div style={{ width:18, height:18, borderRadius:4, border:`2px solid ${selPats.includes(p.id)?G[500]:G[300]}`, background:selPats.includes(p.id)?G[600]:"#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    {selPats.includes(p.id)&&<Check size={10} color="#fff"/>}
+                  </div>
+                  <Av name={p.name} size={28}/>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
+                    <div style={{ fontSize:10, color:"#aaa" }}>{p.phone || "Sem telefone"}</div>
+                  </div>
+                  {!p.phone && <span style={{ fontSize:9, color:S.red, background:S.redBg, padding:"2px 6px", borderRadius:6 }}>sem tel.</span>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Step 3: Preview + envio */}
+          {step===3 && (
+            <div>
+              <div style={{ fontSize:12, fontWeight:600, color:G[700], marginBottom:8 }}>
+                Preview — dados do primeiro paciente selecionado
+              </div>
+              <div style={{ background:"#f0f0f0", borderRadius:12, padding:16, fontSize:12, color:"#333", lineHeight:1.7, whiteSpace:"pre-wrap", marginBottom:14, fontFamily:"inherit" }}>
+                {preview || "Carregando preview..."}
+              </div>
+
+              {/* Variáveis extras manuais */}
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:6 }}>Sobrescrever variáveis (opcional):</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                  {["data_evento","profissional","semana"].map(k=>(
+                    <div key={k}>
+                      <label style={{ fontSize:10, color:"#aaa", display:"block", marginBottom:2 }}>{`{{${k}}}`}</label>
+                      <input value={extraVars[k]||""} onChange={e=>setExtraVars(v=>({...v,[k]:e.target.value}))}
+                        placeholder="valor customizado"
+                        style={{ width:"100%", padding:"7px 9px", borderRadius:7, border:`1px solid ${G[200]}`, fontSize:11, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ background:G[50], borderRadius:9, padding:"10px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+                <span style={{ fontSize:12, color:G[700] }}>Enviar para <strong>{selPats.length}</strong> paciente(s)</span>
+                <span style={{ fontSize:11, color:S.grn }}>{selPats.filter(id=>ps.find(p=>p.id===id)?.phone).length} com WhatsApp</span>
+              </div>
+
+              {result && (
+                <div style={{ background: result.sent>0?S.grnBg:S.redBg, borderRadius:9, padding:"10px 14px", marginTop:10 }}>
+                  <div style={{ fontSize:13, fontWeight:600, color: result.sent>0?S.grn:S.red }}>
+                    {result.sent>0 ? `${result.sent}/${result.total} mensagens enviadas` : "Nenhuma mensagem enviada"}
+                  </div>
+                  {result.results?.filter(r=>!r.ok).map((r,i)=>(
+                    <div key={i} style={{ fontSize:11, color:S.red, marginTop:3 }}>
+                      {ps.find(p=>p.id===r.patientId)?.name}: {r.reason}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:"14px 24px", borderTop:`1px solid ${G[100]}`, display:"flex", gap:8, flexShrink:0 }}>
+          {step>1 && !result && <button onClick={()=>setStep(s=>s-1)} style={{ padding:"10px 18px", background:G[100], color:G[800], border:"none", borderRadius:9, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>‹ Voltar</button>}
+          {step<3 && (
+            <button onClick={()=>{ if(step===1&&!body&&!useCustom&&!tmplId) return alert("Selecione um template."); if(step===2&&!selPats.length) return alert("Selecione ao menos um paciente."); setStep(s=>s+1); }}
+              style={{ flex:1, padding:"10px 18px", background:G[600], color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+              Próximo ›
+            </button>
+          )}
+          {step===3 && !result && (
+            <button onClick={handleSend} disabled={sending}
+              style={{ flex:1, padding:"10px 18px", background:sending?G[400]:S.grn, color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:sending?"not-allowed":"pointer", fontFamily:"inherit" }}>
+              {sending?"Enviando...":"Enviar mensagens"}
+            </button>
+          )}
+          {result && <button onClick={onClose} style={{ flex:1, padding:"10px 18px", background:G[600], color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Fechar</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Página principal de comunicação
+function CommsPage({ ps, team, mob }) {
+  const [templates,    setTemplates]    = useState([]);
+  const [history,      setHistory]      = useState([]);
+  const [tab,          setTab]          = useState("templates");
+  const [showEditor,   setShowEditor]   = useState(false);
+  const [editTmpl,     setEditTmpl]     = useState(null);
+  const [showComposer, setShowComposer] = useState(false);
+  const [loading,      setLoading]      = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [tr, hr] = await Promise.all([
+        fetch('/api/templates').then(r=>r.ok?r.json():[]),
+        fetch('/api/messages/history?limit=30').then(r=>r.ok?r.json():[]),
+      ]);
+      setTemplates(Array.isArray(tr)?tr:[]);
+      setHistory(Array.isArray(hr)?hr:[]);
+    } catch { }
+    setLoading(false);
+  }, []);
+
+  useEffect(()=>{ load(); },[load]);
+
+  const duplicate = async (id) => {
+    const res = await fetch(`/api/templates/${id}/duplicate`, { method:'POST' });
+    if (res.ok) { const t = await res.json(); setTemplates(prev=>[...prev,t]); }
+  };
+
+  const deleteT = async (id) => {
+    if (!confirm("Remover template?")) return;
+    const res = await fetch(`/api/templates/${id}`, { method:'DELETE' });
+    if (res.ok) setTemplates(prev=>prev.filter(t=>t.id!==id));
+  };
+
+  const STATUS_COLOR = { sent:S.grn, failed:S.red, pending:S.yel };
+  const STATUS_LABEL = { sent:"Enviado", failed:"Falhou", pending:"Pendente" };
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+      {showEditor && <TemplateEditor initial={editTmpl} onClose={()=>{ setShowEditor(false); setEditTmpl(null); }} onSave={t=>{ setTemplates(prev=>editTmpl?prev.map(x=>x.id===t.id?t:x):[...prev,t]); setShowEditor(false); setEditTmpl(null); }}/>}
+      {showComposer && <MessageComposer ps={ps} templates={templates} onClose={()=>setShowComposer(false)} onSent={load}/>}
+
+      {/* Header */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+        <div style={{ display:"flex", gap:4 }}>
+          {[["templates","Templates"],["history","Histórico"]].map(([k,l])=>(
+            <div key={k} onClick={()=>setTab(k)} style={{ padding:"6px 16px", borderRadius:20, fontSize:11, cursor:"pointer", fontWeight:tab===k?600:400, background:tab===k?G[600]:"#fff", color:tab===k?"#fff":G[700], border:`1px solid ${tab===k?G[600]:G[300]}` }}>{l}</div>
+          ))}
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          {tab==="templates" && <button onClick={()=>{ setEditTmpl(null); setShowEditor(true); }} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px", borderRadius:8, background:"#fff", color:G[700], border:`1px solid ${G[300]}`, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}><Plus size={12}/>Novo template</button>}
+          <button onClick={()=>setShowComposer(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+            <Zap size={12}/>Disparar mensagem
+          </button>
+        </div>
+      </div>
+
+      {loading && <div style={{ textAlign:"center", padding:40, color:"#ccc", fontSize:12 }}>Carregando...</div>}
+
+      {/* Templates */}
+      {!loading && tab==="templates" && (
+        <div style={{ display:"grid", gridTemplateColumns: mob?"1fr":"repeat(2,1fr)", gap:10 }}>
+          {templates.map(t=>{
+            const cc = CATEG_COLORS[t.category]||G[500];
+            return (
+              <div key={t.id} style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[100]}`, padding:"14px 16px", boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+                  <div style={{ flex:1, minWidth:0, marginRight:8 }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:G[800], overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.name}</div>
+                    <div style={{ display:"flex", gap:6, marginTop:4, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:9, padding:"2px 7px", borderRadius:8, background:`${cc}18`, color:cc, fontWeight:600 }}>{CATEG_LABELS[t.category]||t.category}</span>
+                      {t.isSystem && <span style={{ fontSize:9, padding:"2px 7px", borderRadius:8, background:G[100], color:G[500] }}>sistema</span>}
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                    <div onClick={()=>duplicate(t.id)} title="Duplicar" style={{ cursor:"pointer", padding:"4px 8px", borderRadius:6, background:G[50], fontSize:10, color:G[600] }}>Duplicar</div>
+                    {!t.isSystem && <>
+                      <div onClick={()=>{ setEditTmpl(t); setShowEditor(true); }} title="Editar" style={{ cursor:"pointer", padding:"4px 8px", borderRadius:6, background:G[50], fontSize:10, color:G[600] }}>Editar</div>
+                      <div onClick={()=>deleteT(t.id)} title="Excluir" style={{ cursor:"pointer", padding:"4px 8px", borderRadius:6, background:S.redBg, fontSize:10, color:S.red }}>✕</div>
+                    </>}
+                  </div>
+                </div>
+                <div style={{ fontSize:11, color:"#888", lineHeight:1.5, overflow:"hidden", maxHeight:48 }}>{t.body.replace(/\n/g," ").slice(0,120)}{t.body.length>120?"...":""}</div>
+                <div style={{ marginTop:10, display:"flex", gap:4, flexWrap:"wrap" }}>
+                  {(t.body.match(/{{(\w+)}}/g)||[]).slice(0,5).map(v=>(
+                    <span key={v} style={{ fontSize:9, padding:"1px 6px", borderRadius:6, background:G[100], color:G[600], fontFamily:"monospace" }}>{v}</span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {templates.length===0 && <div style={{ gridColumn:"1/-1", textAlign:"center", padding:40, color:"#ccc" }}>Nenhum template encontrado.</div>}
+        </div>
+      )}
+
+      {/* Histórico */}
+      {!loading && tab==="history" && (
+        <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[100]}`, overflow:"hidden" }}>
+          {history.length===0 && <div style={{ padding:40, textAlign:"center", color:"#ccc", fontSize:12 }}>Nenhuma mensagem enviada ainda.</div>}
+          {history.map((log,i)=>(
+            <div key={log.id} style={{ padding:"12px 16px", borderBottom:i<history.length-1?`1px solid ${G[50]}`:"none", display:"flex", alignItems:"flex-start", gap:12 }}>
+              <div style={{ width:8, height:8, borderRadius:"50%", background:STATUS_COLOR[log.status]||"#ccc", marginTop:5, flexShrink:0 }}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:4 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{log.patient?.user?.name || log.phone}</div>
+                  <div style={{ fontSize:10, color:"#aaa" }}>{format(new Date(log.createdAt),"dd/MM HH:mm")}</div>
+                </div>
+                {log.template && <div style={{ fontSize:10, color:G[500], marginTop:1 }}>{log.template.name}</div>}
+                <div style={{ fontSize:11, color:"#888", marginTop:3, lineHeight:1.4, overflow:"hidden", maxHeight:36 }}>{log.body.slice(0,100)}{log.body.length>100?"...":""}</div>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
+                  <span style={{ fontSize:9, color:STATUS_COLOR[log.status], fontWeight:600 }}>{STATUS_LABEL[log.status]||log.status}</span>
+                  {log.sentBy && <span style={{ fontSize:9, color:"#ccc" }}>por {log.sentBy.name}</span>}
+                  <span style={{ fontSize:9, color:"#ccc" }}>{log.phone}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Mini histórico de comunicação dentro do paciente
+function PatientCommsTab({ p, mob }) {
+  const [history,      setHistory]      = useState([]);
+  const [templates,    setTemplates]    = useState([]);
+  const [showComposer, setShowComposer] = useState(false);
+  const [loading,      setLoading]      = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [hr, tr] = await Promise.all([
+        fetch(`/api/messages/history?patientId=${p.id}&limit=20`).then(r=>r.ok?r.json():[]),
+        fetch('/api/templates').then(r=>r.ok?r.json():[]),
+      ]);
+      setHistory(Array.isArray(hr)?hr:[]);
+      setTemplates(Array.isArray(tr)?tr:[]);
+    } catch {}
+    setLoading(false);
+  }, [p.id]);
+
+  useEffect(()=>{ load(); },[load]);
+
+  const STATUS_COLOR = { sent:S.grn, failed:S.red, pending:S.yel };
+
+  return (
+    <div>
+      {showComposer && <MessageComposer ps={[p]} templates={templates} onClose={()=>setShowComposer(false)} onSent={load} initialPatientId={p.id}/>}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Comunicação</span>
+        <button onClick={()=>setShowComposer(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+          <Zap size={11}/>Enviar mensagem
+        </button>
+      </div>
+      {!p.phone && <div style={{ background:S.yelBg, border:`1px solid ${S.yel}30`, borderRadius:8, padding:"8px 12px", fontSize:11, color:S.yel, marginBottom:12 }}>Paciente sem telefone cadastrado — WhatsApp não disponível.</div>}
+      {loading && <div style={{ textAlign:"center", padding:20, color:"#ccc", fontSize:12 }}>Carregando...</div>}
+      {!loading && history.length===0 && <div style={{ textAlign:"center", padding:24, color:"#ccc", fontSize:12 }}>Nenhuma mensagem enviada para este paciente.</div>}
+      {!loading && history.map((log,i)=>(
+        <div key={log.id} style={{ display:"flex", gap:10, padding:"10px 12px", borderRadius:9, marginBottom:6, background:G[50], border:`1px solid ${G[100]}` }}>
+          <div style={{ width:7, height:7, borderRadius:"50%", background:STATUS_COLOR[log.status]||"#ccc", marginTop:4, flexShrink:0 }}/>
+          <div style={{ flex:1 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              {log.template && <span style={{ fontSize:10, fontWeight:600, color:G[600] }}>{log.template.name}</span>}
+              <span style={{ fontSize:10, color:"#aaa" }}>{format(new Date(log.createdAt),"dd/MM HH:mm")}</span>
+            </div>
+            <div style={{ fontSize:11, color:"#777", marginTop:3, lineHeight:1.5, whiteSpace:"pre-wrap" }}>{log.body.slice(0,160)}{log.body.length>160?"...":""}</div>
+            {log.sentBy && <div style={{ fontSize:10, color:"#bbb", marginTop:2 }}>por {log.sentBy.name}</div>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
    APP PRINCIPAL
 ═══════════════════════════════════════════════ */
 export default function App() {
@@ -2403,11 +2925,12 @@ export default function App() {
   /* alertas críticos */
   const ac = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); }).length;
 
-  const titles = { dash:"Dashboard", pat:"Pacientes", det:sp?.name||"", alert:"Central de alertas", team:"Equipe", cal:"Calendário" };
+  const titles = { dash:"Dashboard", pat:"Pacientes", det:sp?.name||"", alert:"Central de alertas", team:"Equipe", cal:"Calendário", comms:"Comunicação" };
   const nav = [
     {k:"dash",  l:"Dashboard", i:LayoutDashboard},
     {k:"pat",   l:"Pacientes", i:Users},
     {k:"cal",   l:"Calendário",i:CalendarDays},
+    {k:"comms", l:"Mensagens", i:Zap},
     {k:"alert", l:"Alertas",   i:AlertTriangle},
     {k:"team",  l:"Equipe",    i:Shield},
   ];
@@ -2482,6 +3005,7 @@ export default function App() {
         onFinish={id=>{ apiFinishProgram(id).catch(err=>console.warn('API finish failed:', err.message)); addLog({action:"finalizado",patientId:sp.id,patientName:sp.name,detail:"Programa finalizado"}); }}
         onRestart={id=>{ setPs(prev=>prev.map(x=>x.id===id?{...x,cycle:(x.cycle||1)+1,week:1}:x)); apiRestartProgram(id).catch(err=>console.warn('API restart failed:', err.message)); addLog({action:"reinicio",patientId:sp.id,patientName:sp.name,detail:`Novo ciclo iniciado: C${(sp.cycle||1)+1}`}); }}
         onEdit={upd=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,...upd}:x)); }}/>}
+      {page==="comms" && <CommsPage ps={ps} team={team} mob={mob}/>}
       {page==="alert" && <Alerts ps={ps} onSel={go}/>}
       {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog}/>}
     </>
