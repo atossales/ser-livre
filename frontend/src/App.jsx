@@ -285,20 +285,47 @@ function Dash({  ps, onSel, mob }) {
   const [df, setDf] = useState("all");
   const SC = genSC(ps);
 
-  // Composição corporal média atual
-  const avgMM = ps.length ? +(ps.reduce((a,p)=>{ const last=p.history[p.history.length-1]; return a+(last.massaMagra||0); },0)/ps.length).toFixed(1) : 0;
-  const avgMG = ps.length ? +(ps.reduce((a,p)=>{ const last=p.history[p.history.length-1]; return a+(last.massaGordura||0); },0)/ps.length).toFixed(1) : 0;
-  const avgPctMM = ps.length ? +(ps.reduce((a,p)=>{ const last=p.history[p.history.length-1]; const tot=(last.massaMagra||0)+(last.massaGordura||0); return a+(tot>0?(last.massaMagra/tot*100):0); },0)/ps.length).toFixed(1) : 0;
+  // Calcula o corte de datas baseado no filtro selecionado
+  const cutoff = df==="all" ? null
+    : df==="week"    ? subDays(new Date(), 7)
+    : df==="month"   ? subDays(new Date(), 30)
+    : df==="quarter" ? subDays(new Date(), 90)
+    :                  subDays(new Date(), 120);
+
+  // Para cada paciente, filtra o histórico pelo período
+  const filtHist = (p) => cutoff
+    ? p.history.filter(h => isAfter(new Date(h.date), cutoff))
+    : p.history;
+
+  // Peso no início do período (primeiro registro após cutoff) vs. atual
+  const periodWeightLoss = (p) => {
+    const fh = filtHist(p);
+    if(fh.length === 0) return 0;
+    return (fh[0].weight || p.iw) - (p.cw || fh[fh.length-1].weight || 0);
+  };
+
+  // Composição corporal média (filtrada pelo período — usa último registro no período)
+  const avgMM = ps.length ? +(ps.reduce((a,p)=>{ const fh=filtHist(p); const last=fh[fh.length-1]||p.history[p.history.length-1]; return a+(last?.massaMagra||0); },0)/ps.length).toFixed(1) : 0;
+  const avgMG = ps.length ? +(ps.reduce((a,p)=>{ const fh=filtHist(p); const last=fh[fh.length-1]||p.history[p.history.length-1]; return a+(last?.massaGordura||0); },0)/ps.length).toFixed(1) : 0;
+  const avgPctMM = ps.length ? +(ps.reduce((a,p)=>{ const fh=filtHist(p); const last=fh[fh.length-1]||p.history[p.history.length-1]; const tot=(last?.massaMagra||0)+(last?.massaGordura||0); return a+(tot>0?(last?.massaMagra/tot*100):0); },0)/ps.length).toFixed(1) : 0;
   const avgPctMG = ps.length ? +(100-avgPctMM).toFixed(1) : 0;
 
-  // Histórico de composição (para gráfico)
+  // Histórico de composição (para gráfico — filtrado pelo período)
   const compHist = (() => {
     const weeks = {};
-    ps.forEach(p => { p.history.forEach((h,i) => { const k=`S${i+1}`; if(!weeks[k]) weeks[k]={s:k,mm:0,mg:0,n:0}; weeks[k].mm+=(h.massaMagra||0); weeks[k].mg+=(h.massaGordura||0); weeks[k].n++; }); });
+    ps.forEach(p => {
+      const fh = filtHist(p);
+      fh.forEach((h,i) => {
+        const k = cutoff ? format(new Date(h.date),"dd/MM") : `S${i+1}`;
+        if(!weeks[k]) weeks[k]={s:k,mm:0,mg:0,n:0};
+        weeks[k].mm+=(h.massaMagra||0); weeks[k].mg+=(h.massaGordura||0); weeks[k].n++;
+      });
+    });
     return Object.values(weeks).map(w=>({s:w.s, mm:w.n?+(w.mm/w.n).toFixed(1):0, mg:w.n?+(w.mg/w.n).toFixed(1):0}));
   })();
 
-  const tl   = ps.reduce((a,p) => a+(p.iw-p.cw), 0);
+  // Perda total no período
+  const tl   = ps.reduce((a,p) => a + periodWeightLoss(p), 0);
   const ae   = Math.round(ps.reduce((a,p) => a+p.eng, 0)/ps.length);
   const cr   = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); });
   const el   = ps.filter(p => { const sc=SC[p.id]; return sc&&cM(sc.m)>=21; });
@@ -533,32 +560,62 @@ function Dash({  ps, onSel, mob }) {
 /* ════════════════════════════════════════════
    LISTA DE PACIENTES
 ═══════════════════════════════════════════════ */
-function PList({  ps, onSel, mob, onAdd, onDelete }) {
+function PList({  ps, onSel, mob, onAdd, onDelete, onBulkDelete }) {
   const SC = genSC(ps);
-  const [q,  setQ]  = useState("");
-  const [fp, setFp] = useState("all");
+  const [q,   setQ]   = useState("");
+  const [fp,  setFp]  = useState("all");
+  const [sel, setSel] = useState(new Set());
+
   const f = ps.filter(p => p.name.toLowerCase().includes(q.toLowerCase()) && (fp==="all"||p.plan===fp));
+
+  const toggleSel = (id) => setSel(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
+  const toggleAll = () => setSel(sel.size===f.length ? new Set() : new Set(f.map(p=>p.id)));
+
+  const handleBulkDelete = () => {
+    if(sel.size===0) return;
+    if(!window.confirm(`Excluir ${sel.size} paciente(s)? Esta ação não pode ser desfeita.`)) return;
+    onBulkDelete && onBulkDelete([...sel]);
+    setSel(new Set());
+  };
 
   return (
     <div>
-      <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap", alignItems:"center" }}>
+      <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap", alignItems:"center" }}>
         <button onClick={onAdd} style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}><Plus size={13}/>Novo paciente</button>
+        {sel.size>0 && (
+          <button onClick={handleBulkDelete} style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:8, background:"#FDEDEC", color:S.red, fontSize:12, fontWeight:600, border:`1px solid #F5B7B1`, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>
+            🗑️ Excluir selecionados ({sel.size})
+          </button>
+        )}
+        {sel.size>0 && (
+          <button onClick={()=>setSel(new Set())} style={{ padding:"8px 12px", borderRadius:8, background:G[50], color:G[700], fontSize:12, border:`1px solid ${G[300]}`, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+        )}
       </div>
-      <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
+      <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap", alignItems:"center" }}>
         <div style={{ flex:1, minWidth:140, position:"relative" }}>
           <Search size={14} color="#bbb" style={{ position:"absolute", left:10, top:10 }}/>
           <input style={{ width:"100%", padding:"8px 10px 8px 30px", borderRadius:8, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} placeholder="Buscar..." value={q} onChange={e=>setQ(e.target.value)}/>
         </div>
         <select style={{ padding:"8px 10px", borderRadius:8, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", background:"#fff" }} value={fp} onChange={e=>setFp(e.target.value)}>
-          <option value="all">Todos</option>
+          <option value="all">Todos os planos</option>
           {PLANS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
+        {f.length>0 && (
+          <button onClick={toggleAll} style={{ padding:"8px 10px", borderRadius:8, background:sel.size===f.length?G[100]:G[50], color:G[700], fontSize:11, border:`1px solid ${G[300]}`, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+            {sel.size===f.length ? "✓ Todos" : "Selecionar todos"}
+          </button>
+        )}
       </div>
       <div style={{ display:"grid", gap:6 }}>
         {f.map(p => {
-          const sc=SC[p.id]; const m=cM(sc?.m); const ms=sM(m);
+          const sc=SC[p.id]; const m=cM(sc?.m); const ms=sM(m); const isSel=sel.has(p.id);
           return (
-            <div key={p.id} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"10px 12px", display:"flex", alignItems:"center", gap:10 }}>
+            <div key={p.id} style={{ background:isSel?G[50]:"#fff", borderRadius:10, border:`1px solid ${isSel?G[400]:G[200]}`, padding:"10px 12px", display:"flex", alignItems:"center", gap:10, transition:"border-color 0.15s" }}>
+              {/* Checkbox */}
+              <div onClick={e=>{ e.stopPropagation(); toggleSel(p.id); }}
+                style={{ flexShrink:0, width:18, height:18, borderRadius:4, border:`2px solid ${isSel?G[600]:G[300]}`, background:isSel?G[600]:"#fff", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
+                {isSel && <span style={{ color:"#fff", fontSize:11, fontWeight:700, lineHeight:1 }}>✓</span>}
+              </div>
               <div onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:10, flex:1, minWidth:0, cursor:"pointer" }}>
                 <Av name={p.name} size={mob?36:40}/>
                 <div style={{ flex:1, minWidth:0 }}>
@@ -571,7 +628,7 @@ function PList({  ps, onSel, mob, onAdd, onDelete }) {
                 </div>
               </div>
               {onDelete && (
-                <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Excluir paciente "${p.name}"? Esta ação não pode ser desfeita.`)) onDelete(p.id); }}
+                <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Excluir "${p.name}"? Ação irreversível.`)) onDelete(p.id); }}
                   style={{ flexShrink:0, padding:"5px 8px", borderRadius:7, background:"#FDEDEC", color:S.red, border:`1px solid #F5B7B1`, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>🗑️</button>
               )}
             </div>
@@ -1032,16 +1089,60 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                 </div>
               )}
             <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-              <div style={{ marginBottom:10 }}>
-                <label style={{ fontSize:12, color:'#888' }}>Data real desta semana:</label>
-                <input
-                  type="date"
-                  value={cl[sw]?.weekDate ? cl[sw].weekDate.split('T')[0] : ''}
-                  onChange={e => setCl(prev => ({ ...prev, [sw]: { ...prev[sw], weekDate: e.target.value ? new Date(e.target.value).toISOString() : null }}))}
-                  style={{ marginLeft:8, padding:'4px 8px', border:'1px solid #ddd', borderRadius:6, fontSize:13 }}
-                />
-                <span style={{ fontSize:11, color:'#aaa', marginLeft:8 }}>Deixe em branco para usar a data calculada</span>
-              </div>
+              {/* Datas da semana: calculadas automaticamente a partir da data de início do programa, editáveis para entrada retroativa */}
+              {(()=>{
+                const sd = p.sd ? new Date(p.sd) : new Date();
+                const calcStart = addD(sd, (sw-1)*7);
+                const calcEnd   = addD(sd, sw*7 - 1);
+                const ovStart = cl[sw]?.weekDate ? cl[sw].weekDate.split('T')[0] : '';
+                const ovEnd   = cl[sw]?.weekDateEnd ? cl[sw].weekDateEnd.split('T')[0] : '';
+                const dispStart = ovStart || format(calcStart,"yyyy-MM-dd");
+                const dispEnd   = ovEnd   || format(calcEnd,  "yyyy-MM-dd");
+                return (
+                  <div style={{ background:G[50], borderRadius:8, padding:"10px 12px", marginBottom:12, border:`1px solid ${G[200]}` }}>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8, flexWrap:"wrap", gap:4 }}>
+                      <span style={{ fontSize:12, fontWeight:600, color:G[700] }}>📅 Período da Semana {sw}</span>
+                      {(ovStart || ovEnd) && (
+                        <button onClick={()=>setCl(prev=>({...prev,[sw]:{...prev[sw],weekDate:null,weekDateEnd:null}}))}
+                          style={{ fontSize:10, padding:"2px 8px", borderRadius:5, background:"#fff", border:`1px solid ${G[300]}`, color:G[600], cursor:"pointer", fontFamily:"inherit" }}>
+                          ↺ Usar datas calculadas
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                      <div style={{ flex:1, minWidth:130 }}>
+                        <label style={{ fontSize:10, color:"#aaa", marginBottom:3, display:"block" }}>Início da semana</label>
+                        <input type="date" value={dispStart}
+                          onChange={e=>{
+                            const v = e.target.value;
+                            setCl(prev=>({...prev,[sw]:{...prev[sw],weekDate: v ? new Date(v).toISOString() : null}}));
+                          }}
+                          style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box", background:ovStart?"#FFFDE7":"#fff" }}/>
+                      </div>
+                      <div style={{ flex:1, minWidth:130 }}>
+                        <label style={{ fontSize:10, color:"#aaa", marginBottom:3, display:"block" }}>Fim da semana</label>
+                        <input type="date" value={dispEnd}
+                          onChange={e=>{
+                            const v = e.target.value;
+                            setCl(prev=>({...prev,[sw]:{...prev[sw],weekDateEnd: v ? new Date(v).toISOString() : null}}));
+                          }}
+                          style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box", background:ovEnd?"#FFFDE7":"#fff" }}/>
+                      </div>
+                    </div>
+                    {!ovStart && !ovEnd && (
+                      <div style={{ fontSize:10, color:"#aaa", marginTop:6 }}>
+                        Datas calculadas automaticamente a partir do início do programa ({p.sd ? format(new Date(p.sd),"dd/MM/yyyy") : "—"}).
+                        Edite para lançar dados retroativos de pacientes que já estavam no programa.
+                      </div>
+                    )}
+                    {(ovStart || ovEnd) && (
+                      <div style={{ fontSize:10, color:G[600], marginTop:6, fontWeight:500 }}>
+                        ✏️ Datas personalizadas — este lançamento será registrado com o período informado.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
                 <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>
                   Semana {sw}
@@ -1969,7 +2070,9 @@ export default function App() {
   const content = (
     <>
       {page==="dash"  && <Dash  ps={ps} onSel={go} mob={mob}/>}
-      {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)} onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(err=>console.warn('API delete failed:', err.message)); }}/>}
+      {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)}
+          onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(err=>console.warn('API delete failed:', err.message)); }}
+          onBulkDelete={ids=>{ setPs(prev=>prev.filter(x=>!ids.includes(x.id))); ids.forEach(id=>apiDeletePatient(id).catch(err=>console.warn('API bulk delete failed:', err.message))); }}/>}
       {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}
         onSaveScores={scores=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,history:[...x.history.slice(0,-1),{...x.history[x.history.length-1],...scores}]}:x)); addLog({action:"scores",patientId:sp.id,patientName:sp.name,detail:"Scores metabólicos atualizados"}); }}
         onAddWeighIn={entry=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,cw:entry.weight,history:[...x.history,entry]}:x)); }}
