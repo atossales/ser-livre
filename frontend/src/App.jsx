@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram } from './utils/api';
 import html2pdf from "html2pdf.js";
 import { subDays, isAfter, format, differenceInYears, setYear, isBefore, addDays, parseISO, differenceInDays } from "date-fns";
 import * as Lucide from "lucide-react";
@@ -532,7 +533,7 @@ function Dash({  ps, onSel, mob }) {
 /* ════════════════════════════════════════════
    LISTA DE PACIENTES
 ═══════════════════════════════════════════════ */
-function PList({  ps, onSel, mob, onAdd }) {
+function PList({  ps, onSel, mob, onAdd, onDelete }) {
   const SC = genSC(ps);
   const [q,  setQ]  = useState("");
   const [fp, setFp] = useState("all");
@@ -557,16 +558,22 @@ function PList({  ps, onSel, mob, onAdd }) {
         {f.map(p => {
           const sc=SC[p.id]; const m=cM(sc?.m); const ms=sM(m);
           return (
-            <div key={p.id} onClick={()=>onSel(p.id)} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"10px 12px", cursor:"pointer", display:"flex", alignItems:"center", gap:10 }}>
-              <Av name={p.name} size={mob?36:40}/>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
-                <div style={{ fontSize:10, color:"#aaa" }}>{PLANS.find(x=>x.id===p.plan)?.name} • S{p.week}/16 • {calcAge(p.birthDate)}a</div>
+            <div key={p.id} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"10px 12px", display:"flex", alignItems:"center", gap:10 }}>
+              <div onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:10, flex:1, minWidth:0, cursor:"pointer" }}>
+                <Av name={p.name} size={mob?36:40}/>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
+                  <div style={{ fontSize:10, color:"#aaa" }}>{PLANS.find(x=>x.id===p.plan)?.name} • S{p.week}/16 • {calcAge(p.birthDate)}a</div>
+                </div>
+                <div style={{ textAlign:"right" }}>
+                  <Bg color={ms.c} bg={ms.bg}>{ms.e}{ms.l}</Bg>
+                  <div style={{ fontSize:11, color:S.grn, fontWeight:600, marginTop:2 }}>-{(p.iw-p.cw).toFixed(1)}kg</div>
+                </div>
               </div>
-              <div style={{ textAlign:"right" }}>
-                <Bg color={ms.c} bg={ms.bg}>{ms.e}{ms.l}</Bg>
-                <div style={{ fontSize:11, color:S.grn, fontWeight:600, marginTop:2 }}>-{(p.iw-p.cw).toFixed(1)}kg</div>
-              </div>
+              {onDelete && (
+                <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Excluir paciente "${p.name}"? Esta ação não pode ser desfeita.`)) onDelete(p.id); }}
+                  style={{ flexShrink:0, padding:"5px 8px", borderRadius:7, background:"#FDEDEC", color:S.red, border:`1px solid #F5B7B1`, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>🗑️</button>
+              )}
             </div>
           );
         })}
@@ -766,7 +773,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
 /* ════════════════════════════════════════════
    DETALHE DO PACIENTE (5 abas)
 ═══════════════════════════════════════════════ */
-function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onLog, onAddScoreMonth, onChangePlan, activityLog }) {
+function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onLog, onAddScoreMonth, onChangePlan, activityLog, onDelete, onFinish, onRestart, onEdit }) {
   const SC = genSC([p]);
   const [tab, setTab]   = useState("ficha");
   const plan = PLANS.find(x=>x.id===p.plan);
@@ -782,6 +789,11 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
   const [showWeighIn, setShowWeighIn] = useState(false);
   const [showChangePlan, setShowChangePlan] = useState(false);
   const [newPlanId, setNewPlanId] = useState(p.plan);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState(p.name);
+  const [editPhone, setEditPhone] = useState(p.phone||'');
+  const [editEmail, setEditEmail] = useState(p.email||'');
+  const [editBirth, setEditBirth] = useState(p.birthDate||'');
 
   const tabs = [
     {k:"ficha",    l:"Ficha",     i:User},
@@ -823,10 +835,39 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
             <Mt value={`${Math.round((p.iw-p.cw)/p.iw*100)}%`} label="Perda total"/>
           </div>
           <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px", fontSize:12 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, flexWrap:"wrap", gap:6 }}>
               <span style={{ fontWeight:600, color:G[800] }}>Dados do paciente</span>
-              <button onClick={()=>setShowChangePlan(true)} style={{ fontSize:10, padding:"4px 10px", borderRadius:6, background:G[50], border:`1px solid ${G[300]}`, color:G[700], cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>✏️ Alterar plano</button>
+              <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+                <button onClick={()=>setShowEditModal(true)} style={{ fontSize:10, padding:"4px 10px", borderRadius:6, background:G[50], border:`1px solid ${G[300]}`, color:G[700], cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>✏️ Editar dados</button>
+                <button onClick={()=>setShowChangePlan(true)} style={{ fontSize:10, padding:"4px 10px", borderRadius:6, background:G[50], border:`1px solid ${G[300]}`, color:G[700], cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>🔄 Alterar plano</button>
+                <button onClick={()=>{ if(window.confirm(`Finalizar programa de "${p.name}"?`)) { onFinish&&onFinish(p.id); } }} style={{ fontSize:10, padding:"4px 10px", borderRadius:6, background:"#EAFAF1", border:`1px solid #A9DFBF`, color:S.grn, cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>✅ Finalizar</button>
+                <button onClick={()=>{ if(window.confirm(`Iniciar novo ciclo para "${p.name}"?`)) { onRestart&&onRestart(p.id); } }} style={{ fontSize:10, padding:"4px 10px", borderRadius:6, background:"#EBF5FB", border:`1px solid #A9CCE3`, color:S.blue, cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>🔁 Novo ciclo</button>
+                {onDelete && <button onClick={()=>{ if(window.confirm(`Excluir paciente "${p.name}"? Esta ação não pode ser desfeita.`)) { onDelete(p.id); onBack&&onBack(); } }} style={{ fontSize:10, padding:"4px 10px", borderRadius:6, background:"#FDEDEC", border:`1px solid #F5B7B1`, color:S.red, cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>🗑️ Excluir</button>}
+              </div>
             </div>
+            {showEditModal && (
+              <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+                <div style={{ background:"#fff", width:"100%", maxWidth:420, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+                  <div style={{ fontSize:15, fontWeight:700, color:G[800], marginBottom:16 }}>Editar dados do paciente</div>
+                  {[
+                    { label:"Nome completo", val:editName, set:setEditName, type:"text" },
+                    { label:"E-mail", val:editEmail, set:setEditEmail, type:"email" },
+                    { label:"Telefone", val:editPhone, set:setEditPhone, type:"tel" },
+                    { label:"Data de nascimento", val:editBirth, set:setEditBirth, type:"date" },
+                  ].map(f => (
+                    <div key={f.label} style={{ marginBottom:12 }}>
+                      <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
+                      <input type={f.type} value={f.val} onChange={e=>f.set(e.target.value)}
+                        style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+                    </div>
+                  ))}
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button onClick={()=>{ const upd={name:editName,email:editEmail,phone:editPhone,birthDate:editBirth}; onEdit&&onEdit(upd); apiUpdatePatient(p.id,upd).catch(err=>console.warn('API update failed:',err.message)); setShowEditModal(false); }} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
+                    <button onClick={()=>setShowEditModal(false)} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+                  </div>
+                </div>
+              </div>
+            )}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"6px 16px" }}>
               <div><span style={{ color:"#aaa" }}>Telefone: </span>{p.phone}</div>
               <div><span style={{ color:"#aaa" }}>Plano: </span>{plan?.name}</div>
@@ -991,6 +1032,16 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                 </div>
               )}
             <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+              <div style={{ marginBottom:10 }}>
+                <label style={{ fontSize:12, color:'#888' }}>Data real desta semana:</label>
+                <input
+                  type="date"
+                  value={cl[sw]?.weekDate ? cl[sw].weekDate.split('T')[0] : ''}
+                  onChange={e => setCl(prev => ({ ...prev, [sw]: { ...prev[sw], weekDate: e.target.value ? new Date(e.target.value).toISOString() : null }}))}
+                  style={{ marginLeft:8, padding:'4px 8px', border:'1px solid #ddd', borderRadius:6, fontSize:13 }}
+                />
+                <span style={{ fontSize:11, color:'#aaa', marginLeft:8 }}>Deixe em branco para usar a data calculada</span>
+              </div>
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
                 <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>
                   Semana {sw}
@@ -1659,17 +1710,19 @@ function NewLeadModal({ onClose, onSave }) {
   const [nasc, setNasc]   = useState("");
   const [peso, setPeso]   = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [plan, setPlan]   = useState("essential");
 
   const handleSave = () => {
     const w = parseFloat(peso);
     if (!nome.trim() || !nasc || !w) return alert("Preencha nome, nascimento e peso.");
+    if (!email.trim()) return alert("Preencha o e-mail do paciente.");
     const np = {
       id: Date.now(), name: nome.trim(), plan, cycle: 1, week: 1,
-      birthDate: nasc, phone, sd: new Date().toISOString(),
+      birthDate: nasc, phone, email, sd: new Date().toISOString(),
       iw: w, cw: w,
       history: [{ date: new Date().toISOString(), weight: w, m: MOCK_HIST_BASE[0].m, b: MOCK_HIST_BASE[0].b, n: MOCK_HIST_BASE[0].n }],
-      nr: addDays(new Date(), 7).toISOString(), eng: 100, pass: "123"
+      nr: addDays(new Date(), 7).toISOString(), eng: 100
     };
     onSave(np);
     onClose();
@@ -1684,6 +1737,7 @@ function NewLeadModal({ onClose, onSave }) {
         </div>
         {[
           { label:"Nome completo", val:nome, set:setNome, type:"text", ph:"Ana Carolina Silva" },
+          { label:"E-mail *", val:email, set:setEmail, type:"email", ph:"paciente@email.com" },
           { label:"Data de nascimento", val:nasc, set:setNasc, type:"date", ph:"" },
           { label:"Peso inicial (kg)", val:peso, set:setPeso, type:"number", ph:"80.5" },
           { label:"Telefone", val:phone, set:setPhone, type:"tel", ph:"(24) 99999-0000" },
@@ -1715,6 +1769,26 @@ function NewLeadModal({ onClose, onSave }) {
 ═══════════════════════════════════════════════ */
 function Login({ onLogin }) {
   const [mode, setMode] = useState("admin");
+  const [forgotMode, setForgotMode] = useState(false);
+  const [fpEmail, setFpEmail] = useState('');
+  const [fpSent, setFpSent] = useState(false);
+  const [fpLoading, setFpLoading] = useState(false);
+  const [fpError, setFpError] = useState('');
+
+  const handleForgot = async (e) => {
+    e.preventDefault();
+    setFpLoading(true);
+    setFpError('');
+    try {
+      await apiForgotPassword(fpEmail);
+      setFpSent(true);
+    } catch (err) {
+      setFpError(err.response?.data?.error || 'Erro ao enviar e-mail. Tente novamente.');
+    } finally {
+      setFpLoading(false);
+    }
+  };
+
   return (
     <div style={{ minHeight:"100vh", background:`linear-gradient(135deg,${G[800]},${G[900]} 50%,#1a1a2e)`, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
       <div style={{ width:"100%", maxWidth:360, background:"#fff", borderRadius:18, padding:"32px 24px", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
@@ -1725,23 +1799,59 @@ function Login({ onLogin }) {
           <div style={{ fontSize:19, fontWeight:700, color:G[800] }}>Programa Ser Livre</div>
           <div style={{ fontSize:11, color:"#bbb", marginTop:2 }}>Instituto Dra. Mariana Wogel</div>
         </div>
-        <div style={{ display:"flex", background:G[50], borderRadius:8, padding:2, marginBottom:18 }}>
-          {[["admin","Equipe"],["paciente","Paciente"]].map(([k,l]) => (
-            <div key={k} onClick={()=>setMode(k)} style={{ flex:1, textAlign:"center", padding:"8px 0", borderRadius:7, cursor:"pointer", fontSize:12, fontWeight:mode===k?600:400, background:mode===k?"#fff":"transparent", color:mode===k?G[700]:"#aaa", transition:"all 0.15s" }}>{l}</div>
-          ))}
-        </div>
-        <div style={{ marginBottom:10 }}>
-          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>E-mail</label>
-          <input style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} placeholder="email@exemplo.com"/>
-        </div>
-        <div style={{ marginBottom:18 }}>
-          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Senha</label>
-          <input type="password" style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} placeholder="••••••••"/>
-        </div>
-        <button onClick={()=>onLogin(mode)} style={{ width:"100%", padding:"11px", borderRadius:9, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-          <Lock size={14}/>Entrar
-        </button>
-        <div style={{ textAlign:"center", marginTop:10, fontSize:10, color:"#ccc" }}>Demo: clique Entrar com qualquer dado</div>
+
+        {forgotMode ? (
+          <>
+            {fpSent ? (
+              <div style={{ textAlign:"center" }}>
+                <div style={{ fontSize:36, marginBottom:8 }}>📧</div>
+                <div style={{ fontSize:14, fontWeight:600, color:G[700], marginBottom:6 }}>E-mail enviado!</div>
+                <div style={{ fontSize:12, color:"#888", marginBottom:20 }}>Verifique sua caixa de entrada e siga as instruções para redefinir sua senha.</div>
+                <button onClick={()=>{ setForgotMode(false); setFpSent(false); setFpEmail(''); }} style={{ width:"100%", padding:"10px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>Voltar ao login</button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgot}>
+                <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:4 }}>Esqueceu a senha?</div>
+                <div style={{ fontSize:11, color:"#888", marginBottom:16 }}>Informe seu e-mail e enviaremos um link para redefinir sua senha.</div>
+                {fpError && <div style={{ background:"#FDEDEC", color:"#C0392B", padding:"8px 12px", borderRadius:7, marginBottom:12, fontSize:12 }}>{fpError}</div>}
+                <div style={{ marginBottom:14 }}>
+                  <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>E-mail</label>
+                  <input type="email" value={fpEmail} onChange={e=>setFpEmail(e.target.value)} required placeholder="email@exemplo.com"
+                    style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+                </div>
+                <button type="submit" disabled={fpLoading} style={{ width:"100%", padding:"11px", borderRadius:9, background:fpLoading?G[300]:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:fpLoading?"not-allowed":"pointer", fontFamily:"inherit" }}>
+                  {fpLoading ? "Enviando..." : "Enviar link"}
+                </button>
+                <div style={{ textAlign:"center", marginTop:10 }}>
+                  <span onClick={()=>setForgotMode(false)} style={{ fontSize:11, color:G[600], cursor:"pointer", textDecoration:"underline" }}>Voltar ao login</span>
+                </div>
+              </form>
+            )}
+          </>
+        ) : (
+          <>
+            <div style={{ display:"flex", background:G[50], borderRadius:8, padding:2, marginBottom:18 }}>
+              {[["admin","Equipe"],["paciente","Paciente"]].map(([k,l]) => (
+                <div key={k} onClick={()=>setMode(k)} style={{ flex:1, textAlign:"center", padding:"8px 0", borderRadius:7, cursor:"pointer", fontSize:12, fontWeight:mode===k?600:400, background:mode===k?"#fff":"transparent", color:mode===k?G[700]:"#aaa", transition:"all 0.15s" }}>{l}</div>
+              ))}
+            </div>
+            <div style={{ marginBottom:10 }}>
+              <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>E-mail</label>
+              <input style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} placeholder="email@exemplo.com"/>
+            </div>
+            <div style={{ marginBottom:18 }}>
+              <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Senha</label>
+              <input type="password" style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} placeholder="••••••••"/>
+            </div>
+            <button onClick={()=>onLogin(mode)} style={{ width:"100%", padding:"11px", borderRadius:9, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+              <Lock size={14}/>Entrar
+            </button>
+            <div style={{ textAlign:"center", marginTop:10 }}>
+              <span onClick={()=>setForgotMode(true)} style={{ fontSize:11, color:G[600], cursor:"pointer", textDecoration:"underline" }}>Esqueceu a senha?</span>
+            </div>
+            <div style={{ textAlign:"center", marginTop:6, fontSize:10, color:"#ccc" }}>Demo: clique Entrar com qualquer dado</div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1859,14 +1969,18 @@ export default function App() {
   const content = (
     <>
       {page==="dash"  && <Dash  ps={ps} onSel={go} mob={mob}/>}
-      {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)}/>}
+      {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)} onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(err=>console.warn('API delete failed:', err.message)); }}/>}
       {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}
         onSaveScores={scores=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,history:[...x.history.slice(0,-1),{...x.history[x.history.length-1],...scores}]}:x)); addLog({action:"scores",patientId:sp.id,patientName:sp.name,detail:"Scores metabólicos atualizados"}); }}
         onAddWeighIn={entry=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,cw:entry.weight,history:[...x.history,entry]}:x)); }}
         onAddScoreMonth={({m,b,n})=>{ const mo=format(new Date(),"MMM/yy"); setPs(prev=>prev.map(x=>x.id===sp.id?{...x,scoreHistory:[...(x.scoreHistory||[]),{id:Date.now(),date:new Date().toISOString(),month:mo,m,b,n}]}:x)); }}
         onChangePlan={newPlan=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,plan:newPlan}:x)); }}
         activityLog={activityLog}
-        onLog={addLog}/>}
+        onLog={addLog}
+        onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(err=>console.warn('API delete failed:', err.message)); setPage("pat"); }}
+        onFinish={id=>{ apiFinishProgram(id).catch(err=>console.warn('API finish failed:', err.message)); addLog({action:"finalizado",patientId:sp.id,patientName:sp.name,detail:"Programa finalizado"}); }}
+        onRestart={id=>{ setPs(prev=>prev.map(x=>x.id===id?{...x,cycle:(x.cycle||1)+1,week:1}:x)); apiRestartProgram(id).catch(err=>console.warn('API restart failed:', err.message)); addLog({action:"reinicio",patientId:sp.id,patientName:sp.name,detail:`Novo ciclo iniciado: C${(sp.cycle||1)+1}`}); }}
+        onEdit={upd=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,...upd}:x)); }}/>}
       {page==="alert" && <Alerts ps={ps} onSel={go}/>}
       {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog}/>}
     </>
@@ -1891,7 +2005,7 @@ export default function App() {
       </div>
       {/* Conteúdo */}
       <div style={{ padding:"10px 12px" }}>
-        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setPs(prev=>[...prev,np]); addLog({action:"cadastro",patientId:np.id,patientName:np.name,detail:"Novo paciente cadastrado"}); }}/>}
+        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setPs(prev=>[...prev,np]); addLog({action:"cadastro",patientId:np.id,patientName:np.name,detail:"Novo paciente cadastrado"}); apiCreatePatient({ name:np.name, email:np.email, phone:np.phone, plan:np.plan, birthDate:np.birthDate, initialWeight:np.iw }).catch(err=>console.warn('API patient creation failed (SMTP may not be configured):', err.message)); }}/>}
         {content}</div>
       {/* Bottom nav */}
       <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:`1px solid ${G[200]}`, display:"flex", justifyContent:"space-around", padding:"6px 0 max(6px,env(safe-area-inset-bottom))", zIndex:50 }}>
@@ -1957,7 +2071,7 @@ export default function App() {
           </div>
         </div>
         
-        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setPs(prev=>[...prev,np]); addLog({action:"cadastro",patientId:np.id,patientName:np.name,detail:"Novo paciente cadastrado"}); }}/>}
+        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setPs(prev=>[...prev,np]); addLog({action:"cadastro",patientId:np.id,patientName:np.name,detail:"Novo paciente cadastrado"}); apiCreatePatient({ name:np.name, email:np.email, phone:np.phone, plan:np.plan, birthDate:np.birthDate, initialWeight:np.iw }).catch(err=>console.warn('API patient creation failed (SMTP may not be configured):', err.message)); }}/>}
         {content}
       </div>
     </div>

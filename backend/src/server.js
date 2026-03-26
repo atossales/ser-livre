@@ -7,20 +7,28 @@
 // 3. Inicia o servidor na porta configurada
 //
 // ROTAS DISPONÍVEIS:
-// POST   /api/auth/login         → Login
-// POST   /api/auth/register      → Cadastro de novo usuário
-// GET    /api/patients            → Lista pacientes
-// GET    /api/patients/:id        → Dados de 1 paciente
-// POST   /api/patients            → Cria paciente
-// PUT    /api/patients/:id        → Atualiza paciente
-// GET    /api/patients/:id/cycles → Ciclos do paciente
-// POST   /api/scores              → Registra scores
-// GET    /api/scores/:cycleId     → Busca scores do ciclo
-// POST   /api/weekchecks          → Salva checklist semanal
-// GET    /api/weekchecks/:cycleId → Busca checklists do ciclo
-// GET    /api/alerts              → Lista alertas
-// GET    /api/dashboard           → Dados do dashboard
-// PUT    /api/users/:id/avatar    → Atualiza foto de perfil
+// POST   /api/auth/login                  → Login
+// POST   /api/auth/register               → Cadastro de novo usuário
+// POST   /api/auth/accept-invite          → Aceitar convite e definir senha
+// POST   /api/auth/forgot-password        → Solicitar redefinição de senha
+// POST   /api/auth/reset-password/:token  → Redefinir senha via token
+// POST   /api/users/:id/resend-invite     → Reenviar convite
+// GET    /api/patients                    → Lista pacientes
+// GET    /api/patients/:id               → Dados de 1 paciente
+// POST   /api/patients                    → Cria paciente
+// PUT    /api/patients/:id               → Atualiza paciente
+// DELETE /api/patients/:id               → Exclui paciente
+// DELETE /api/patients                    → Exclui pacientes em massa
+// PATCH  /api/patients/:id/finish         → Finaliza programa
+// PATCH  /api/patients/:id/restart        → Reinicia programa
+// GET    /api/patients/:id/cycles         → Ciclos do paciente
+// POST   /api/scores                      → Registra scores
+// GET    /api/scores/:cycleId             → Busca scores do ciclo
+// POST   /api/weekchecks                  → Salva checklist semanal
+// GET    /api/weekchecks/:cycleId         → Busca checklists do ciclo
+// GET    /api/alerts                      → Lista alertas
+// GET    /api/dashboard                   → Dados do dashboard
+// PUT    /api/users/:id/avatar            → Atualiza foto de perfil
 // ============================================================
 
 const express = require('express');
@@ -31,6 +39,11 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const morgan = require('morgan');
+const crypto = require('crypto');
+const { sendInviteEmail, sendResetEmail } = require('./utils/mailer');
 
 const { authRequired, requireRole, onlyOwnData } = require('./middleware/auth');
 const { calcularMetabolico, calcularBemEstar, calcularMental, gerarAlertas, getPlanoFeatures } = require('./utils/scores');
@@ -40,9 +53,37 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // ── Configurações ──
-app.use(cors({ origin: '*', methods: ['GET','PUT','POST','DELETE','OPTIONS'], allowedHeaders: ['Content-Type','Authorization'] }));
+
+// Security headers
+app.use(helmet({ contentSecurityPolicy: false }));
+
+// Logging
+app.use(morgan('combined'));
+
+// CORS — aceita todas as origens em dev, restrito em prod
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : null;
+
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!ALLOWED_ORIGINS || !origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    cb(new Error('Origem não permitida pelo CORS'));
+  },
+  methods: ['GET','PUT','POST','DELETE','PATCH','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization']
+}));
 app.options('*', cors());
 app.use(express.json());
+
+// Rate limiter para rotas de autenticação (evita força bruta)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 20,
+  message: { error: 'Muitas tentativas. Tente novamente em 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Upload de avatares
 const uploadsDir = path.join(__dirname, '..', 'uploads');
@@ -65,7 +106,7 @@ const upload = multer({
 //  AUTENTICAÇÃO
 // ════════════════════════════════════════════
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await prisma.user.findUnique({
@@ -82,7 +123,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, avatarUrl: user.avatarUrl, patientId: user.patient?.id }
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, avatarUrl: user.avatarUrl, patientId: user.patient?.id, emailVerified: user.emailVerified }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -91,12 +132,155 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.post('/api/auth/register', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
   try {
-    const { email, password, name, role, phone } = req.body;
-    const hashed = await bcrypt.hash(password, 10);
+    const { email, name, role, phone } = req.body;
+    if (!email || !name || !role) return res.status(400).json({ error: 'email, name e role são obrigatórios' });
+
+    // Cria usuário sem senha (senha será definida via convite)
+    const tempPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
     const user = await prisma.user.create({
-      data: { email, password: hashed, name, role, phone }
+      data: { email, password: tempPassword, name, role, phone }
     });
-    res.status(201).json({ id: user.id, name: user.name, role: user.role });
+
+    // Gera token de convite
+    const tokenRaw = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(tokenRaw).digest('hex');
+    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72h
+
+    await prisma.inviteToken.create({
+      data: { tokenHash, userId: user.id, expiresAt }
+    });
+
+    // Envia e-mail de convite
+    await sendInviteEmail(email, name, tokenRaw);
+
+    res.status(201).json({ id: user.id, name: user.name, role: user.role, inviteSent: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Aceitar convite e definir senha
+app.post('/api/auth/accept-invite', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: 'Token e senha são obrigatórios' });
+    if (password.length < 8) return res.status(400).json({ error: 'Senha deve ter pelo menos 8 caracteres' });
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const invite = await prisma.inviteToken.findUnique({
+      where: { tokenHash },
+      include: { user: true }
+    });
+
+    if (!invite || invite.used || invite.expiresAt < new Date()) {
+      return res.status(400).json({ error: 'Token inválido ou expirado' });
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: invite.userId },
+        data: { password: hashed, emailVerified: true }
+      }),
+      prisma.inviteToken.update({
+        where: { id: invite.id },
+        data: { used: true }
+      })
+    ]);
+
+    res.json({ message: 'Senha definida com sucesso. Faça login.', emailVerified: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Solicitar redefinição de senha
+app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
+  try {
+    const { email } = req.body;
+    // Sempre retorna 200 por segurança (não revela se e-mail existe)
+    if (!email) return res.status(400).json({ error: 'E-mail é obrigatório' });
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user && user.active) {
+      // Invalida tokens anteriores
+      await prisma.resetToken.updateMany({
+        where: { userId: user.id, used: false },
+        data: { used: true }
+      });
+
+      const tokenRaw = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(tokenRaw).digest('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
+
+      await prisma.resetToken.create({
+        data: { tokenHash, userId: user.id, expiresAt }
+      });
+
+      await sendResetEmail(email, user.name, tokenRaw);
+    }
+
+    res.json({ message: 'Se o e-mail existir no sistema, um link foi enviado.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Redefinir senha via token
+app.post('/api/auth/reset-password/:token', async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: 'Senha deve ter pelo menos 8 caracteres' });
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(req.params.token).digest('hex');
+    const resetToken = await prisma.resetToken.findUnique({ where: { tokenHash } });
+
+    if (!resetToken || resetToken.used || resetToken.expiresAt < new Date()) {
+      return res.status(400).json({ error: 'Token inválido ou expirado' });
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { password: hashed }
+      }),
+      prisma.resetToken.update({
+        where: { id: resetToken.id },
+        data: { used: true }
+      })
+    ]);
+
+    res.json({ message: 'Senha redefinida com sucesso. Faça login.' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Reenviar convite
+app.post('/api/users/:id/resend-invite', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: parseInt(req.params.id) } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    // Invalida convites anteriores
+    await prisma.inviteToken.updateMany({
+      where: { userId: user.id, used: false },
+      data: { used: true }
+    });
+
+    const tokenRaw = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(tokenRaw).digest('hex');
+    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+
+    await prisma.inviteToken.create({
+      data: { tokenHash, userId: user.id, expiresAt }
+    });
+
+    await sendInviteEmail(user.email, user.name, tokenRaw);
+    res.json({ message: 'Convite reenviado.' });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -148,18 +332,28 @@ app.get('/api/patients/:id', authRequired, onlyOwnData, async (req, res) => {
   }
 });
 
-// Criar paciente (cria o User + Patient + Cycle 1)
+// Criar paciente (cria o User + Patient + Cycle 1 + envia convite)
 app.post('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM'), async (req, res) => {
   try {
-    const { name, email, password, phone, plan, initialWeight, height, birthDate } = req.body;
-    const hashed = await bcrypt.hash(password || '123456', 10);
+    const { name, email, phone, plan, initialWeight, height, birthDate } = req.body;
+    if (!name || !email) return res.status(400).json({ error: 'name e email são obrigatórios' });
+
+    // Cria usuário com senha temporária aleatória (será definida via convite)
+    const tempPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
 
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
-        data: { name, email, password: hashed, role: 'PACIENTE', phone }
+        data: { name, email, password: tempPassword, role: 'PACIENTE', phone }
       });
       const patient = await tx.patient.create({
-        data: { userId: user.id, plan, initialWeight, currentWeight: initialWeight, height, birthDate: birthDate ? new Date(birthDate) : null }
+        data: {
+          userId: user.id,
+          plan: plan || 'ESSENTIAL',
+          initialWeight: parseFloat(initialWeight) || 0,
+          currentWeight: parseFloat(initialWeight) || 0,
+          height: height ? parseFloat(height) : null,
+          birthDate: birthDate ? new Date(birthDate) : null
+        }
       });
       const cycle = await tx.cycle.create({
         data: { patientId: patient.id, number: 1 }
@@ -167,9 +361,160 @@ app.post('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAG
       return { user, patient, cycle };
     });
 
-    res.status(201).json(result);
+    // Gera token de convite
+    const tokenRaw = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(tokenRaw).digest('hex');
+    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+
+    await prisma.inviteToken.create({
+      data: { tokenHash, userId: result.user.id, expiresAt }
+    });
+
+    await sendInviteEmail(email, name, tokenRaw);
+
+    res.status(201).json({
+      patientId: result.patient.id,
+      userId: result.user.id,
+      cycleId: result.cycle.id,
+      inviteSent: true
+    });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// Atualizar paciente
+app.put('/api/patients/:id', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM'), async (req, res) => {
+  try {
+    const { plan, currentWeight, height, birthDate, phone } = req.body;
+    const patient = await prisma.patient.update({
+      where: { id: parseInt(req.params.id) },
+      data: {
+        ...(plan && { plan }),
+        ...(currentWeight !== undefined && { currentWeight: parseFloat(currentWeight) }),
+        ...(height !== undefined && { height: height ? parseFloat(height) : null }),
+        ...(birthDate !== undefined && { birthDate: birthDate ? new Date(birthDate) : null })
+      }
+    });
+
+    if (phone !== undefined) {
+      await prisma.user.update({
+        where: { id: patient.userId },
+        data: { phone }
+      });
+    }
+
+    res.json(patient);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Excluir paciente (individual)
+app.delete('/api/patients/:id', authRequired, requireRole('ADMIN'), async (req, res) => {
+  try {
+    const patientId = parseInt(req.params.id);
+    const patient = await prisma.patient.findUnique({ where: { id: patientId } });
+    if (!patient) return res.status(404).json({ error: 'Paciente não encontrado' });
+
+    await prisma.$transaction(async (tx) => {
+      // Deleta ciclos e filhos (WeekCheck, ScoreEntry são cascade)
+      await tx.patient.delete({ where: { id: patientId } });
+      // Deleta o usuário associado
+      await tx.user.delete({ where: { id: patient.userId } });
+    });
+
+    res.json({ message: 'Paciente removido com sucesso.' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Excluir pacientes em massa
+app.delete('/api/patients', authRequired, requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids deve ser um array não vazio' });
+    }
+
+    const patients = await prisma.patient.findMany({
+      where: { id: { in: ids.map(Number) } }
+    });
+
+    const userIds = patients.map(p => p.userId);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.patient.deleteMany({ where: { id: { in: ids.map(Number) } } });
+      await tx.user.deleteMany({ where: { id: { in: userIds } } });
+    });
+
+    res.json({ deleted: patients.length });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Finalizar programa (completa o ciclo ativo)
+app.patch('/api/patients/:id/finish', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
+  try {
+    const patientId = parseInt(req.params.id);
+    const cycle = await prisma.cycle.findFirst({
+      where: { patientId, status: 'ACTIVE' }
+    });
+
+    if (!cycle) return res.status(404).json({ error: 'Nenhum ciclo ativo encontrado' });
+
+    const updated = await prisma.cycle.update({
+      where: { id: cycle.id },
+      data: { status: 'COMPLETED', endDate: new Date() }
+    });
+
+    res.json({ message: 'Programa finalizado.', cycleId: cycle.id, status: 'COMPLETED' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Reiniciar programa (cria novo ciclo)
+app.patch('/api/patients/:id/restart', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
+  try {
+    const patientId = parseInt(req.params.id);
+
+    // Verifica se já tem ciclo ativo
+    const activeCheck = await prisma.cycle.findFirst({ where: { patientId, status: 'ACTIVE' } });
+    if (activeCheck) return res.status(400).json({ error: 'Já existe um ciclo ativo para este paciente' });
+
+    const lastCycle = await prisma.cycle.findFirst({
+      where: { patientId },
+      orderBy: { number: 'desc' }
+    });
+
+    const newNumber = (lastCycle?.number || 0) + 1;
+    const newCycle = await prisma.cycle.create({
+      data: { patientId, number: newNumber, status: 'ACTIVE' }
+    });
+
+    res.json({ message: 'Novo ciclo iniciado.', cycleId: newCycle.id, cycleNumber: newNumber });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Ciclos de um paciente
+app.get('/api/patients/:id/cycles', authRequired, async (req, res) => {
+  try {
+    const cycles = await prisma.cycle.findMany({
+      where: { patientId: parseInt(req.params.id) },
+      include: {
+        weekChecks: { orderBy: { weekNumber: 'asc' } },
+        scores: { orderBy: { month: 'asc' } }
+      },
+      orderBy: { number: 'desc' }
+    });
+    res.json(cycles);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -402,15 +747,15 @@ app.put('/api/users/:id/password', authRequired, async (req, res) => {
     if (req.user.role !== 'ADMIN' && req.user.id !== parseInt(req.params.id)) {
       return res.status(403).json({ error: 'Acesso negado' });
     }
-    
+
     const { password } = req.body;
     const hashed = await bcrypt.hash(password, 10);
-    
+
     await prisma.user.update({
       where: { id: parseInt(req.params.id) },
       data: { password: hashed }
     });
-    
+
     res.json({ message: 'Senha atualizada com sucesso' });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -474,8 +819,15 @@ app.put('/api/state/:key', express.json({ limit: '20mb' }), async (req, res) => 
   }
 });
 
+// Middleware de tratamento de erros
+app.use((err, req, res, next) => {
+  console.error('[ERROR]', err.message);
+  res.status(err.status || 500).json({ error: err.message || 'Erro interno do servidor' });
+});
+
 // ── Inicia o servidor ──
 app.listen(PORT, () => {
   console.log(`\n🟢 Ser Livre API rodando na porta ${PORT}`);
-  console.log(`   Banco: ${process.env.DATABASE_URL ? 'Conectado' : '⚠️ DATABASE_URL não configurada'}\n`);
+  console.log(`   Banco: ${process.env.DATABASE_URL ? 'Conectado' : '⚠️ DATABASE_URL não configurada'}`);
+  console.log(`   E-mail: ${process.env.SMTP_USER ? `Configurado (${process.env.SMTP_USER})` : '⚠️ SMTP não configurado (e-mails serão logados no console)'}\n`);
 });

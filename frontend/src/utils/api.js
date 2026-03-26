@@ -64,4 +64,19 @@ export const updateAvatar = (userId, file) => {
 // ── Seed (só na primeira vez) ──
 export const seed = () => api.post('/seed');
 
+// ── Auth (novos) ──
+export const acceptInvite = (token, password) => api.post('/auth/accept-invite', { token, password });
+export const forgotPassword = (email) => api.post('/auth/forgot-password', { email });
+export const resetPassword = (token, password) => api.post(`/auth/reset-password/${token}`, { password });
+
+// ── Pacientes (novos) ──
+export const updatePatient = (id, data) => api.put(`/patients/${id}`, data);
+export const deletePatient = (id) => api.delete(`/patients/${id}`);
+export const bulkDeletePatients = (ids) => api.delete('/patients', { data: { ids } });
+export const finishProgram = (id) => api.patch(`/patients/${id}/finish`);
+export const restartProgram = (id) => api.patch(`/patients/${id}/restart`);
+
+// ── Usuários ──
+export const resendInvite = (userId) => api.post(`/users/${userId}/resend-invite`);
+
 export default api;
