@@ -44,6 +44,10 @@ const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const crypto = require('crypto');
 const { sendInviteEmail, sendResetEmail } = require('./utils/mailer');
+const {
+  sendWelcome, sendWeighInReport, checkStatus,
+} = require('./utils/whatsapp');
+const { setupScheduler } = require('./utils/scheduler');
 
 const { authRequired, requireRole, onlyOwnData } = require('./middleware/auth');
 const { calcularMetabolico, calcularBemEstar, calcularMental, gerarAlertas, getPlanoFeatures } = require('./utils/scores');
@@ -371,6 +375,13 @@ app.post('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAG
     });
 
     await sendInviteEmail(email, name, tokenRaw);
+
+    // WhatsApp de boas-vindas (assíncrono, não bloqueia a resposta)
+    if (phone) {
+      sendWelcome({ name, phone, plan: plan || 'ESSENTIAL' }).catch(err =>
+        console.warn('[WA] Boas-vindas não enviado:', err.message)
+      );
+    }
 
     res.status(201).json({
       patientId: result.patient.id,
@@ -819,6 +830,69 @@ app.put('/api/state/:key', express.json({ limit: '20mb' }), async (req, res) => 
   }
 });
 
+// ════════════════════════════════════════════
+//  WHATSAPP
+// ════════════════════════════════════════════
+
+// Status da conexão
+app.get('/api/whatsapp/status', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
+  try {
+    const status = await checkStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Enviar relatório de pesagem para paciente
+app.post('/api/whatsapp/send-report', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM', 'NUTRICIONISTA'), async (req, res) => {
+  try {
+    const { patientId, weekNum, currentWeight, previousWeight, massaMagra, massaGordura } = req.body;
+    if (!patientId) return res.status(400).json({ error: 'patientId é obrigatório' });
+
+    const patient = await prisma.patient.findUnique({
+      where: { id: parseInt(patientId) },
+      include: { user: { select: { name: true, phone: true } } }
+    });
+    if (!patient) return res.status(404).json({ error: 'Paciente não encontrado' });
+
+    const phone = patient.user?.phone;
+    if (!phone) return res.status(400).json({ error: 'Paciente sem telefone cadastrado' });
+
+    const result = await sendWeighInReport(
+      { name: patient.user.name, phone },
+      { weekNum, currentWeight, previousWeight, massaMagra, massaGordura }
+    );
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Enviar mensagem manual para paciente
+app.post('/api/whatsapp/send-custom', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
+  try {
+    const { patientId, message } = req.body;
+    if (!patientId || !message) return res.status(400).json({ error: 'patientId e message são obrigatórios' });
+
+    const patient = await prisma.patient.findUnique({
+      where: { id: parseInt(patientId) },
+      include: { user: { select: { name: true, phone: true } } }
+    });
+    if (!patient) return res.status(404).json({ error: 'Paciente não encontrado' });
+
+    const phone = patient.user?.phone;
+    if (!phone) return res.status(400).json({ error: 'Paciente sem telefone cadastrado' });
+
+    const { sendWhatsApp } = require('./utils/whatsapp');
+    const result = await sendWhatsApp(phone, message);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Middleware de tratamento de erros
 app.use((err, req, res, next) => {
   console.error('[ERROR]', err.message);
@@ -828,6 +902,11 @@ app.use((err, req, res, next) => {
 // ── Inicia o servidor ──
 app.listen(PORT, () => {
   console.log(`\n🟢 Ser Livre API rodando na porta ${PORT}`);
-  console.log(`   Banco: ${process.env.DATABASE_URL ? 'Conectado' : '⚠️ DATABASE_URL não configurada'}`);
-  console.log(`   E-mail: ${process.env.SMTP_USER ? `Configurado (${process.env.SMTP_USER})` : '⚠️ SMTP não configurado (e-mails serão logados no console)'}\n`);
+  console.log(`   Banco:      ${process.env.DATABASE_URL ? 'Conectado' : '⚠️ DATABASE_URL não configurada'}`);
+  console.log(`   E-mail:     ${process.env.SMTP_USER ? `Configurado (${process.env.SMTP_USER})` : '⚠️ SMTP não configurado'}`);
+  console.log(`   WhatsApp:   ${process.env.EVOLUTION_API_KEY ? `Configurado (${process.env.EVOLUTION_INSTANCE})` : '⚠️ Evolution API não configurada'}`);
+  console.log(`   Gemini AI:  ${process.env.GEMINI_API_KEY ? 'Configurado' : '⚠️ Não configurado (usando templates padrão)'}\n`);
+
+  // Inicia cron jobs (requer node-cron instalado)
+  setupScheduler(prisma);
 });

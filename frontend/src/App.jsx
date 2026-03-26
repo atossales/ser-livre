@@ -1690,39 +1690,76 @@ function Portal({  p, av, setAv }) {
    MODAL REGISTRO DE PESAGEM
 ═══════════════════════════════════════════════ */
 function WeighInModal({ p, onClose, onSave, onLog }) {
-  const [weekNum, setWeekNum] = useState(p.week || 1);
-  const [peso,    setPeso]    = useState(p.cw || "");
-  const [mm,      setMm]      = useState("");
-  const [mg,      setMg]      = useState("");
+  const [weekNum,  setWeekNum]  = useState(p.week || 1);
+  const [peso,     setPeso]     = useState(p.cw || "");
+  const [mm,       setMm]       = useState("");
+  const [mg,       setMg]       = useState("");
+  const [sendWa,   setSendWa]   = useState(true);
+  const [sending,  setSending]  = useState(false);
+  const [waStatus, setWaStatus] = useState(null); // null | 'ok' | 'err'
 
   const sd = p.sd ? new Date(p.sd + 'T12:00:00') : new Date();
   const weekStart = addDays(sd, (weekNum - 1) * 7);
   const weekEnd   = addDays(sd, weekNum * 7 - 1);
   const fmtFull   = d => format(d, "dd/MM/yyyy");
+  const hasPhone  = !!(p.phone);
 
   const tot   = parseFloat(mm||0) + parseFloat(mg||0);
   const pctMM = tot > 0 ? (parseFloat(mm||0)/tot*100).toFixed(1) : "—";
   const pctMG = tot > 0 ? (parseFloat(mg||0)/tot*100).toFixed(1) : "—";
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const w    = parseFloat(peso);
     const mVal = parseFloat(mm||0);
     const gVal = parseFloat(mg||0);
     if (!w) return alert("Informe o peso.");
+
+    // Peso anterior (último registro)
+    const prevEntry = p.history?.[p.history.length - 1];
+    const prevWeight = prevEntry?.weight || p.iw || null;
+
     const entry = {
-      date:       weekStart.toISOString(),
-      weekStart:  weekStart.toISOString(),
-      weekEnd:    weekEnd.toISOString(),
+      date:         weekStart.toISOString(),
+      weekStart:    weekStart.toISOString(),
+      weekEnd:      weekEnd.toISOString(),
       weekNum,
-      weight:     w,
-      massaMagra: mVal,
+      weight:       w,
+      massaMagra:   mVal,
       massaGordura: gVal,
-      m: p.history[p.history.length-1]?.m || {},
-      b: p.history[p.history.length-1]?.b || {},
-      n: p.history[p.history.length-1]?.n || {},
+      m: prevEntry?.m || {},
+      b: prevEntry?.b || {},
+      n: prevEntry?.n || {},
     };
     onSave(entry);
     onLog && onLog({ action:"pesagem", patientId:p.id, patientName:p.name, detail:`Semana ${weekNum} | Peso: ${w}kg | MM: ${mVal}kg | MG: ${gVal}kg` });
+
+    // Enviar relatório via WhatsApp
+    if (sendWa && hasPhone) {
+      setSending(true);
+      try {
+        const res = await fetch('/api/whatsapp/send-report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patientId:      p.id,
+            weekNum,
+            currentWeight:  w,
+            previousWeight: prevWeight,
+            massaMagra:     mVal || null,
+            massaGordura:   gVal || null,
+          }),
+        });
+        setWaStatus(res.ok ? 'ok' : 'err');
+        setTimeout(onClose, 1200);
+      } catch {
+        setWaStatus('err');
+        setTimeout(onClose, 1200);
+      } finally {
+        setSending(false);
+      }
+    } else {
+      onClose();
+    }
   };
 
   return (
@@ -1772,14 +1809,34 @@ function WeighInModal({ p, onClose, onSave, onLog }) {
         ))}
 
         {tot > 0 && (
-          <div style={{ background:G[50], borderRadius:8, padding:"8px 12px", marginBottom:14, display:"flex", gap:16, fontSize:11 }}>
+          <div style={{ background:G[50], borderRadius:8, padding:"8px 12px", marginBottom:12, display:"flex", gap:16, fontSize:11 }}>
             <span style={{ color:S.blue }}>Magra: <strong>{pctMM}%</strong></span>
             <span style={{ color:S.yel }}>Gorda: <strong>{pctMG}%</strong></span>
           </div>
         )}
-        <div style={{ display:"flex", gap:8, marginTop:4 }}>
-          <button onClick={handleSave} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar pesagem</button>
-          <button onClick={onClose}   style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:9, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+
+        {/* Opção WhatsApp */}
+        <div onClick={()=>hasPhone&&setSendWa(v=>!v)}
+          style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:9, border:`1.5px solid ${sendWa&&hasPhone?S.grn:G[200]}`, background:sendWa&&hasPhone?S.grnBg:"#fafafa", marginBottom:14, cursor:hasPhone?"pointer":"default", opacity:hasPhone?1:0.5 }}>
+          <div style={{ width:20, height:20, borderRadius:5, border:`2px solid ${sendWa&&hasPhone?S.grn:G[300]}`, background:sendWa&&hasPhone?S.grn:"#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            {sendWa && hasPhone && <Check size={11} color="#fff"/>}
+          </div>
+          <div>
+            <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>Enviar relatório por WhatsApp</div>
+            <div style={{ fontSize:10, color:"#aaa" }}>{hasPhone ? `Relatório formatado por IA → ${p.phone}` : "Sem telefone cadastrado"}</div>
+          </div>
+        </div>
+
+        {/* Feedback status WhatsApp */}
+        {waStatus === 'ok' && <div style={{ background:S.grnBg, color:S.grn, borderRadius:7, padding:"7px 12px", fontSize:12, marginBottom:10, fontWeight:500 }}>Mensagem enviada com sucesso.</div>}
+        {waStatus === 'err' && <div style={{ background:S.redBg, color:S.red, borderRadius:7, padding:"7px 12px", fontSize:12, marginBottom:10 }}>Erro ao enviar. Verifique a conexão WhatsApp.</div>}
+
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={handleSave} disabled={sending}
+            style={{ flex:1, padding:11, background:sending?G[400]:G[600], color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:sending?"not-allowed":"pointer", fontFamily:"inherit" }}>
+            {sending ? "Enviando..." : "Salvar pesagem"}
+          </button>
+          <button onClick={onClose} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:9, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
         </div>
       </div>
     </div>
