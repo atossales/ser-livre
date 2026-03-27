@@ -2,6 +2,13 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram } from './utils/api';
 import html2pdf from "html2pdf.js";
 import { subDays, isAfter, format, differenceInYears, setYear, isBefore, addDays, parseISO, differenceInDays } from "date-fns";
+
+// Formata data com segurança — retorna "—" se a data for nula ou inválida
+const safeFmt = (dateStr, fmt) => {
+  if (!dateStr) return "—";
+  try { const d = new Date(dateStr); if (isNaN(d.getTime())) return "—"; return format(d, fmt); }
+  catch { return "—"; }
+};
 import * as Lucide from "lucide-react";
 import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
@@ -13,38 +20,8 @@ import {
   LogOut, ChevronRight, Search, Bell, TrendingUp, TrendingDown,
   Activity, Shield, User, Lock, Menu, Check, Download,
   ArrowLeft, Camera, Star, Award, Flame, Target, Zap, BarChart3,
-  Trophy, CalendarDays, Calendar, Weight, Home, Heart, Brain, RefreshCw, Plus, Settings, UserPlus, Cake, FileSignature, Save, MessageCircle
+  Trophy, CalendarDays, Weight, Home, Heart, Brain, RefreshCw, Plus, Settings, UserPlus, Cake, FileSignature, Save
 } from "lucide-react";
-
-/* ════════════════════════════════════════════
-   TOAST — Notificações globais
-═══════════════════════════════════════════════ */
-let _toastFn = null;
-function showToast(msg, type = 'success') { if (_toastFn) _toastFn(msg, type); }
-
-function ToastContainer() {
-  const [toasts, setToasts] = useState([]);
-  useEffect(() => {
-    _toastFn = (msg, type) => {
-      const id = Date.now() + Math.random();
-      setToasts(p => [...p, { id, msg, type }]);
-      setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4000);
-    };
-    return () => { _toastFn = null; };
-  }, []);
-  if (!toasts.length) return null;
-  const TC = { success:'#27AE60', error:'#C0392B', warning:'#F39C12', info:'#2980B9' };
-  const TI = { success:'✓', error:'✕', warning:'!', info:'ℹ' };
-  return (
-    <div style={{ position:'fixed', bottom:74, right:16, zIndex:9999, display:'flex', flexDirection:'column', gap:6, maxWidth:300, pointerEvents:'none' }}>
-      {toasts.map(t => (
-        <div key={t.id} style={{ background: TC[t.type]||TC.success, color:'#fff', padding:'10px 14px', borderRadius:10, fontSize:12, fontWeight:500, boxShadow:'0 4px 20px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', gap:8 }}>
-          <span style={{ fontSize:14, fontWeight:700, flexShrink:0 }}>{TI[t.type]||'✓'}</span>{t.msg}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 /* ════════════════════════════════════════════
    DESIGN TOKENS
@@ -61,18 +38,6 @@ const S = {
   grn:"#27AE60", grnBg:"#EAFAF1",
   pur:"#8E44AD", purBg:"#F4ECF7",
   blue:"#2980B9", blueBg:"#EBF5FB"
-};
-
-/* ════════════════════════════════════════════
-   HELPER: fetch autenticado com JWT
-   Todas as chamadas à API precisam do token;
-   este helper adiciona Authorization automaticamente.
-═══════════════════════════════════════════════ */
-const authFetch = (url, opts = {}) => {
-  const token = localStorage.getItem('serlivre_token');
-  const headers = { ...(opts.headers || {}) };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return fetch(url, { ...opts, headers });
 };
 
 /* ════════════════════════════════════════════
@@ -96,32 +61,6 @@ const TIER = {
 const TODAY = new Date();
 const fmt   = d => { const dt = new Date(d); return `${String(dt.getDate()).padStart(2,"0")}/${String(dt.getMonth()+1).padStart(2,"0")}`; };
 const addD  = (d, n) => { const r = new Date(d); r.setDate(r.getDate()+n); return r; };
-// safeFmt: wrapper seguro para format() do date-fns — nunca joga RangeError
-const safeFmt = (d, fmt, fb = "—") => {
-  try {
-    const dt = (d instanceof Date) ? d : new Date(d);
-    if (!d || isNaN(dt.getTime())) return fb;
-    return format(dt, fmt);
-  } catch { return fb; }
-};
-// Calcula semana atual baseado na data de início do ciclo (sd)
-const calcWeek = (p) => {
-  if (!p.sd) return p.week || 1;
-  const days = Math.floor((TODAY - new Date(p.sd)) / (1000 * 60 * 60 * 24));
-  return Math.min(Math.max(Math.floor(days / 7) + 1, 1), 16);
-};
-
-// Calcula engajamento automaticamente baseado em pesagens vs semanas no programa
-const calcEng = (p) => {
-  const weeks = calcWeek(p);
-  const weighins = (p.history||[]).length;
-  if (weeks <= 0) return p.eng ?? 100;
-  // Proporção de semanas com pesagem registrada (máx 100%)
-  const ratio = Math.min(weighins / weeks, 1);
-  // Penaliza levemente se poucos registros: 70% peso pesagens + 30% do valor manual existente
-  const manual = p.eng ?? 80;
-  return Math.round(ratio * 70 + (manual / 100) * 30);
-};
 
 /* ════════════════════════════════════════════
    DADOS INICIAIS (PERSISTENTES)
@@ -179,8 +118,8 @@ const MOCK_ACTIVITY = [
 
 const genSC = (ps) => ps.reduce((acc, p) => {
   const hist = p.history || [];
-  const last = hist[hist.length - 1];
-  if (!last) return acc; // paciente sem histórico — ignora
+  const last = hist[hist.length-1];
+  if (!last) return acc;
   acc[p.id] = { m: last.m || {}, b: last.b || {}, n: last.n || {} };
   return acc;
 }, {});
@@ -351,68 +290,40 @@ function SI({ label, value, onChange, opts }) {
 /* ════════════════════════════════════════════
    DASHBOARD — Dra. Mariana
 ═══════════════════════════════════════════════ */
-function Dash({ ps, onSel, mob, onQuickMsg }) {
+function Dash({  ps, onSel, mob }) {
   const [df, setDf] = useState("all");
   const SC = genSC(ps);
 
-  // Calcula o corte de datas baseado no filtro selecionado
-  const cutoff = df==="all" ? null
-    : df==="week"    ? subDays(new Date(), 7)
-    : df==="month"   ? subDays(new Date(), 30)
-    : df==="quarter" ? subDays(new Date(), 90)
-    :                  subDays(new Date(), 120);
-
-  // Para cada paciente, filtra o histórico pelo período
-  const filtHist = (p) => {
-    const hist = p.history || [];
-    return cutoff ? hist.filter(h => isAfter(new Date(h.date), cutoff)) : hist;
-  };
-
-  // Peso no início do período (primeiro registro após cutoff) vs. atual
-  const periodWeightLoss = (p) => {
-    const fh = filtHist(p);
-    if(fh.length === 0) return 0;
-    return (fh[0].weight || p.iw) - (p.cw || fh[fh.length-1].weight || 0);
-  };
-
-  // Composição corporal média (filtrada pelo período — usa último registro no período)
-  const avgMM = ps.length ? +(ps.reduce((a,p)=>{ const fh=filtHist(p); const hist=p.history||[]; const last=fh[fh.length-1]||hist[hist.length-1]; return a+(last?.massaMagra||0); },0)/ps.length).toFixed(1) : 0;
-  const avgMG = ps.length ? +(ps.reduce((a,p)=>{ const fh=filtHist(p); const hist=p.history||[]; const last=fh[fh.length-1]||hist[hist.length-1]; return a+(last?.massaGordura||0); },0)/ps.length).toFixed(1) : 0;
-  const avgPctMM = ps.length ? +(ps.reduce((a,p)=>{ const fh=filtHist(p); const hist=p.history||[]; const last=fh[fh.length-1]||hist[hist.length-1]; const tot=(last?.massaMagra||0)+(last?.massaGordura||0); return a+(tot>0?(last?.massaMagra/tot*100):0); },0)/ps.length).toFixed(1) : 0;
+  // Composição corporal média atual
+  const avgMM = ps.length ? +(ps.reduce((a,p)=>{ const h=p.history||[]; const last=h[h.length-1]; return a+(last?.massaMagra||0); },0)/ps.length).toFixed(1) : 0;
+  const avgMG = ps.length ? +(ps.reduce((a,p)=>{ const h=p.history||[]; const last=h[h.length-1]; return a+(last?.massaGordura||0); },0)/ps.length).toFixed(1) : 0;
+  const avgPctMM = ps.length ? +(ps.reduce((a,p)=>{ const h=p.history||[]; const last=h[h.length-1]; const tot=(last?.massaMagra||0)+(last?.massaGordura||0); return a+(tot>0?((last?.massaMagra||0)/tot*100):0); },0)/ps.length).toFixed(1) : 0;
   const avgPctMG = ps.length ? +(100-avgPctMM).toFixed(1) : 0;
 
-  // Histórico de composição (para gráfico — filtrado pelo período)
+  // Histórico de composição (para gráfico)
   const compHist = (() => {
     const weeks = {};
-    ps.forEach(p => {
-      const fh = filtHist(p);
-      fh.forEach((h,i) => {
-        const k = cutoff ? safeFmt(h.date,"dd/MM","??") : `S${i+1}`;
-        if(!weeks[k]) weeks[k]={s:k,mm:0,mg:0,n:0};
-        weeks[k].mm+=(h.massaMagra||0); weeks[k].mg+=(h.massaGordura||0); weeks[k].n++;
-      });
-    });
+    ps.forEach(p => { (p.history||[]).forEach((h,i) => { const k=`S${i+1}`; if(!weeks[k]) weeks[k]={s:k,mm:0,mg:0,n:0}; weeks[k].mm+=(h.massaMagra||0); weeks[k].mg+=(h.massaGordura||0); weeks[k].n++; }); });
     return Object.values(weeks).map(w=>({s:w.s, mm:w.n?+(w.mm/w.n).toFixed(1):0, mg:w.n?+(w.mg/w.n).toFixed(1):0}));
   })();
 
-  // Perda total no período
-  const tl   = ps.reduce((a,p) => a + periodWeightLoss(p), 0);
-  const ae   = Math.round(ps.reduce((a,p) => a+calcEng(p), 0)/ps.length);
+  const tl   = ps.reduce((a,p) => a+(p.iw-p.cw), 0);
+  const ae   = Math.round(ps.reduce((a,p) => a+p.eng, 0)/ps.length);
   const cr   = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); });
   const el   = ps.filter(p => { const sc=SC[p.id]; return sc&&cM(sc.m)>=21; });
   const rTod = ps.filter(p => p.nr && fmt(p.nr)===fmt(TODAY));
   const rWk  = ps.filter(p => { if(!p.nr)return false; const d=new Date(p.nr).getTime(); return d>=TODAY.getTime()&&d<=addD(TODAY,7).getTime(); }).sort((a,b)=>new Date(a.nr)-new Date(b.nr));
-  const top  = useMemo(() => ps.map(p=>({...p,pct:(p.iw&&p.cw)?((p.iw-p.cw)/p.iw*100):0})).sort((a,b)=>b.pct-a.pct).slice(0,3), [ps]);
+  const top  = useMemo(() => ps.map(p=>({...p,pct:((p.iw-p.cw)/p.iw*100)})).sort((a,b)=>b.pct-a.pct).slice(0,3), [ps]);
   const pavg = useMemo(() => {
     const s={c:0,i:0,g:0,v:0,n:0};
     ps.forEach(p => { const sc=SC[p.id]; if(!sc)return; const pm=pM(sc.m); s.c+=pm.comp; s.i+=pm.infl; s.g+=pm.glic; s.v+=pm.card; s.n++; });
     const n=s.n||1;
     return [{p:"Composição",v:+(s.c/n).toFixed(1)},{p:"Inflamação",v:+(s.i/n).toFixed(1)},{p:"Glicêmico",v:+(s.g/n).toFixed(1)},{p:"Cardiovascular",v:+(s.v/n).toFixed(1)}];
   }, [ps]);
-  const engD = useMemo(() => ps.map(p=>({n:p.name.split(" ")[0],e:calcEng(p)})).sort((a,b)=>b.e-a.e), [ps]);
+  const engD = useMemo(() => ps.map(p=>({n:p.name.split(" ")[0],e:p.eng})).sort((a,b)=>b.e-a.e), [ps]);
   const wbw  = useMemo(() => {
     const w=[];
-    for(let i=1;i<=16;i++){let s=0,n=0; ps.forEach(p=>{if(!p.iw)return; const h=p.history||[];if(h[i-1]!==undefined){s+=p.iw-(h[i-1]?.weight||0);n++;}}); w.push({s:`S${i}`,v:n?+(s/n).toFixed(1):0});}
+    for(let i=1;i<=16;i++){let s=0,n=0; ps.forEach(p=>{const h=p.history||[];if(h[i-1]!==undefined){s+=p.iw-(h[i-1]?.weight||0);n++;}}); w.push({s:`S${i}`,v:n?+(s/n).toFixed(1):0});}
     return w;
   }, [ps]);
 
@@ -429,57 +340,14 @@ function Dash({ ps, onSel, mob, onQuickMsg }) {
   const gc  = mob ? "1fr" : "repeat(4,1fr)";
   const gc2 = mob ? "1fr" : "1fr 1fr";
 
-  const gerarRelatorioCohort = () => {
-    const el = document.createElement('div');
-    el.style.cssText = 'padding:24px;font-family:Outfit,Inter,sans-serif;color:#2C2C2A;background:#fff;width:750px';
-    const now = format(new Date(), "dd/MM/yyyy HH:mm");
-    el.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #8B6D1E;padding-bottom:12px;margin-bottom:20px">
-        <div><div style="font-size:20px;font-weight:700;color:#4E3D12">Programa Ser Livre</div><div style="font-size:11px;color:#999">Instituto Dra. Mariana Wogel · Relatório consolidado gerado em ${now}</div></div>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
-        ${[
-          ['Total de pacientes', ps.length],
-          ['Perda coletiva', tl.toFixed(1)+'kg'],
-          ['Média por paciente', (tl/ps.length).toFixed(1)+'kg'],
-          ['Engajamento médio', ae+'%'],
-        ].map(([l,v])=>`<div style="background:#FBF7EE;border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:#8B6D1E;font-weight:600">${l}</div><div style="font-size:18px;font-weight:700;color:#4E3D12">${v}</div></div>`).join('')}
-      </div>
-      <table style="width:100%;border-collapse:collapse;font-size:11px">
-        <thead><tr style="background:#FBF7EE">
-          ${['Paciente','Plano','Semana','Peso Inicial','Peso Atual','Perda','%','Engajamento'].map(h=>`<th style="text-align:left;padding:7px 8px;font-weight:600;color:#6E5517;border-bottom:1px solid #EBDAB5">${h}</th>`).join('')}
-        </tr></thead>
-        <tbody>
-          ${ps.map((p,i)=>`<tr style="background:${i%2===0?'#FEFCF9':'#fff'}">
-            <td style="padding:7px 8px;font-weight:500">${p.name}</td>
-            <td style="padding:7px 8px;color:#8B6D1E">${PLANS.find(x=>x.id===p.plan)?.name||p.plan}</td>
-            <td style="padding:7px 8px">S${calcWeek(p)}/16</td>
-            <td style="padding:7px 8px">${(p.iw||0).toFixed(1)}kg</td>
-            <td style="padding:7px 8px;font-weight:600">${(p.cw||0).toFixed(1)}kg</td>
-            <td style="padding:7px 8px;color:#27AE60;font-weight:600">-${Math.max(0,(p.iw||0)-(p.cw||0)).toFixed(1)}kg</td>
-            <td style="padding:7px 8px;color:#27AE60">${p.iw?((p.iw-p.cw)/p.iw*100).toFixed(1):0}%</td>
-            <td style="padding:7px 8px">${calcEng(p)}%</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-    `;
-    document.body.appendChild(el);
-    html2pdf().set({ margin:8, filename:`relatorio-cohort-${format(new Date(),'yyyy-MM')}.pdf`, html2canvas:{scale:2}, jsPDF:{orientation:'landscape',unit:'mm',format:'a4'} }).from(el).save().then(()=>{ document.body.removeChild(el); showToast('Relatório PDF gerado!'); });
-  };
-
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-      {/* Filtro período + botão relatório */}
-      <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center", justifyContent:"space-between" }}>
-        <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-          <span style={{ fontSize:11, color:G[600], fontWeight:500 }}>Período:</span>
-          {[["all","Todos"],["week","7d"],["month","30d"],["quarter","90d"],["120d","120d"]].map(([k,l]) => (
-            <div key={k} onClick={()=>setDf(k)} style={{ padding:"5px 12px", borderRadius:20, fontSize:11, cursor:"pointer", fontWeight:df===k?600:400, background:df===k?G[600]:"#fff", color:df===k?"#fff":G[700], border:`1px solid ${df===k?G[600]:G[300]}` }}>{l}</div>
-          ))}
-        </div>
-        <button onClick={gerarRelatorioCohort} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>
-          <Download size={11}/>Relatório Cohort
-        </button>
+      {/* Filtro período */}
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+        <span style={{ fontSize:11, color:G[600], fontWeight:500 }}>Período:</span>
+        {[["all","Todos"],["week","7d"],["month","30d"],["quarter","90d"],["120d","120d"]].map(([k,l]) => (
+          <div key={k} onClick={()=>setDf(k)} style={{ padding:"5px 12px", borderRadius:20, fontSize:11, cursor:"pointer", fontWeight:df===k?600:400, background:df===k?G[600]:"#fff", color:df===k?"#fff":G[700], border:`1px solid ${df===k?G[600]:G[300]}` }}>{l}</div>
+        ))}
       </div>
 
       {/* KPIs linha 1 */}
@@ -495,7 +363,7 @@ function Dash({ ps, onSel, mob, onQuickMsg }) {
         <Mt value={`${(tl/ps.length).toFixed(1)}kg`} label="Média por paciente"  icon={Weight}/>
         <Mt value={el.length}          label="Score elite"         icon={Trophy}        color={S.pur} sub={el.map(p=>p.name.split(" ")[0]).join(", ")||"—"}/>
         <Mt value={rTod.length}        label="Retornos hoje"       icon={CalendarDays}  color={S.blue} sub={rTod.map(p=>p.name.split(" ")[0]).join(", ")||"Nenhum"}/>
-        <Mt value={`${Math.round(ps.filter(p=>calcEng(p)>=80).length/ps.length*100)}%`} label="Engajamento alto" icon={Zap} color={S.grn}/>
+        <Mt value={`${Math.round(ps.filter(p=>p.eng>=80).length/ps.length*100)}%`} label="Engajamento alto" icon={Zap} color={S.grn}/>
       </div>
 
       {/* KPIs composição corporal */}
@@ -527,12 +395,9 @@ function Dash({ ps, onSel, mob, onQuickMsg }) {
       {/* Calendário + Conquistas */}
       <div style={{ display:"grid", gridTemplateColumns:gc2, gap:12 }}>
         <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
             <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Retornos próximos 7 dias</span>
-            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-              {rWk.length>0 && onQuickMsg && <button onClick={e=>{e.stopPropagation();onQuickMsg(rWk.map(p=>p.id),'retorno');}} style={{ display:"flex", alignItems:"center", gap:3, padding:"3px 8px", borderRadius:6, background:S.blueBg, color:S.blue, border:`1px solid ${S.blue}30`, cursor:"pointer", fontSize:10, fontWeight:600, fontFamily:"inherit" }}><Zap size={10}/>Enviar</button>}
-              <CalendarDays size={15} color={G[400]}/>
-            </div>
+            <CalendarDays size={15} color={G[400]}/>
           </div>
           {rWk.length===0 ? <div style={{ fontSize:12, color:"#ccc", padding:8, textAlign:"center" }}>Nenhum</div>
             : rWk.map(p => {
@@ -551,10 +416,7 @@ function Dash({ ps, onSel, mob, onQuickMsg }) {
         </div>
 
         <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-            <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Conquistas da semana</span>
-            {onQuickMsg && <button onClick={()=>onQuickMsg(ps.map(p=>p.id),'conquistas')} style={{ display:"flex", alignItems:"center", gap:3, padding:"3px 8px", borderRadius:6, background:S.grnBg, color:S.grn, border:`1px solid ${S.grn}30`, cursor:"pointer", fontSize:10, fontWeight:600, fontFamily:"inherit" }}><Zap size={10}/>Parabéns</button>}
-          </div>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Conquistas da semana</div>
           {achievements.map((a,i) => (
             <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 0", borderBottom:i<achievements.length-1?`1px solid ${G[50]}`:"none" }}>
               <a.i size={14} color={a.c}/><span style={{ fontSize:11, color:G[800] }}>{a.l}</span>
@@ -607,10 +469,7 @@ function Dash({ ps, onSel, mob, onQuickMsg }) {
         </div>
 
         <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-            <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Top resultados — maior perda %</span>
-            {onQuickMsg && <button onClick={()=>onQuickMsg(top.map(p=>p.id),'top')} style={{ display:"flex", alignItems:"center", gap:3, padding:"3px 8px", borderRadius:6, background:`${G[500]}18`, color:G[600], border:`1px solid ${G[400]}40`, cursor:"pointer", fontSize:10, fontWeight:600, fontFamily:"inherit" }}><Zap size={10}/>Parabenizar</button>}
-          </div>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Top resultados — maior perda %</div>
           {top.map((p,i) => (
             <div key={p.id} onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px", borderRadius:7, marginBottom:4, cursor:"pointer", background:i===0?`${G[500]}0A`:W[50] }}>
               <span style={{ fontSize:16, fontWeight:700, color:i===0?G[500]:G[300], width:20 }}>{i+1}</span>
@@ -631,12 +490,9 @@ function Dash({ ps, onSel, mob, onQuickMsg }) {
       {/* Críticos destaque */}
       {cr.length>0 && (
         <div style={{ background:S.redBg, borderRadius:12, border:`1px solid ${S.red}30`, padding:"14px 16px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-              <AlertTriangle size={14} color={S.red}/>
-              <span style={{ fontSize:13, fontWeight:600, color:S.red }}>Críticos — atenção imediata</span>
-            </div>
-            {onQuickMsg && <button onClick={()=>onQuickMsg(cr.map(p=>p.id),'criticos')} style={{ display:"flex", alignItems:"center", gap:3, padding:"3px 8px", borderRadius:6, background:S.redBg, color:S.red, border:`1px solid ${S.red}30`, cursor:"pointer", fontSize:10, fontWeight:600, fontFamily:"inherit" }}><Zap size={10}/>Contatar</button>}
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+            <AlertTriangle size={14} color={S.red}/>
+            <span style={{ fontSize:13, fontWeight:600, color:S.red }}>Críticos — atenção imediata</span>
           </div>
           {cr.map(p => { const sc=SC[p.id]; const m=cM(sc.m); const b=cB(sc.b); return (
             <div key={p.id} onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 8px", borderRadius:7, marginBottom:3, background:"rgba(255,255,255,0.6)", cursor:"pointer" }}>
@@ -649,66 +505,35 @@ function Dash({ ps, onSel, mob, onQuickMsg }) {
         </div>
       )}
 
-      {/* Tabela resumo — desktop full / mobile cards */}
-      <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:mob?"10px":"14px 16px" }}>
+      {/* Tabela resumo */}
+      <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:mob?"10px":"14px 16px", overflowX:"auto" }}>
         <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Todos os pacientes</div>
-        {mob ? (
-          /* ── MOBILE: cards compactos ── */
-          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-            {ps.map(p => {
-              const sc=SC[p.id]; const m=cM(sc?.m); const b=cB(sc?.b);
-              const ms=sM(m); const bs=sB(b); const e=calcEng(p);
-              return (
-                <div key={p.id} onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 10px", borderRadius:8, border:`1px solid ${G[100]}`, cursor:"pointer", background:G[50] }}>
-                  <Av name={p.name} size={32}/>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontWeight:600, fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
-                    <div style={{ display:"flex", gap:5, marginTop:3, flexWrap:"wrap" }}>
-                      <Bg color={ms.c} bg={ms.bg}>{ms.e}{m}</Bg>
-                      <Bg color={bs.c} bg={bs.bg}>{bs.e}{b}</Bg>
-                    </div>
+        <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:0, fontSize:11, minWidth:560 }}>
+          <thead><tr>{["Paciente","Plano","Sem","Met","Bem","Ment","Eng%","Evol"].map(h =>
+            <th key={h} style={{ textAlign:"left", padding:"6px 8px", borderBottom:`2px solid ${G[300]}`, color:G[700], fontWeight:600, fontSize:9, textTransform:"uppercase", letterSpacing:"0.04em" }}>{h}</th>
+          )}</tr></thead>
+          <tbody>{ps.map(p => {
+            const sc=SC[p.id]; const m=cM(sc?.m); const b=cB(sc?.b); const n=cN(sc?.n);
+            const ms=sM(m); const bs=sB(b); const ns=sN(n);
+            return (
+              <tr key={p.id} onClick={()=>onSel(p.id)} style={{ cursor:"pointer" }}>
+                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><div style={{ display:"flex", alignItems:"center", gap:6 }}><Av name={p.name} size={22}/><span style={{ fontWeight:500 }}>{p.name}</span></div></td>
+                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}`, color:G[600], fontSize:10 }}>{PLANS.find(x=>x.id===p.plan)?.name}</td>
+                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><strong>{p.week}</strong>/16</td>
+                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={ms.c} bg={ms.bg}>{ms.e}{m}</Bg></td>
+                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={bs.c} bg={bs.bg}>{bs.e}{b}</Bg></td>
+                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={ns.c} bg={ns.bg}>{ns.e}{n}</Bg></td>
+                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}>
+                  <div style={{ height:5, width:44, background:G[100], borderRadius:3, overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${p.eng}%`, background:p.eng>=80?S.grn:p.eng>=60?S.yel:S.red, borderRadius:3 }}/>
                   </div>
-                  <div style={{ textAlign:"right", flexShrink:0 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:S.grn }}>-{(p.iw-p.cw).toFixed(1)}kg</div>
-                    <div style={{ fontSize:9, color:"#aaa", marginTop:2 }}>S{calcWeek(p)} • {e}%</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          /* ── DESKTOP: tabela completa ── */
-          <div style={{ overflowX:"auto" }}>
-            <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:0, fontSize:11, minWidth:560 }}>
-              <thead><tr>{["Paciente","Plano","Sem","Met","Bem","Ment","Eng%","Evol"].map(h =>
-                <th key={h} style={{ textAlign:"left", padding:"6px 8px", borderBottom:`2px solid ${G[300]}`, color:G[700], fontWeight:600, fontSize:9, textTransform:"uppercase", letterSpacing:"0.04em" }}>{h}</th>
-              )}</tr></thead>
-              <tbody>{ps.map(p => {
-                const sc=SC[p.id]; const m=cM(sc?.m); const b=cB(sc?.b); const n=cN(sc?.n);
-                const ms=sM(m); const bs=sB(b); const ns=sN(n);
-                return (
-                  <tr key={p.id} onClick={()=>onSel(p.id)} style={{ cursor:"pointer" }}>
-                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><div style={{ display:"flex", alignItems:"center", gap:6 }}><Av name={p.name} size={22}/><span style={{ fontWeight:500 }}>{p.name}</span></div></td>
-                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}`, color:G[600], fontSize:10 }}>{PLANS.find(x=>x.id===p.plan)?.name}</td>
-                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><strong>{calcWeek(p)}</strong>/16</td>
-                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={ms.c} bg={ms.bg}>{ms.e}{m}</Bg></td>
-                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={bs.c} bg={bs.bg}>{bs.e}{b}</Bg></td>
-                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={ns.c} bg={ns.bg}>{ns.e}{n}</Bg></td>
-                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}>
-                      {(()=>{ const e=calcEng(p); return (<>
-                      <div style={{ height:5, width:44, background:G[100], borderRadius:3, overflow:"hidden" }}>
-                        <div style={{ height:"100%", width:`${e}%`, background:e>=80?S.grn:e>=60?S.yel:S.red, borderRadius:3 }}/>
-                      </div>
-                      <div style={{ fontSize:9, color:"#aaa" }}>{e}%</div>
-                      </>); })()}
-                    </td>
-                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}`, color:S.grn, fontWeight:600 }}>-{(p.iw-p.cw).toFixed(1)}kg</td>
-                  </tr>
-                );
-              })}</tbody>
-            </table>
-          </div>
-        )}
+                  <div style={{ fontSize:9, color:"#aaa" }}>{p.eng}%</div>
+                </td>
+                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}`, color:S.grn, fontWeight:600 }}>-{(p.iw-p.cw).toFixed(1)}kg</td>
+              </tr>
+            );
+          })}</tbody>
+        </table>
       </div>
     </div>
   );
@@ -717,74 +542,32 @@ function Dash({ ps, onSel, mob, onQuickMsg }) {
 /* ════════════════════════════════════════════
    LISTA DE PACIENTES
 ═══════════════════════════════════════════════ */
-function PList({  ps, onSel, mob, onAdd, onDelete, onBulkDelete }) {
+function PList({  ps, onSel, mob, onAdd, onDelete }) {
   const SC = genSC(ps);
-  const [q,   setQ]   = useState("");
-  const [fp,  setFp]  = useState("all");
-  const [sel, setSel] = useState(new Set());
-
+  const [q,  setQ]  = useState("");
+  const [fp, setFp] = useState("all");
   const f = ps.filter(p => p.name.toLowerCase().includes(q.toLowerCase()) && (fp==="all"||p.plan===fp));
-
-  const toggleSel = (id) => setSel(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
-  const toggleAll = () => setSel(sel.size===f.length ? new Set() : new Set(f.map(p=>p.id)));
-
-  const handleBulkDelete = () => {
-    if(sel.size===0) return;
-    if(!window.confirm(`Excluir ${sel.size} paciente(s)? Esta ação não pode ser desfeita.`)) return;
-    onBulkDelete && onBulkDelete([...sel]);
-    setSel(new Set());
-  };
 
   return (
     <div>
-      <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap", alignItems:"center" }}>
+      <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap", alignItems:"center" }}>
         <button onClick={onAdd} style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}><Plus size={13}/>Novo paciente</button>
-        {sel.size>0 && (
-          <button onClick={handleBulkDelete} style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:8, background:"#FDEDEC", color:S.red, fontSize:12, fontWeight:600, border:`1px solid #F5B7B1`, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>
-            🗑️ Excluir selecionados ({sel.size})
-          </button>
-        )}
-        {sel.size>0 && (
-          <button onClick={()=>setSel(new Set())} style={{ padding:"8px 12px", borderRadius:8, background:G[50], color:G[700], fontSize:12, border:`1px solid ${G[300]}`, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
-        )}
       </div>
-      <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap", alignItems:"center" }}>
+      <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
         <div style={{ flex:1, minWidth:140, position:"relative" }}>
           <Search size={14} color="#bbb" style={{ position:"absolute", left:10, top:10 }}/>
           <input style={{ width:"100%", padding:"8px 10px 8px 30px", borderRadius:8, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} placeholder="Buscar..." value={q} onChange={e=>setQ(e.target.value)}/>
         </div>
         <select style={{ padding:"8px 10px", borderRadius:8, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", background:"#fff" }} value={fp} onChange={e=>setFp(e.target.value)}>
-          <option value="all">Todos os planos</option>
+          <option value="all">Todos</option>
           {PLANS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        {f.length>0 && (
-          <button onClick={toggleAll} style={{ padding:"8px 10px", borderRadius:8, background:sel.size===f.length?G[100]:G[50], color:G[700], fontSize:11, border:`1px solid ${G[300]}`, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
-            {sel.size===f.length ? "✓ Todos" : "Selecionar todos"}
-          </button>
-        )}
       </div>
-      {f.length===0 && (
-        <div style={{ textAlign:"center", padding:"40px 20px", color:"#bbb" }}>
-          <div style={{ fontSize:36, marginBottom:10 }}>👥</div>
-          <div style={{ fontSize:14, fontWeight:600, color:G[600], marginBottom:4 }}>
-            {q || fp!=="all" ? "Nenhum paciente encontrado" : "Nenhum paciente cadastrado"}
-          </div>
-          <div style={{ fontSize:12, marginBottom:16 }}>
-            {q || fp!=="all" ? "Tente ajustar a busca ou o filtro de plano." : "Adicione seu primeiro paciente para começar."}
-          </div>
-          {!q && fp==="all" && <button onClick={onAdd} style={{ padding:"9px 20px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 }}><Plus size={13}/>Novo paciente</button>}
-        </div>
-      )}
       <div style={{ display:"grid", gap:6 }}>
         {f.map(p => {
-          const sc=SC[p.id]; const m=cM(sc?.m); const ms=sM(m); const isSel=sel.has(p.id);
+          const sc=SC[p.id]; const m=cM(sc?.m); const ms=sM(m);
           return (
-            <div key={p.id} style={{ background:isSel?G[50]:"#fff", borderRadius:10, border:`1px solid ${isSel?G[400]:G[200]}`, padding:"10px 12px", display:"flex", alignItems:"center", gap:10, transition:"border-color 0.15s" }}>
-              {/* Checkbox */}
-              <div onClick={e=>{ e.stopPropagation(); toggleSel(p.id); }}
-                style={{ flexShrink:0, width:18, height:18, borderRadius:4, border:`2px solid ${isSel?G[600]:G[300]}`, background:isSel?G[600]:"#fff", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
-                {isSel && <span style={{ color:"#fff", fontSize:11, fontWeight:700, lineHeight:1 }}>✓</span>}
-              </div>
+            <div key={p.id} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"10px 12px", display:"flex", alignItems:"center", gap:10 }}>
               <div onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:10, flex:1, minWidth:0, cursor:"pointer" }}>
                 <Av name={p.name} size={mob?36:40}/>
                 <div style={{ flex:1, minWidth:0 }}>
@@ -797,7 +580,7 @@ function PList({  ps, onSel, mob, onAdd, onDelete, onBulkDelete }) {
                 </div>
               </div>
               {onDelete && (
-                <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Excluir "${p.name}"? Ação irreversível.`)) onDelete(p.id); }}
+                <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Excluir paciente "${p.name}"? Esta ação não pode ser desfeita.`)) onDelete(p.id); }}
                   style={{ flexShrink:0, padding:"5px 8px", borderRadius:7, background:"#FDEDEC", color:S.red, border:`1px solid #F5B7B1`, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>🗑️</button>
               )}
             </div>
@@ -823,17 +606,17 @@ function RelTab({ p, mob, plan, met, be, mn }) {
     if(relAte && d > new Date(relAte)) return false;
     return true;
   }) : sh;
-  const _pHist = p.history || [];
-  const histFilt = relDe||relAte ? _pHist.filter(h => {
+  const histFilt = relDe||relAte ? (p.history||[]).filter(h => {
     const d = new Date(h.date);
     if(relDe && d < new Date(relDe)) return false;
     if(relAte && d > new Date(relAte)) return false;
     return true;
-  }) : _pHist;
+  }) : (p.history||[]);
 
   const comp1 = shFilt[0];
   const comp2 = shFilt[shFilt.length-1];
-  const lastH = _pHist[_pHist.length-1];
+  const pHist = p.history||[];
+  const lastH = pHist[pHist.length-1];
   const mmLast = lastH?.massaMagra||0;
   const mgLast = lastH?.massaGordura||0;
   const totComp = mmLast+mgLast||1;
@@ -898,16 +681,16 @@ function RelTab({ p, mob, plan, met, be, mn }) {
         <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
           <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>⚖️ Evolução de peso</div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:10 }}>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.iw?`${p.iw}kg`:"—"}</div><div style={{ fontSize:9, color:"#aaa" }}>Peso inicial</div></div>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.cw?`${p.cw}kg`:"—"}</div><div style={{ fontSize:9, color:"#aaa" }}>Peso atual</div></div>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>{(p.iw&&p.cw)?`-${(p.iw-p.cw).toFixed(1)}kg`:"—"}</div><div style={{ fontSize:9, color:"#aaa" }}>Perdido</div></div>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>{(p.iw&&p.cw)?`${(((p.iw-p.cw)/p.iw)*100).toFixed(1)}%`:"—"}</div><div style={{ fontSize:9, color:"#aaa" }}>Redução</div></div>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.iw}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Peso inicial</div></div>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.cw}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Peso atual</div></div>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>-{(p.iw-p.cw).toFixed(1)}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Perdido</div></div>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>{(((p.iw-p.cw)/p.iw)*100).toFixed(1)}%</div><div style={{ fontSize:9, color:"#aaa" }}>Redução</div></div>
           </div>
           {histFilt.length > 0 && (
             <div style={{ overflowX:"auto" }}>
               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:400 }}>
                 <thead><tr>{["Data","Peso","MM (kg)","%MM","MG (kg)","%MG"].map(h=><th key={h} style={{ textAlign:"left", padding:"5px 7px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600, textTransform:"uppercase" }}>{h}</th>)}</tr></thead>
-                <tbody>{[...histFilt].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{safeFmt(h.date,"dd/MM/yy")}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{(h.weight||0).toFixed(1)}kg</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
+                <tbody>{[...histFilt].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{safeFmt(h.date,"dd/MM/yy")}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{h.weight.toFixed(1)}kg</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
                 </tbody>
               </table>
             </div>
@@ -1029,7 +812,6 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
     {k:"evolucao", l:"Evolução",  i:TrendingUp},
     {k:"graficos", l:"Gráficos",  i:BarChart3},
     {k:"rel",      l:"Relatório", i:FileText},
-    {k:"comms",    l:"Mensagens", i:Zap},
   ];
 
   return (
@@ -1057,10 +839,10 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
       {tab==="ficha" && (
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           <div style={{ display:"grid", gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)", gap:6 }}>
-            <Mt value={p.iw?`${p.iw}kg`:"—"} label="Peso inicial"/>
-            <Mt value={p.cw?`${p.cw}kg`:"—"} label="Peso atual"/>
-            <Mt value={(p.iw&&p.cw)?`-${(p.iw-p.cw).toFixed(1)}kg`:"—"} label="Evolução" color={S.grn}/>
-            <Mt value={(p.iw&&p.cw)?`${Math.round((p.iw-p.cw)/p.iw*100)}%`:"—"} label="Perda total"/>
+            <Mt value={`${p.iw}kg`} label="Peso inicial"/>
+            <Mt value={`${p.cw}kg`} label="Peso atual"/>
+            <Mt value={`-${(p.iw-p.cw).toFixed(1)}kg`} label="Evolução" color={S.grn}/>
+            <Mt value={`${Math.round((p.iw-p.cw)/p.iw*100)}%`} label="Perda total"/>
           </div>
           <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px", fontSize:12 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, flexWrap:"wrap", gap:6 }}>
@@ -1090,7 +872,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                     </div>
                   ))}
                   <div style={{ display:"flex", gap:8 }}>
-                    <button onClick={()=>{ const upd={name:editName,email:editEmail,phone:editPhone,birthDate:editBirth}; onEdit&&onEdit(upd); apiUpdatePatient(p.id,upd).then(()=>showToast('Dados atualizados')).catch(()=>showToast('Erro ao salvar dados','error')); setShowEditModal(false); }} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
+                    <button onClick={()=>{ const upd={name:editName,email:editEmail,phone:editPhone,birthDate:editBirth}; onEdit&&onEdit(upd); apiUpdatePatient(p.id,upd).catch(err=>console.warn('API update failed:',err.message)); setShowEditModal(false); }} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
                     <button onClick={()=>setShowEditModal(false)} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
                   </div>
                 </div>
@@ -1131,8 +913,8 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
           )}
           {/* Composição corporal */}
           {(() => {
-            const _h = p.history || [];
-            const last = _h[_h.length-1] || {};
+            const _ph = p.history||[];
+            const last = _ph[_ph.length-1] || {};
             const mm = last.massaMagra || 0;
             const mg = last.massaGordura || 0;
             const tot = mm + mg || 1;
@@ -1172,7 +954,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                     <div style={{ overflowX:"auto" }}>
                       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:320 }}>
                         <thead><tr>{["Data","Peso","MM (kg)","%MM","MG (kg)","%MG"].map(h=><th key={h} style={{ textAlign:"left", padding:"4px 6px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600, textTransform:"uppercase" }}>{h}</th>)}</tr></thead>
-                        <tbody>{[...(p.history||[])].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{safeFmt(h.date,"dd/MM/yy")}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{(h.weight||0).toFixed(1)}kg</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
+                        <tbody>{[...(p.history||[])].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{safeFmt(h.date,"dd/MM/yy")}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{h.weight.toFixed(1)}kg</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
                         </tbody>
                       </table>
                     </div>
@@ -1227,43 +1009,10 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
       {/* ABA JORNADA */}
       {tab==="jornada" && (
         <div>
-          {/* Legenda */}
-          <div style={{ display:"flex", gap:10, marginBottom:8, flexWrap:"wrap" }}>
-            {[{c:S.grn,bg:S.grnBg,l:"Concluída"},{c:G[600],bg:G[100],l:"Atual"},{c:G[500],bg:G[50],l:"Parcial"},{c:"#bbb",bg:"#fff",l:"Futura"}].map((x,i)=>(
-              <div key={i} style={{ display:"flex", alignItems:"center", gap:4, fontSize:9, color:"#aaa" }}>
-                <div style={{ width:8, height:8, borderRadius:2, background:x.bg, border:`1.5px solid ${x.c}` }}/>
-                {x.l}
-              </div>
-            ))}
-          </div>
           <div style={{ display:"flex", gap:5, marginBottom:12, flexWrap:"wrap" }}>
             {Array.from({length:16},(_,i)=>i+1).map(w => {
-              const sp  = w===8||w===16;
-              const cur = w===p.week;
-              const dn  = w<p.week;
-              const fut = w>p.week;
-              // Calcula % de conclusão do checklist desta semana
-              const cw  = cl[w];
-              const items  = cw ? [cw.tirz,cw.peso,cw.bio,...(cw.tr||[])].filter(x=>x!==null&&x!==undefined) : [];
-              const done   = items.filter(Boolean).length;
-              const total  = items.length||1;
-              const pctW   = Math.round(done/total*100);
-              const partial = dn && pctW>0 && pctW<100;
-              const full    = dn && pctW===100;
-              return (
-                <div key={w} onClick={()=>setSw(w)} style={{ position:"relative", width:30, height:30, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", fontSize:11, fontWeight:cur?700:500,
-                  background: sw===w?G[600] : full?S.grnBg : cur?G[100] : partial?"#FFF8E7" : "#fff",
-                  color:      sw===w?"#fff" : full?S.grn   : cur?G[800] : G[700],
-                  border:     sp ? `2px solid ${G[500]}` : `1px solid ${full?S.grn:partial?S.yel:cur?G[400]:G[200]}` }}>
-                  {w}
-                  {/* Dot indicator */}
-                  {dn && sw!==w && (
-                    <div style={{ position:"absolute", bottom:2, right:3, width:5, height:5, borderRadius:"50%",
-                      background: full ? S.grn : partial ? S.yel : "#ccc" }}/>
-                  )}
-                  {cur && sw!==w && <div style={{ position:"absolute", top:2, right:3, width:5, height:5, borderRadius:"50%", background:G[500] }}/>}
-                </div>
-              );
+              const sp=w===8||w===16; const cur=w===p.week; const dn=w<p.week;
+              return <div key={w} onClick={()=>setSw(w)} style={{ width:30, height:30, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", fontSize:11, fontWeight:cur?700:500, background:sw===w?G[600]:dn?S.grnBg:cur?G[100]:"#fff", color:sw===w?"#fff":dn?S.grn:G[800], border:sp?`2px solid ${G[500]}`:`1px solid ${G[200]}` }}>{w}</div>;
             })}
           </div>
           {cl[sw] && (
@@ -1294,60 +1043,16 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                 </div>
               )}
             <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-              {/* Datas da semana: calculadas automaticamente a partir da data de início do programa, editáveis para entrada retroativa */}
-              {(()=>{
-                const sd = p.sd ? new Date(p.sd) : new Date();
-                const calcStart = addD(sd, (sw-1)*7);
-                const calcEnd   = addD(sd, sw*7 - 1);
-                const ovStart = cl[sw]?.weekDate ? cl[sw].weekDate.split('T')[0] : '';
-                const ovEnd   = cl[sw]?.weekDateEnd ? cl[sw].weekDateEnd.split('T')[0] : '';
-                const dispStart = ovStart || safeFmt(calcStart,"yyyy-MM-dd","");
-                const dispEnd   = ovEnd   || safeFmt(calcEnd,  "yyyy-MM-dd","");
-                return (
-                  <div style={{ background:G[50], borderRadius:8, padding:"10px 12px", marginBottom:12, border:`1px solid ${G[200]}` }}>
-                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8, flexWrap:"wrap", gap:4 }}>
-                      <span style={{ fontSize:12, fontWeight:600, color:G[700] }}>📅 Período da Semana {sw}</span>
-                      {(ovStart || ovEnd) && (
-                        <button onClick={()=>setCl(prev=>({...prev,[sw]:{...prev[sw],weekDate:null,weekDateEnd:null}}))}
-                          style={{ fontSize:10, padding:"2px 8px", borderRadius:5, background:"#fff", border:`1px solid ${G[300]}`, color:G[600], cursor:"pointer", fontFamily:"inherit" }}>
-                          ↺ Usar datas calculadas
-                        </button>
-                      )}
-                    </div>
-                    <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-                      <div style={{ flex:1, minWidth:130 }}>
-                        <label style={{ fontSize:10, color:"#aaa", marginBottom:3, display:"block" }}>Início da semana</label>
-                        <input type="date" value={dispStart}
-                          onChange={e=>{
-                            const v = e.target.value;
-                            setCl(prev=>({...prev,[sw]:{...prev[sw],weekDate: v ? new Date(v).toISOString() : null}}));
-                          }}
-                          style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box", background:ovStart?"#FFFDE7":"#fff" }}/>
-                      </div>
-                      <div style={{ flex:1, minWidth:130 }}>
-                        <label style={{ fontSize:10, color:"#aaa", marginBottom:3, display:"block" }}>Fim da semana</label>
-                        <input type="date" value={dispEnd}
-                          onChange={e=>{
-                            const v = e.target.value;
-                            setCl(prev=>({...prev,[sw]:{...prev[sw],weekDateEnd: v ? new Date(v).toISOString() : null}}));
-                          }}
-                          style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box", background:ovEnd?"#FFFDE7":"#fff" }}/>
-                      </div>
-                    </div>
-                    {!ovStart && !ovEnd && (
-                      <div style={{ fontSize:10, color:"#aaa", marginTop:6 }}>
-                        Datas calculadas automaticamente a partir do início do programa ({p.sd ? safeFmt(p.sd,"dd/MM/yyyy") : "—"}).
-                        Edite para lançar dados retroativos de pacientes que já estavam no programa.
-                      </div>
-                    )}
-                    {(ovStart || ovEnd) && (
-                      <div style={{ fontSize:10, color:G[600], marginTop:6, fontWeight:500 }}>
-                        ✏️ Datas personalizadas — este lançamento será registrado com o período informado.
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
+              <div style={{ marginBottom:10 }}>
+                <label style={{ fontSize:12, color:'#888' }}>Data real desta semana:</label>
+                <input
+                  type="date"
+                  value={cl[sw]?.weekDate ? cl[sw].weekDate.split('T')[0] : ''}
+                  onChange={e => setCl(prev => ({ ...prev, [sw]: { ...prev[sw], weekDate: e.target.value ? new Date(e.target.value).toISOString() : null }}))}
+                  style={{ marginLeft:8, padding:'4px 8px', border:'1px solid #ddd', borderRadius:6, fontSize:13 }}
+                />
+                <span style={{ fontSize:11, color:'#aaa', marginLeft:8 }}>Deixe em branco para usar a data calculada</span>
+              </div>
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
                 <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>
                   Semana {sw}
@@ -1429,7 +1134,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
             <SI label="Movimento"              value={es.n.mv} onChange={v=>setEs(pr=>({...pr,n:{...pr.n,mv:v}}))} opts={[{v:1,l:"Sedentário"},{v:2,l:"Parcial"},{v:3,l:"Completo"}]}/>
             {(()=>{ const t=cN(es.n); const s=sN(t); return <div style={{ marginTop:10, padding:"8px 12px", borderRadius:8, background:s.bg, display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600, color:s.c, fontSize:12 }}>{s.e} {t}/9 — {s.l}</span><span style={{ fontSize:11, color:s.c }}>{s.d}</span></div>; })()}
           </div>
-          <button onClick={()=>{ onSaveScores && onSaveScores(es); onAddScoreMonth && onAddScoreMonth({m:es.m,b:es.b,n:es.n}); showToast("Scores salvos e registrados no histórico mensal!"); }} style={{ width:"100%", padding:"11px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>💾 Salvar scores (registra no histórico mensal)</button>
+          <button onClick={()=>{ onSaveScores && onSaveScores(es); onAddScoreMonth && onAddScoreMonth({m:es.m,b:es.b,n:es.n}); alert("✅ Scores salvos e registrados na evolução mensal!"); }} style={{ width:"100%", padding:"11px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>💾 Salvar scores (registra no histórico mensal)</button>
         </div>
       )}
 
@@ -1601,9 +1306,6 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
 
       {/* ABA RELATÓRIO */}
       {tab==="rel" && <RelTab p={p} mob={mob} plan={plan} met={met} be={be} mn={mn}/>}
-
-      {/* ABA MENSAGENS */}
-      {tab==="comms" && <PatientCommsTab p={p} mob={mob}/>}
     </div>
   );
 }
@@ -1611,72 +1313,34 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
 /* ════════════════════════════════════════════
    ALERTAS
 ═══════════════════════════════════════════════ */
-function Alerts({ ps, onSel, dismissed = {}, onDismiss }) {
+function Alerts({  ps, onSel }) {
   const SC = genSC(ps);
   const data = ps.map(p => {
     const sc=SC[p.id]; if(!sc) return null;
     const m=cM(sc.m), b=cB(sc.b), n=cN(sc.n);
     const al=[];
-    if(m<=12         && !dismissed[`${p.id}_met_r`])  al.push({t:"r",k:"met_r", l:"Met crítico",       s:`${m}/24`,a:"Ataque+detox"});
-    if(m>=13&&m<=16  && !dismissed[`${p.id}_met_y`])  al.push({t:"y",k:"met_y", l:"Met transição",     s:`${m}/24`,a:"Ajustes"});
-    if(b<10          && !dismissed[`${p.id}_bem_r`])  al.push({t:"r",k:"bem_r", l:"Bem-estar crítico", s:`${b}/18`,a:"Médica"});
-    if(b>=10&&b<=13  && !dismissed[`${p.id}_bem_y`])  al.push({t:"y",k:"bem_y", l:"Bem-estar alerta",  s:`${b}/18`,a:"Nutri"});
-    if(n<=4          && !dismissed[`${p.id}_men_r`])  al.push({t:"r",k:"men_r", l:"Recaída",           s:`${n}/9`, a:"Sessão individual"});
-    if(n>=5&&n<=7    && !dismissed[`${p.id}_men_y`])  al.push({t:"y",k:"men_y", l:"Mental construção", s:`${n}/9`, a:"Reforço"});
+    if(m<=12)         al.push({t:"r",l:"Met crítico",       s:`${m}/24`,a:"Ataque+detox"});
+    if(m>=13&&m<=16)  al.push({t:"y",l:"Met transição",       s:`${m}/24`,a:"Ajustes"});
+    if(b<10)          al.push({t:"r",l:"Bem-estar crítico",  s:`${b}/18`,a:"Médica"});
+    if(b>=10&&b<=13)  al.push({t:"y",l:"Bem-estar alerta",   s:`${b}/18`,a:"Nutri"});
+    if(n<=4)          al.push({t:"r",l:"Recaída",            s:`${n}/9`, a:"Sessão individual"});
+    if(n>=5&&n<=7)    al.push({t:"y",l:"Mental construção",  s:`${n}/9`, a:"Reforço"});
     return al.length ? {...p,al} : null;
   }).filter(Boolean);
   const reds = data.filter(p=>p.al.some(a=>a.t==="r"));
   const yels = data.filter(p=>p.al.every(a=>a.t==="y"));
 
-  const btnR = { display:"flex", alignItems:"center", gap:3, padding:"2px 8px", borderRadius:5, background:S.grnBg, color:S.grn, border:`1px solid ${S.grn}30`, cursor:"pointer", fontSize:10, fontWeight:600, fontFamily:"inherit", flexShrink:0 };
-
   return (
     <div>
-      {/* Painel de resumo de severidade */}
-      {(reds.length>0||yels.length>0) ? (
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
-          <div style={{ background:S.redBg, border:`1px solid ${S.red}30`, borderRadius:10, padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:36, height:36, borderRadius:"50%", background:S.red, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-              <span style={{ color:"#fff", fontSize:16, fontWeight:700 }}>{reds.length}</span>
-            </div>
-            <div>
-              <div style={{ fontSize:11, fontWeight:700, color:S.red }}>CRÍTICO</div>
-              <div style={{ fontSize:10, color:"#aaa" }}>Dra. Mariana</div>
-            </div>
-          </div>
-          <div style={{ background:S.yelBg, border:`1px solid ${S.yel}30`, borderRadius:10, padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:36, height:36, borderRadius:"50%", background:S.yel, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-              <span style={{ color:"#fff", fontSize:16, fontWeight:700 }}>{yels.length}</span>
-            </div>
-            <div>
-              <div style={{ fontSize:11, fontWeight:700, color:"#B7770A" }}>ATENÇÃO</div>
-              <div style={{ fontSize:10, color:"#aaa" }}>Equipe multidisciplinar</div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      {(reds.length>0||yels.length>0) && (
-        <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>
-          <button onClick={()=>{ data.forEach(p=>p.al.forEach(a=>onDismiss&&onDismiss(p.id,a.k))); }} style={{ ...btnR, background:S.grnBg }}><Check size={10}/>Resolver todos</button>
-        </div>
-      )}
       {reds.length>0 && (
         <div style={{ marginBottom:16 }}>
           <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:8 }}>
-            <div style={{ width:9, height:9, borderRadius:"50%", background:S.red }}/><span style={{ fontWeight:600, color:S.red, fontSize:13 }}>Críticos — Dra. Mariana</span>
+            <div style={{ width:9, height:9, borderRadius:"50%", background:S.red }}/><span style={{ fontWeight:600, color:S.red, fontSize:13 }}>Vermelhos — Dra. Mariana</span>
           </div>
           {reds.map(p => (
-            <div key={p.id} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.red}`, padding:"10px 12px", marginBottom:5 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
-                <div onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:8, flex:1, cursor:"pointer" }}><Av name={p.name} size={24}/><span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span></div>
-                <button onClick={()=>p.al.filter(a=>a.t==="r").forEach(a=>onDismiss&&onDismiss(p.id,a.k))} style={btnR}><Check size={10}/>Resolver</button>
-              </div>
-              {p.al.filter(a=>a.t==="r").map((a,i) => (
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
-                  <div style={{ flex:1, fontSize:11, padding:"3px 8px", background:S.redBg, borderRadius:5 }}>🔴 {a.l} ({a.s}) — <strong>{a.a}</strong></div>
-                  <button onClick={()=>onDismiss&&onDismiss(p.id,a.k)} style={{ ...btnR, fontSize:9, padding:"2px 6px" }}>✓</button>
-                </div>
-              ))}
+            <div key={p.id} onClick={()=>onSel(p.id)} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.red}`, padding:"10px 12px", marginBottom:5, cursor:"pointer" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}><Av name={p.name} size={24}/><span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span></div>
+              {p.al.filter(a=>a.t==="r").map((a,i) => <div key={i} style={{ fontSize:11, padding:"3px 8px", background:S.redBg, borderRadius:5, marginBottom:2 }}>🔴 {a.l} ({a.s}) — <strong>{a.a}</strong></div>)}
             </div>
           ))}
         </div>
@@ -1684,25 +1348,17 @@ function Alerts({ ps, onSel, dismissed = {}, onDismiss }) {
       {yels.length>0 && (
         <div>
           <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:8 }}>
-            <div style={{ width:9, height:9, borderRadius:"50%", background:S.yel }}/><span style={{ fontWeight:600, color:"#B7770A", fontSize:13 }}>Atenção — equipe multidisciplinar</span>
+            <div style={{ width:9, height:9, borderRadius:"50%", background:S.yel }}/><span style={{ fontWeight:600, color:S.yel, fontSize:13 }}>Amarelos — equipe</span>
           </div>
           {yels.map(p => (
-            <div key={p.id} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.yel}`, padding:"10px 12px", marginBottom:5 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
-                <div onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:8, flex:1, cursor:"pointer" }}><Av name={p.name} size={24}/><span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span></div>
-                <button onClick={()=>p.al.forEach(a=>onDismiss&&onDismiss(p.id,a.k))} style={btnR}><Check size={10}/>Resolver</button>
-              </div>
-              {p.al.map((a,i) => (
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
-                  <div style={{ flex:1, fontSize:11, padding:"3px 8px", background:S.yelBg, borderRadius:5 }}>🟡 {a.l} ({a.s}) — {a.a}</div>
-                  <button onClick={()=>onDismiss&&onDismiss(p.id,a.k)} style={{ ...btnR, fontSize:9, padding:"2px 6px" }}>✓</button>
-                </div>
-              ))}
+            <div key={p.id} onClick={()=>onSel(p.id)} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.yel}`, padding:"10px 12px", marginBottom:5, cursor:"pointer" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}><Av name={p.name} size={24}/><span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span></div>
+              {p.al.map((a,i) => <div key={i} style={{ fontSize:11, padding:"3px 8px", background:S.yelBg, borderRadius:5, marginBottom:2 }}>🟡 {a.l} ({a.s}) — {a.a}</div>)}
             </div>
           ))}
         </div>
       )}
-      {data.length===0 && <div style={{ textAlign:"center", padding:30 }}><div style={{ fontSize:32 }}>🟢</div><div style={{ fontSize:14, fontWeight:600, color:S.grn, marginTop:6 }}>Todos bem!</div><div style={{ fontSize:12, color:"#aaa", marginTop:4 }}>Nenhum alerta ativo</div></div>}
+      {data.length===0 && <div style={{ textAlign:"center", padding:30 }}><div style={{ fontSize:32 }}>🟢</div><div style={{ fontSize:14, fontWeight:600, color:S.grn, marginTop:6 }}>Todos bem!</div></div>}
     </div>
   );
 }
@@ -1753,7 +1409,7 @@ function TeamP({ team, setTeam, ta, setTa, activityLog }) {
                   <div style={{ fontSize:12, fontWeight:500, color:G[800] }}>{a.patientName}</div>
                   <div style={{ fontSize:11, color:"#aaa" }}>{a.detail}</div>
                 </div>
-                <div style={{ fontSize:10, color:"#bbb", whiteSpace:"nowrap" }}>{safeFmt(a.date,"dd/MM HH:mm")}</div>
+                <div style={{ fontSize:10, color:"#bbb", whiteSpace:"nowrap" }}>{format(new Date(a.date),"dd/MM HH:mm")}</div>
               </div>
             );
           })}
@@ -1826,94 +1482,21 @@ function TeamP({ team, setTeam, ta, setTa, activityLog }) {
 }
 
 /* ════════════════════════════════════════════
-   PORTAL — Onboarding (primeira visita)
-═══════════════════════════════════════════════ */
-function PortalOnboarding({ name, onClose }) {
-  return (
-    <div style={{ position:"fixed", inset:0, zIndex:500, background:"rgba(0,0,0,0.65)", display:"flex", alignItems:"flex-end", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"#fff", borderRadius:20, padding:"28px 24px", width:"100%", maxWidth:440, boxShadow:"0 -8px 40px rgba(0,0,0,0.2)" }}>
-        <div style={{ textAlign:"center", marginBottom:20 }}>
-          <div style={{ fontSize:40, marginBottom:10 }}>🌱</div>
-          <div style={{ fontSize:18, fontWeight:700, color:G[800] }}>Olá, {name.split(" ")[0]}!</div>
-          <div style={{ fontSize:13, color:"#888", marginTop:6, lineHeight:1.6 }}>
-            Seja bem-vinda à sua área pessoal do <strong style={{ color:G[700] }}>Programa Ser Livre</strong>. Aqui você acompanha seu progresso semanal, scores de saúde e evolução de peso.
-          </div>
-        </div>
-        <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:20 }}>
-          {[
-            { icon:"📊", title:"Scores de saúde", desc:"Três pilares: metabólico, bem-estar e mental" },
-            { icon:"⚖️", title:"Curva de peso",  desc:"Seu progresso de pesagem semana a semana" },
-            { icon:"📅", title:"Minha semana",   desc:"Atividades previstas para a semana atual" },
-            { icon:"💬", title:"Minhas mensagens",desc:"Histórico de comunicações da equipe" },
-          ].map((item,i) => (
-            <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 12px", background:G[50], borderRadius:10 }}>
-              <span style={{ fontSize:22 }}>{item.icon}</span>
-              <div>
-                <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{item.title}</div>
-                <div style={{ fontSize:11, color:"#aaa" }}>{item.desc}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-        <button onClick={onClose} style={{ width:"100%", padding:"13px", borderRadius:10, background:`linear-gradient(135deg,${G[600]},${G[700]})`, color:"#fff", border:"none", fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
-          Começar 🚀
-        </button>
-        <div style={{ textAlign:"center", fontSize:10, color:"#ccc", marginTop:10 }}>Instituto Dra. Mariana Wogel</div>
-      </div>
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════
    PORTAL DO PACIENTE (Read-only)
 ═══════════════════════════════════════════════ */
-function Portal({ p, av, setAv }) {
-  const SC   = genSC([p]);
+function Portal({  p, av, setAv }) {
+  const SC = genSC([p]);
   const sc   = SC[p.id];
   const met  = cM(sc?.m); const be=cB(sc?.b); const mn=cN(sc?.n);
   const pm   = sc ? pM(sc.m) : {comp:0,infl:0,glic:0,card:0};
   const hist = HIST(p.id);
   const plan = PLANS.find(x=>x.id===p.plan);
-  const tier = TIER[plan?.tier||3];
-  const currentWeek = calcWeek(p);
-  const pct  = Math.round(currentWeek/16*100);
-
-  // Histórico de mensagens recebidas
-  const [msgs,     setMsgs]     = useState([]);
-  const [msgsLoad, setMsgsLoad] = useState(true);
-  useEffect(() => {
-    authFetch(`/api/messages/history?patientId=${p.id}&limit=10`)
-      .then(r => r.ok ? r.json() : [])
-      .then(d => { setMsgs(Array.isArray(d) ? d : []); setMsgsLoad(false); })
-      .catch(() => setMsgsLoad(false));
-  }, [p.id]);
-
-  // Última pesagem
-  const lastH    = (p.history||[]).slice(-1)[0];
-  const lastDate = lastH?.date ? new Date(lastH.date) : null;
-  const daysSinceWeigh = lastDate ? Math.floor((TODAY-lastDate)/(1000*60*60*24)) : null;
-
-  // Próximo retorno
-  const nextRet = p.nr ? new Date(p.nr) : null;
-  const daysToRet = nextRet ? Math.ceil((nextRet-TODAY)/(1000*60*60*24)) : null;
-
-  // Semana de exames
-  const examWeek = [4,8,16].includes(currentWeek);
-
-  // Itens esperados esta semana — 3 estados: done/pending/waiting
-  // "waiting" = a equipe não registrou ainda (não temos dados para confirmar)
-  const weighedThisWeek = daysSinceWeigh !== null && daysSinceWeigh <= 7;
-  const weekItems = [
-    { l:"Tirzepatida aplicada", done: weighedThisWeek,  waiting: !weighedThisWeek && daysSinceWeigh !== null },
-    { l:"Pesagem semanal",      done: weighedThisWeek,  waiting: daysSinceWeigh === null },
-    { l:"Treino 1 — Pulsare",   done: false,            waiting: true },
-    ...(tier.tr>=2 ? [{ l:"Treino 2 — Pulsare",            done:false, waiting:true }] : []),
-    ...(tier.tr>=3 ? [{ l:"Treino 3 — Pulsare",            done:false, waiting:true }] : []),
-    ...(tier.psi   ? [{ l:`Sessão psicologia (${tier.psi})`,done:false, waiting:true }] : []),
-    ...(examWeek   ? [{ l:"Exames laboratoriais",           done:false, waiting:true }] : []),
+  const pct  = Math.round(p.week/16*100);
+  const tasks=[
+    {d:true, l:"Tirzepatida aplicada"},
+    {d:true, l:"Pesagem semanal"},
+    {d:false,l:"Treino 2 — Pulsare"},
   ];
-
-  const doneCount = weekItems.filter(x=>x.done).length;
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
@@ -1926,7 +1509,7 @@ function Portal({ p, av, setAv }) {
             <div style={{ fontSize:18, fontWeight:700 }}>Olá, {p.name.split(" ")[0]}!</div>
           </div>
         </div>
-        <div style={{ fontSize:11, opacity:0.6 }}>Plano {plan?.name} • Semana {currentWeek}/16</div>
+        <div style={{ fontSize:11, opacity:0.6 }}>Plano {plan?.name} • Semana {p.week}/16</div>
         <div style={{ height:6, background:"rgba(255,255,255,0.15)", borderRadius:3, marginTop:8, overflow:"hidden" }}>
           <div style={{ height:"100%", width:`${pct}%`, background:G[300], borderRadius:3 }}/>
         </div>
@@ -1935,37 +1518,10 @@ function Portal({ p, av, setAv }) {
         </div>
       </div>
 
-      {/* Métricas de peso + próximo retorno */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
-        <Mt value={p.cw ? `${p.cw}kg` : "—"} label="Peso atual" icon={Weight}/>
-        <Mt value={(p.iw&&p.cw) ? `-${(p.iw-p.cw).toFixed(1)}kg` : "—"} label="Já perdeu" icon={TrendingUp} color={S.grn}/>
-        <Mt value={daysToRet!==null ? (daysToRet===0?"Hoje":`${daysToRet}d`) : "—"} label="Próx. retorno" icon={Calendar} color={daysToRet<=2?S.red:G[600]}/>
-      </div>
-
-      {/* Minha semana */}
-      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-          <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Minha semana {currentWeek}</div>
-          <div style={{ fontSize:11, fontWeight:600, color:doneCount===weekItems.length?S.grn:G[500] }}>{doneCount}/{weekItems.length} concluídos</div>
-        </div>
-        {examWeek && <div style={{ background:"#FEF9E7", border:`1px solid #F9E79F`, borderRadius:6, padding:"5px 8px", fontSize:10, color:"#8B6D1E", marginBottom:8 }}>Semana especial — exames laboratoriais indicados</div>}
-        {weekItems.map((t,i) => (
-          <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:i<weekItems.length-1?`1px solid ${G[50]}`:"none" }}>
-            <div style={{ width:18, height:18, borderRadius:4, flexShrink:0,
-              background: t.done ? S.grnBg : t.waiting ? G[50] : G[100],
-              border: `2px solid ${t.done ? S.grn : t.waiting ? G[200] : G[300]}`,
-              display:"flex", alignItems:"center", justifyContent:"center" }}>
-              {t.done && <Check size={10} color={S.grn}/>}
-              {t.waiting && <span style={{ fontSize:8, color:G[400] }}>…</span>}
-            </div>
-            <span style={{ fontSize:12, flex:1,
-              color: t.done ? "#bbb" : t.waiting ? G[500] : G[900],
-              textDecoration: t.done ? "line-through" : "none" }}>{t.l}</span>
-            {t.waiting && !t.done && <span style={{ fontSize:9, color:G[400], flexShrink:0, fontStyle:"italic" }}>aguardando</span>}
-          </div>
-        ))}
-        {daysSinceWeigh !== null && <div style={{ fontSize:9, color:"#bbb", marginTop:6 }}>Última pesagem: há {daysSinceWeigh} dia(s)</div>}
-        <div style={{ fontSize:9, color:"#ccc", marginTop:4, textAlign:"center" }}>Preenchido pela equipe — visualização apenas</div>
+      {/* Métricas de peso */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+        <Mt value={`${p.cw}kg`} label="Peso atual" icon={Weight}/>
+        <Mt value={`-${(p.iw-p.cw).toFixed(1)}kg`} label="Já perdeu" icon={TrendingUp} color={S.grn}/>
       </div>
 
       {/* Scores */}
@@ -1981,396 +1537,125 @@ function Portal({ p, av, setAv }) {
         })}
       </div>
 
+      {/* Progresso da semana (read-only) */}
+      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:8 }}>Progresso da semana</div>
+        {tasks.map((t,i) => (
+          <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 0", borderBottom:i<tasks.length-1?`1px solid ${G[50]}`:"none" }}>
+            <div style={{ width:18, height:18, borderRadius:4, background:t.d?S.grnBg:G[100], border:`2px solid ${t.d?S.grn:G[300]}`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+              {t.d && <Check size={10} color={S.grn}/>}
+            </div>
+            <span style={{ fontSize:12, color:t.d?"#bbb":G[900], textDecoration:t.d?"line-through":"none" }}>{t.l}</span>
+          </div>
+        ))}
+        <div style={{ fontSize:9, color:"#ccc", marginTop:6, textAlign:"center" }}>Preenchido pela equipe — visualização apenas</div>
+      </div>
+
       {/* Curva de peso */}
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
         <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Curva de peso</div>
-        {(p.history||[]).length > 0 ? (
-          <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={(p.history||[]).map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
-              <defs><linearGradient id="gpt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.grn} stopOpacity={0.2}/><stop offset="100%" stopColor={S.grn} stopOpacity={0}/></linearGradient></defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis domain={["dataMin-2","dataMax+1"]} tick={{fontSize:9,fill:"#bbb"}}/>
-              <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Area type="monotone" dataKey="w" stroke={S.grn} fill="url(#gpt)" strokeWidth={2}/>
-            </AreaChart>
-          </ResponsiveContainer>
-        ) : <div style={{ textAlign:"center", color:"#ccc", fontSize:12, padding:20 }}>Sem pesagens registradas ainda</div>}
+        <ResponsiveContainer width="100%" height={160}>
+          <AreaChart data={(p.history||[]).map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
+            <defs><linearGradient id="gpt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.grn} stopOpacity={0.2}/><stop offset="100%" stopColor={S.grn} stopOpacity={0}/></linearGradient></defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis domain={["dataMin-2","dataMax+1"]} tick={{fontSize:9,fill:"#bbb"}}/>
+            <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Area type="monotone" dataKey="w" stroke={S.grn} fill="url(#gpt)" strokeWidth={2}/>
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
 
       {/* Evolução scores */}
-      {hist.length > 0 && (
-        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Evolução dos scores</div>
-          <ResponsiveContainer width="100%" height={170}>
-            <LineChart data={hist}>
-              <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="mo" tick={{fontSize:9,fill:G[700]}}/><YAxis tick={{fontSize:9,fill:"#bbb"}}/>
-              <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Legend iconType="circle" wrapperStyle={{fontSize:9}}/>
-              <Line type="monotone" dataKey="met" name="Met"    stroke={G[500]} strokeWidth={2} dot={{r:2}}/>
-              <Line type="monotone" dataKey="be"  name="Bem"    stroke={S.grn}  strokeWidth={2} dot={{r:2}}/>
-              <Line type="monotone" dataKey="mn"  name="Mental" stroke={S.pur}  strokeWidth={2} dot={{r:2}}/>
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Evolução dos scores</div>
+        <ResponsiveContainer width="100%" height={170}>
+          <LineChart data={hist}>
+            <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="mo" tick={{fontSize:9,fill:G[700]}}/><YAxis tick={{fontSize:9,fill:"#bbb"}}/>
+            <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Legend iconType="circle" wrapperStyle={{fontSize:9}}/>
+            <Line type="monotone" dataKey="met" name="Met"    stroke={G[500]} strokeWidth={2} dot={{r:2}}/>
+            <Line type="monotone" dataKey="be"  name="Bem"    stroke={S.grn}  strokeWidth={2} dot={{r:2}}/>
+            <Line type="monotone" dataKey="mn"  name="Mental" stroke={S.pur}  strokeWidth={2} dot={{r:2}}/>
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
 
       {/* Radar metabólico */}
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:2 }}>Seus 4 pilares metabólicos</div>
-        <div style={{ fontSize:10, color:"#aaa", marginBottom:6 }}>Quanto maior a área, melhor sua saúde</div>
+        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Radar metabólico</div>
         <ResponsiveContainer width="100%" height={180}>
-          <RadarChart data={[{p:"Gordura",v:pm.comp},{p:"Inflamação",v:pm.infl},{p:"Glicemia",v:pm.glic},{p:"Coração",v:pm.card}]} outerRadius={60}>
+          <RadarChart data={[{p:"Comp",v:pm.comp},{p:"Infl",v:pm.infl},{p:"Glic",v:pm.glic},{p:"Card",v:pm.card}]} outerRadius={60}>
             <PolarGrid stroke={G[200]}/><PolarAngleAxis dataKey="p" tick={{fontSize:10,fill:G[700]}}/><PolarRadiusAxis domain={[0,6]} tick={{fontSize:8,fill:"#ddd"}}/>
             <Radar dataKey="v" stroke={G[500]} fill={G[400]} fillOpacity={0.2} strokeWidth={2}/>
           </RadarChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Minhas mensagens */}
-      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-          <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Minhas mensagens</div>
-          {msgs.length>0 && <span style={{ fontSize:10, color:G[500] }}>{msgs.length} recebidas</span>}
-        </div>
-        {msgsLoad && <div style={{ textAlign:"center", color:"#ccc", fontSize:11, padding:"10px 0" }}>Carregando...</div>}
-        {!msgsLoad && msgs.length===0 && (
-          <div style={{ textAlign:"center", padding:"12px 0" }}>
-            <div style={{ fontSize:22, marginBottom:4 }}>💬</div>
-            <div style={{ fontSize:11, color:"#bbb" }}>Nenhuma mensagem recebida ainda</div>
-          </div>
-        )}
-        {!msgsLoad && msgs.map((m,i) => (
-          <div key={m.id||i} style={{ padding:"9px 0", borderBottom:i<msgs.length-1?`1px solid ${G[50]}`:"none" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:3 }}>
-              <span style={{ fontSize:10, fontWeight:600, color:G[600] }}>
-                {m.template?.name || "Mensagem da equipe"}
-              </span>
-              <span style={{ fontSize:9, color:"#bbb", flexShrink:0, marginLeft:8 }}>
-                {m.createdAt ? safeFmt(m.createdAt,"dd/MM HH:mm") : ""}
-              </span>
-            </div>
-            <div style={{ fontSize:11, color:"#555", lineHeight:1.5 }}>
-              {(m.body||"").slice(0,180)}{m.body?.length>180?"…":""}
-            </div>
-            {m.sentBy && <div style={{ fontSize:9, color:"#bbb", marginTop:2 }}>Enviado por {m.sentBy.name}</div>}
-          </div>
-        ))}
-      </div>
-
-      {/* Contato com equipe */}
-      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:8 }}>Fale com a equipe</div>
-        <div style={{ fontSize:11, color:G[600], marginBottom:10 }}>Dúvidas, sintomas ou intercorrências? Fale diretamente com a equipe pelo WhatsApp.</div>
-        <a href="https://wa.me/5524999999999" target="_blank" rel="noopener noreferrer" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px", borderRadius:8, background:"#25D366", color:"#fff", fontSize:12, fontWeight:600, textDecoration:"none", cursor:"pointer" }}>
-          <MessageCircle size={14}/>WhatsApp da equipe
-        </a>
-      </div>
-
-      <button onClick={()=>{
-        const html = `<div style="font-family:sans-serif;padding:24px;max-width:540px;margin:0 auto">
-          <div style="background:linear-gradient(135deg,#6E5517,#332810);border-radius:12px;padding:20px;color:#fff;margin-bottom:20px">
-            <div style="font-size:9px;opacity:0.5;margin-bottom:4px">Programa Ser Livre — Instituto Dra. Mariana Wogel</div>
-            <div style="font-size:20px;font-weight:700">${p.name}</div>
-            <div style="font-size:11px;opacity:0.6;margin-top:4px">Plano ${plan?.name||p.plan} • Semana ${currentWeek}/16 • Gerado em ${format(TODAY,'dd/MM/yyyy')}</div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
-            <div style="border:1px solid #EBDAB5;border-radius:8px;padding:12px;text-align:center"><div style="font-size:9px;color:#8B6D1E;text-transform:uppercase;margin-bottom:4px">Peso atual</div><div style="font-size:22px;font-weight:700;color:#4E3D12">${p.cw||'—'}kg</div></div>
-            <div style="border:1px solid #EBDAB5;border-radius:8px;padding:12px;text-align:center"><div style="font-size:9px;color:#8B6D1E;text-transform:uppercase;margin-bottom:4px">Já perdeu</div><div style="font-size:22px;font-weight:700;color:#27AE60">${(p.iw&&p.cw)?`-${(p.iw-p.cw).toFixed(1)}kg`:'—'}</div></div>
-            <div style="border:1px solid #EBDAB5;border-radius:8px;padding:12px;text-align:center"><div style="font-size:9px;color:#8B6D1E;text-transform:uppercase;margin-bottom:4px">Semana</div><div style="font-size:22px;font-weight:700;color:#4E3D12">${currentWeek}/16</div></div>
-          </div>
-          <div style="border:1px solid #EBDAB5;border-radius:8px;padding:14px;margin-bottom:14px">
-            <div style="font-size:12px;font-weight:600;color:#4E3D12;margin-bottom:10px">Scores de saúde</div>
-            ${[{l:"Saúde metabólica",v:met,m:24},{l:"Bem-estar",v:be,m:18},{l:"Blindagem mental",v:mn,m:9}].map(s=>`
-              <div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span style="color:#6E5517">${s.l}</span><span style="font-weight:700;color:#4E3D12">${s.v}/${s.m}</span></div>
-              <div style="height:5px;background:#F5ECDA;border-radius:3px"><div style="height:100%;width:${Math.round(s.v/s.m*100)}%;background:#A8872E;border-radius:3px"></div></div></div>`).join('')}
-          </div>
-          ${(p.history||[]).length>0?`<div style="border:1px solid #EBDAB5;border-radius:8px;padding:14px">
-            <div style="font-size:12px;font-weight:600;color:#4E3D12;margin-bottom:10px">Histórico de pesagens</div>
-            <table style="width:100%;border-collapse:collapse;font-size:11px">
-              <thead><tr style="background:#FBF7EE"><th style="padding:6px 8px;text-align:left;color:#6E5517">Semana</th><th style="padding:6px 8px;text-align:right;color:#6E5517">Peso</th><th style="padding:6px 8px;text-align:right;color:#6E5517">Variação</th></tr></thead>
-              <tbody>${(p.history||[]).map((h,i)=>`<tr><td style="padding:6px 8px">S${i+1}</td><td style="padding:6px 8px;text-align:right;font-weight:600">${h.weight}kg</td><td style="padding:6px 8px;text-align:right;color:${i>0&&h.weight<(p.history[i-1]?.weight||h.weight)?'#27AE60':'#C0392B'}">${i>0?`${(h.weight-(p.history[i-1]?.weight||h.weight)).toFixed(1)}kg`:'—'}</td></tr>`).join('')}</tbody>
-            </table></div>`:''}
-          <div style="text-align:center;font-size:9px;color:#bbb;margin-top:20px;padding-top:16px;border-top:1px solid #EBDAB5">Instituto Dra. Mariana Wogel — Programa Ser Livre — ${format(TODAY,'yyyy')}</div>
-        </div>`;
-        const el = document.createElement('div');
-        el.innerHTML = html;
-        document.body.appendChild(el);
-        html2pdf().set({ margin:0, filename:`relatorio-${p.name.split(' ')[0].toLowerCase()}.pdf`, html2canvas:{scale:2}, jsPDF:{format:'a4'} }).from(el).save().then(()=>document.body.removeChild(el));
-      }} style={{ width:"100%", padding:"10px", borderRadius:8, background:"transparent", border:`1px solid ${G[300]}`, color:G[700], fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-        <Download size={13}/>Baixar meu relatório PDF
+      <button onClick={()=>{ const el=document.getElementById(`portal-rel-${p.id}`); if(el) html2pdf().set({margin:10,filename:`meu-relatorio.pdf`,html2canvas:{scale:2},jsPDF:{format:"a4"}}).from(el).save(); }} style={{ width:"100%", padding:"10px", borderRadius:8, background:"transparent", border:`1px solid ${G[300]}`, color:G[700], fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+        <Download size={13}/>Baixar relatório PDF
       </button>
       <div style={{ textAlign:"center", fontSize:9, color:"#ccc", padding:"6px 0" }}>Instituto Dra. Mariana Wogel • Dados preenchidos pela equipe clínica</div>
     </div>
   );
 }
 
-// Gera card visual de pesagem usando Canvas API → retorna base64 PNG
-function generateWeighInCard({ name, weekNum, currentWeight, previousWeight, massaMagra, massaGordura }) {
-  const W = 600, H = 300;
-  const canvas = document.createElement('canvas');
-  canvas.width = W; canvas.height = H;
-  const ctx = canvas.getContext('2d');
-
-  // Fundo gradiente dourado suave
-  const grad = ctx.createLinearGradient(0, 0, W, H);
-  grad.addColorStop(0, '#FBF7EE'); grad.addColorStop(1, '#F5ECDA');
-  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
-
-  // Barra lateral dourada
-  ctx.fillStyle = '#A8872E'; ctx.fillRect(0, 0, 6, H);
-
-  // Logo texto
-  ctx.fillStyle = '#C4A44E'; ctx.font = 'bold 11px sans-serif';
-  ctx.fillText('INSTITUTO DRA. MARIANA WOGEL — PROGRAMA SER LIVRE', 22, 24);
-
-  // Nome do paciente
-  ctx.fillStyle = '#6E5517'; ctx.font = '14px sans-serif';
-  ctx.fillText(name, 22, 50);
-
-  // Semana
-  ctx.fillStyle = '#8B6D1E'; ctx.font = 'bold 13px sans-serif';
-  ctx.fillText(`Semana ${weekNum}`, 22, 72);
-
-  // Separador
-  ctx.strokeStyle = '#EBDAB5'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(22, 84); ctx.lineTo(W-22, 84); ctx.stroke();
-
-  // Peso atual — grande
-  ctx.fillStyle = '#4E3D12'; ctx.font = 'bold 58px sans-serif';
-  ctx.fillText(`${currentWeight}kg`, 22, 158);
-
-  // Label peso
-  ctx.fillStyle = '#aaa'; ctx.font = '12px sans-serif';
-  ctx.fillText('PESO ATUAL', 22, 175);
-
-  // Variação de peso
-  if (previousWeight) {
-    const diff = +(previousWeight - currentWeight).toFixed(1);
-    const sign = diff >= 0 ? '-' : '+';
-    const color = diff >= 0 ? '#27AE60' : '#C0392B';
-    ctx.fillStyle = color; ctx.font = 'bold 22px sans-serif';
-    ctx.fillText(`${sign}${Math.abs(diff).toFixed(1)}kg`, 22, 215);
-    ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif';
-    ctx.fillText('em relação à semana anterior', 22, 230);
-  }
-
-  // Composição corporal (coluna direita)
-  if (massaMagra || massaGordura) {
-    const x = W - 180;
-    ctx.fillStyle = '#E8DFC8'; ctx.fillRect(x-14, 90, 174, 140);
-    ctx.fillStyle = '#8B6D1E'; ctx.font = 'bold 10px sans-serif';
-    ctx.fillText('COMPOSIÇÃO CORPORAL', x-4, 108);
-    ctx.fillStyle = '#2980B9'; ctx.font = 'bold 24px sans-serif';
-    ctx.fillText(`${massaMagra||'—'}kg`, x, 142);
-    ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif';
-    ctx.fillText('MASSA MAGRA', x, 157);
-    ctx.fillStyle = '#F39C12'; ctx.font = 'bold 24px sans-serif';
-    ctx.fillText(`${massaGordura||'—'}kg`, x, 192);
-    ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif';
-    ctx.fillText('MASSA GORDA', x, 207);
-  }
-
-  // Rodapé
-  ctx.fillStyle = '#D4B978'; ctx.font = '10px sans-serif';
-  ctx.fillText('Acompanhe sua evolução no aplicativo Programa Ser Livre', 22, H-14);
-
-  return canvas.toDataURL('image/jpeg', 0.88).split(',')[1]; // JPEG para menor tamanho
-}
-
 /* ════════════════════════════════════════════
    MODAL REGISTRO DE PESAGEM
 ═══════════════════════════════════════════════ */
 function WeighInModal({ p, onClose, onSave, onLog }) {
-  const [weekNum,  setWeekNum]  = useState(p.week || 1);
-  const [peso,     setPeso]     = useState(p.cw || "");
-  const [mm,       setMm]       = useState("");
-  const [mg,       setMg]       = useState("");
-  const [sendWa,   setSendWa]   = useState(true);
-  const [sendCard, setSendCard] = useState(false); // enviar card visual
-  const [sending,  setSending]  = useState(false);
-  const [waStatus, setWaStatus] = useState(null); // null | 'ok' | 'err'
+  const [data,    setData]    = useState(format(new Date(), "yyyy-MM-dd"));
+  const [peso,    setPeso]    = useState(p.cw || "");
+  const [mm,      setMm]      = useState("");
+  const [mg,      setMg]      = useState("");
 
-  // Aceita tanto "2025-11-01" quanto "2026-03-27T12:00:00.000Z" sem adicionar T12 em ISO strings
-  const sd = p.sd ? (p.sd.includes('T') ? new Date(p.sd) : new Date(p.sd + 'T12:00:00')) : new Date();
-  const weekStart = addDays(isNaN(sd.getTime()) ? new Date() : sd, (weekNum - 1) * 7);
-  const weekEnd   = addDays(isNaN(sd.getTime()) ? new Date() : sd, weekNum * 7 - 1);
-  const fmtFull   = d => safeFmt(d, "dd/MM/yyyy", "?");
-  const hasPhone  = !!(p.phone);
-
-  const tot   = parseFloat(mm||0) + parseFloat(mg||0);
+  const tot = parseFloat(mm||0) + parseFloat(mg||0);
   const pctMM = tot > 0 ? (parseFloat(mm||0)/tot*100).toFixed(1) : "—";
   const pctMG = tot > 0 ? (parseFloat(mg||0)/tot*100).toFixed(1) : "—";
 
-  const handleSave = async () => {
-    const w    = parseFloat(peso);
+  const handleSave = () => {
+    const w = parseFloat(peso);
     const mVal = parseFloat(mm||0);
     const gVal = parseFloat(mg||0);
-    if (!w) return showToast("Informe o peso.","error");
-
-    // Peso anterior (último registro)
-    const prevEntry = p.history?.[p.history.length - 1];
-    const prevWeight = prevEntry?.weight || p.iw || null;
-
+    if (!w) return alert("Informe o peso.");
     const entry = {
-      date:         weekStart.toISOString(),
-      weekStart:    weekStart.toISOString(),
-      weekEnd:      weekEnd.toISOString(),
-      weekNum,
-      weight:       w,
-      massaMagra:   mVal,
+      date: new Date(data).toISOString(),
+      weight: w,
+      massaMagra: mVal,
       massaGordura: gVal,
-      m: prevEntry?.m || {},
-      b: prevEntry?.b || {},
-      n: prevEntry?.n || {},
+      m: (p.history||[])[((p.history||[]).length-1)]?.m || {},
+      b: (p.history||[])[((p.history||[]).length-1)]?.b || {},
+      n: (p.history||[])[((p.history||[]).length-1)]?.n || {},
     };
     onSave(entry);
-    onLog && onLog({ action:"pesagem", patientId:p.id, patientName:p.name, detail:`Semana ${weekNum} | Peso: ${w}kg | MM: ${mVal}kg | MG: ${gVal}kg` });
-
-    // Enviar relatório via WhatsApp
-    if (sendWa && hasPhone) {
-      setSending(true);
-      try {
-        const res = await authFetch('/api/whatsapp/send-report', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            patientId:      p.id,
-            patientName:    p.name,
-            phone:          p.phone,
-            weekNum,
-            currentWeight:  w,
-            previousWeight: prevWeight,
-            massaMagra:     mVal || null,
-            massaGordura:   gVal || null,
-          }),
-        });
-        const ok1 = res.ok;
-
-        // Enviar card visual se marcado
-        if (sendCard) {
-          try {
-            const base64 = generateWeighInCard({
-              name: p.name, weekNum, currentWeight: w,
-              previousWeight: prevWeight, massaMagra: mVal||null, massaGordura: gVal||null,
-            });
-            const mRes = await authFetch('/api/whatsapp/send-media', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                patientId:   p.id,
-                patientName: p.name,
-                phone:       p.phone,
-                base64,
-                mimeType:  'image/jpeg',
-                fileName:  `pesagem-semana${weekNum}.jpg`,
-                caption:   `📊 Resultado visual — Semana ${weekNum}`,
-              }),
-            });
-            if (!mRes.ok) showToast('Falha ao enviar card visual','warning');
-            const mData = await mRes.json().catch(()=>({}));
-            if (!mData.ok) showToast('Evolution API rejeitou o card','warning');
-          } catch (e) { showToast('Erro ao enviar card visual','warning'); }
-        }
-
-        setWaStatus(ok1 ? 'ok' : 'err');
-        setTimeout(onClose, 1200);
-      } catch {
-        setWaStatus('err');
-        setTimeout(onClose, 1200);
-      } finally {
-        setSending(false);
-      }
-    } else {
-      onClose();
-    }
+    onLog && onLog({ action:"pesagem", patientId:p.id, patientName:p.name, detail:`Peso: ${w}kg | MM: ${mVal}kg | MG: ${gVal}kg` });
   };
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"#fff", width:"100%", maxWidth:420, borderRadius:16, padding:24, boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:380, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
           <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>Registrar pesagem</span>
-          <div onClick={onClose} style={{ cursor:"pointer", padding:"4px 8px", borderRadius:6, background:G[50], fontSize:13, color:"#aaa" }}>✕</div>
+          <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50], fontSize:13, color:"#aaa" }}>✕</div>
         </div>
-        <div style={{ fontSize:11, color:"#aaa", marginBottom:18 }}>{p.name}</div>
-
-        {/* Week grid */}
-        <div style={{ marginBottom:16 }}>
-          <label style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:8, display:"block" }}>A qual semana se refere?</label>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(8,1fr)", gap:4, marginBottom:10 }}>
-            {Array.from({length:16},(_,i)=>i+1).map(n=>(
-              <div key={n} onClick={()=>setWeekNum(n)}
-                style={{ height:32, borderRadius:7, border:`1.5px solid ${weekNum===n?G[500]:G[200]}`,
-                  background:weekNum===n?G[600]:"#fff", color:weekNum===n?"#fff":"#aaa",
-                  fontSize:11, fontWeight:weekNum===n?700:400,
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  cursor:"pointer", transition:"all 0.15s" }}>
-                {n}
-              </div>
-            ))}
-          </div>
-          <div style={{ background:`linear-gradient(135deg,${G[50]},${G[100]})`, borderRadius:9, padding:"10px 14px", display:"flex", alignItems:"center", gap:8, border:`1px solid ${G[200]}` }}>
-            <CalendarDays size={15} color={G[500]}/>
-            <div>
-              <div style={{ fontSize:10, color:G[500], fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em" }}>Semana {weekNum}</div>
-              <div style={{ fontSize:13, fontWeight:700, color:G[800] }}>{fmtFull(weekStart)} → {fmtFull(weekEnd)}</div>
-            </div>
-          </div>
-        </div>
-
+        <div style={{ fontSize:11, color:"#aaa", marginBottom:14 }}>{p.name}</div>
         {[
-          { label:"Peso total (kg)",  val:peso, set:setPeso, type:"number", ph:"84.2" },
-          { label:"Massa magra (kg)", val:mm,   set:setMm,   type:"number", ph:"56.8" },
-          { label:"Massa gorda (kg)", val:mg,   set:setMg,   type:"number", ph:"27.4" },
+          { label:"Data da pesagem", val:data, set:setData, type:"date" },
+          { label:"Peso total (kg)", val:peso, set:setPeso, type:"number", ph:"84.2" },
+          { label:"Massa magra (kg)", val:mm, set:setMm, type:"number", ph:"56.8" },
+          { label:"Massa gorda (kg)", val:mg, set:setMg, type:"number", ph:"27.4" },
         ].map(f => (
           <div key={f.label} style={{ marginBottom:12 }}>
             <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
             <input type={f.type} value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph||""}
-              style={{ width:"100%", padding:"9px 11px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", transition:"border-color 0.15s" }}
-              onFocus={e=>e.target.style.borderColor=G[400]} onBlur={e=>e.target.style.borderColor=G[200]}/>
+              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
           </div>
         ))}
-
         {tot > 0 && (
-          <div style={{ background:G[50], borderRadius:8, padding:"8px 12px", marginBottom:12, display:"flex", gap:16, fontSize:11 }}>
+          <div style={{ background:G[50], borderRadius:8, padding:"8px 12px", marginBottom:14, display:"flex", gap:16, fontSize:11 }}>
             <span style={{ color:S.blue }}>Magra: <strong>{pctMM}%</strong></span>
             <span style={{ color:S.yel }}>Gorda: <strong>{pctMG}%</strong></span>
           </div>
         )}
-
-        {/* Opções WhatsApp */}
-        <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:14, opacity:hasPhone?1:0.5 }}>
-          <div onClick={()=>hasPhone&&setSendWa(v=>!v)}
-            style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:9, border:`1.5px solid ${sendWa&&hasPhone?S.grn:G[200]}`, background:sendWa&&hasPhone?S.grnBg:"#fafafa", cursor:hasPhone?"pointer":"default" }}>
-            <div style={{ width:18, height:18, borderRadius:4, border:`2px solid ${sendWa&&hasPhone?S.grn:G[300]}`, background:sendWa&&hasPhone?S.grn:"#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-              {sendWa && hasPhone && <Check size={10} color="#fff"/>}
-            </div>
-            <div>
-              <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>Enviar relatório por WhatsApp</div>
-              <div style={{ fontSize:10, color:"#aaa" }}>{hasPhone ? `Texto formatado por IA → ${p.phone}` : "Sem telefone cadastrado"}</div>
-            </div>
-          </div>
-          {sendWa && hasPhone && (
-            <div onClick={()=>setSendCard(v=>!v)}
-              style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:9, border:`1.5px solid ${sendCard?S.blue:G[200]}`, background:sendCard?S.blueBg:"#fafafa", cursor:"pointer", marginLeft:8 }}>
-              <div style={{ width:18, height:18, borderRadius:4, border:`2px solid ${sendCard?S.blue:G[300]}`, background:sendCard?S.blue:"#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                {sendCard && <Check size={10} color="#fff"/>}
-              </div>
-              <div>
-                <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>Incluir card visual 📊</div>
-                <div style={{ fontSize:10, color:"#aaa" }}>Envia imagem com peso + composição corporal</div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Feedback status WhatsApp */}
-        {waStatus === 'ok' && <div style={{ background:S.grnBg, color:S.grn, borderRadius:7, padding:"7px 12px", fontSize:12, marginBottom:10, fontWeight:500 }}>Mensagem enviada com sucesso.</div>}
-        {waStatus === 'err' && <div style={{ background:S.redBg, color:S.red, borderRadius:7, padding:"7px 12px", fontSize:12, marginBottom:10 }}>Erro ao enviar. Verifique a conexão WhatsApp.</div>}
-
         <div style={{ display:"flex", gap:8 }}>
-          <button onClick={handleSave} disabled={sending}
-            style={{ flex:1, padding:11, background:sending?G[400]:G[600], color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:sending?"not-allowed":"pointer", fontFamily:"inherit" }}>
-            {sending ? "Enviando..." : "Salvar pesagem"}
-          </button>
-          <button onClick={onClose} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:9, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+          <button onClick={handleSave} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar pesagem</button>
+          <button onClick={onClose} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
         </div>
       </div>
     </div>
@@ -2388,7 +1673,7 @@ function NewMemberModal({ onClose, onSave }) {
   const [phone,     setPhone]     = useState("");
 
   const handleSave = () => {
-    if (!nome.trim()) return showToast("Informe o nome do membro.","error");
+    if (!nome.trim()) return alert("Informe o nome.");
     const roleInfo = ROLES.find(r=>r.id===role);
     const nm = { id: Date.now(), name: nome.trim(), role, label: roleInfo?.label||role, specialty, email, phone, color: roleInfo?.color||G[600], createdAt: new Date().toISOString() };
     onSave(nm);
@@ -2432,64 +1717,46 @@ function NewMemberModal({ onClose, onSave }) {
    MODAL NOVO PACIENTE
 ═══════════════════════════════════════════════ */
 function NewLeadModal({ onClose, onSave }) {
-  const [nome,  setNome]  = useState("");
-  const [nasc,  setNasc]  = useState("");
-  const [peso,  setPeso]  = useState("");
+  const [nome, setNome]   = useState("");
+  const [nasc, setNasc]   = useState("");
+  const [peso, setPeso]   = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [plan,  setPlan]  = useState("essential");
-  const [errs,  setErrs]  = useState({});
-
-  const validate = () => {
-    const e = {};
-    if (!nome.trim())                                     e.nome  = "Nome obrigatório";
-    if (!email.trim())                                    e.email = "E-mail obrigatório";
-    else if (!/\S+@\S+\.\S+/.test(email.trim()))         e.email = "E-mail inválido";
-    if (!nasc)                                            e.nasc  = "Data de nascimento obrigatória";
-    const w = parseFloat(peso);
-    if (!peso || isNaN(w) || w <= 0)                     e.peso  = "Peso inválido (ex: 80.5)";
-    setErrs(e);
-    return Object.keys(e).length === 0;
-  };
+  const [plan, setPlan]   = useState("essential");
 
   const handleSave = () => {
-    if (!validate()) return;
     const w = parseFloat(peso);
+    if (!nome.trim() || !nasc || !w) return alert("Preencha nome, nascimento e peso.");
+    if (!email.trim()) return alert("Preencha o e-mail do paciente.");
     const np = {
       id: Date.now(), name: nome.trim(), plan, cycle: 1, week: 1,
       birthDate: nasc, phone, email, sd: new Date().toISOString(),
       iw: w, cw: w,
-      history: [{ date: new Date().toISOString(), weight: w, massaMagra: 0, massaGordura: 0, m: {}, b: {}, n: {} }],
+      history: [{ date: new Date().toISOString(), weight: w, m: MOCK_HIST_BASE[0].m, b: MOCK_HIST_BASE[0].b, n: MOCK_HIST_BASE[0].n }],
       nr: addDays(new Date(), 7).toISOString(), eng: 100
     };
     onSave(np);
     onClose();
   };
 
-  const fields = [
-    { key:"nome",  label:"Nome completo *", val:nome,  set:setNome,  type:"text",   ph:"Ana Carolina Silva" },
-    { key:"email", label:"E-mail *",        val:email, set:setEmail, type:"email",  ph:"paciente@email.com" },
-    { key:"nasc",  label:"Nascimento *",    val:nasc,  set:setNasc,  type:"date",   ph:"" },
-    { key:"peso",  label:"Peso inicial (kg) *", val:peso, set:setPeso, type:"number", ph:"80.5" },
-    { key:"phone", label:"Telefone",        val:phone, set:setPhone, type:"tel",    ph:"(24) 99999-0000" },
-  ];
-
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"#fff", width:"100%", maxWidth:420, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)", maxHeight:"90vh", overflowY:"auto" }}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:420, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
           <span style={{ fontSize:16, fontWeight:700, color:G[800] }}>Novo paciente</span>
           <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50] }}>✕</div>
         </div>
-        {fields.map(f => (
-          <div key={f.key} style={{ marginBottom:12 }}>
-            <label style={{ fontSize:11, fontWeight:500, color:errs[f.key]?S.red:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
-            <input type={f.type} value={f.val}
-              onChange={e=>{ f.set(e.target.value); if(errs[f.key]) setErrs(prev=>({...prev,[f.key]:undefined})); }}
-              onBlur={()=>validate()}
-              placeholder={f.ph}
-              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1.5px solid ${errs[f.key]?S.red:G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box", transition:"border-color 0.15s" }}/>
-            {errs[f.key] && <div style={{ fontSize:10, color:S.red, marginTop:3 }}>⚠ {errs[f.key]}</div>}
+        {[
+          { label:"Nome completo", val:nome, set:setNome, type:"text", ph:"Ana Carolina Silva" },
+          { label:"E-mail *", val:email, set:setEmail, type:"email", ph:"paciente@email.com" },
+          { label:"Data de nascimento", val:nasc, set:setNasc, type:"date", ph:"" },
+          { label:"Peso inicial (kg)", val:peso, set:setPeso, type:"number", ph:"80.5" },
+          { label:"Telefone", val:phone, set:setPhone, type:"tel", ph:"(24) 99999-0000" },
+        ].map(f => (
+          <div key={f.label} style={{ marginBottom:12 }}>
+            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
+            <input type={f.type} value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph}
+              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
           </div>
         ))}
         <div style={{ marginBottom:16 }}>
@@ -2513,7 +1780,6 @@ function NewLeadModal({ onClose, onSave }) {
 ═══════════════════════════════════════════════ */
 function Login({ onLogin }) {
   const [mode, setMode] = useState("admin");
-  const [loginEmail, setLoginEmail] = useState('');
   const [forgotMode, setForgotMode] = useState(false);
   const [fpEmail, setFpEmail] = useState('');
   const [fpSent, setFpSent] = useState(false);
@@ -2538,7 +1804,9 @@ function Login({ onLogin }) {
     <div style={{ minHeight:"100vh", background:`linear-gradient(135deg,${G[800]},${G[900]} 50%,#1a1a2e)`, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
       <div style={{ width:"100%", maxWidth:360, background:"#fff", borderRadius:18, padding:"32px 24px", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
         <div style={{ textAlign:"center", marginBottom:24 }}>
-          <img src="http://dramarianawogel.com.br/wp-content/uploads/2026/03/INSTITUTO-PNG-BRANCO.webp" alt="Instituto" style={{ height:56, objectFit:"contain", margin:"0 auto 10px", display:"block", filter:"invert(1)" }} onError={e=>{e.target.style.display="none";}}/>
+          <div style={{ width:52, height:52, borderRadius:"50%", background:`linear-gradient(135deg,${G[400]},${G[600]})`, margin:"0 auto 10px", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <Shield size={22} color="#fff"/>
+          </div>
           <div style={{ fontSize:19, fontWeight:700, color:G[800] }}>Programa Ser Livre</div>
           <div style={{ fontSize:11, color:"#bbb", marginTop:2 }}>Instituto Dra. Mariana Wogel</div>
         </div>
@@ -2580,14 +1848,13 @@ function Login({ onLogin }) {
             </div>
             <div style={{ marginBottom:10 }}>
               <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>E-mail</label>
-              <input value={loginEmail} onChange={e=>setLoginEmail(e.target.value)}
-                style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} placeholder="email@exemplo.com"/>
+              <input style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} placeholder="email@exemplo.com"/>
             </div>
             <div style={{ marginBottom:18 }}>
               <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Senha</label>
               <input type="password" style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} placeholder="••••••••"/>
             </div>
-            <button onClick={()=>onLogin(mode, loginEmail)} style={{ width:"100%", padding:"11px", borderRadius:9, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+            <button onClick={()=>onLogin(mode)} style={{ width:"100%", padding:"11px", borderRadius:9, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
               <Lock size={14}/>Entrar
             </button>
             <div style={{ textAlign:"center", marginTop:10 }}>
@@ -2597,1031 +1864,6 @@ function Login({ onLogin }) {
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════
-   CALENDÁRIO GERAL
-═══════════════════════════════════════════════ */
-// Tipo → cor / label / ícone do agendamento
-const APPT_TYPES = {
-  CONSULTA_MEDICA: { label:"Consulta médica",       color:"#2980B9", icon:Heart,       reminder:true  },
-  CONSULTA_NUTRI:  { label:"Consulta nutricionista",color:S.pur,     icon:Activity,    reminder:true  },
-  EXAME:           { label:"Exame laboratorial",    color:S.yel,     icon:FileText,    reminder:true  },
-  OUTRO:           { label:"Evento interno",        color:G[500],    icon:CalendarDays,reminder:false },
-};
-
-/* ── Modal novo/editar evento ─── */
-function NewApptModal({ ps, team, onClose, onSave, initial }) {
-  const [patId,  setPatId]  = useState(initial?.patientId  || "");
-  const [staffId,setStaff]  = useState(initial?.staffId    || "");
-  const [type,   setType]   = useState(initial?.type       || "CONSULTA_MEDICA");
-  const [title,  setTitle]  = useState(initial?.title      || "");
-  const [date,   setDate]   = useState(initial?.date ? safeFmt(initial.date,"yyyy-MM-dd",format(new Date(),"yyyy-MM-dd")) : format(new Date(),"yyyy-MM-dd"));
-  const [time,   setTime]   = useState(initial?.date ? safeFmt(initial.date,"HH:mm","09:00") : "09:00");
-  const [notes,  setNotes]  = useState(initial?.notes      || "");
-  const [saving, setSaving] = useState(false);
-
-  const typeInfo = APPT_TYPES[type];
-
-  const handleSave = async () => {
-    if (!date) return showToast("Selecione a data.","error");
-    setSaving(true);
-    const dt = new Date(`${date}T${time||"09:00"}:00`);
-    const body = {
-      patientId: patId  ? parseInt(patId)  : null,
-      staffId:   staffId? parseInt(staffId): null,
-      type, title: title||null, date: dt.toISOString(), notes: notes||null,
-    };
-    try {
-      const url    = initial ? `/api/appointments/${initial.id}` : '/api/appointments';
-      const method = initial ? 'PUT' : 'POST';
-      const res    = await authFetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-      const data   = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro');
-      onSave(data);
-    } catch(e) { showToast(e.message,"error"); }
-    finally { setSaving(false); }
-  };
-
-  const staffTeam = team.filter(m => m.role !== 'PACIENTE');
-
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"#fff", width:"100%", maxWidth:440, borderRadius:16, padding:24, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", maxHeight:"90vh", overflowY:"auto" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-          <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>{initial?"Editar evento":"Novo evento"}</span>
-          <div onClick={onClose} style={{ cursor:"pointer", padding:"4px 8px", borderRadius:6, background:G[50], fontSize:13, color:"#aaa" }}>✕</div>
-        </div>
-
-        {/* Tipo */}
-        <div style={{ marginBottom:14 }}>
-          <label style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:6, display:"block" }}>Tipo de evento</label>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
-            {Object.entries(APPT_TYPES).map(([k,v]) => {
-              const Ic = v.icon;
-              return (
-                <div key={k} onClick={()=>setType(k)} style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px", borderRadius:9, border:`1.5px solid ${type===k?v.color:G[200]}`, background:type===k?`${v.color}12`:"#fafafa", cursor:"pointer", transition:"all 0.15s" }}>
-                  <Ic size={13} color={type===k?v.color:G[400]}/>
-                  <div>
-                    <div style={{ fontSize:11, fontWeight:type===k?600:400, color:type===k?v.color:G[700] }}>{v.label}</div>
-                    {v.reminder && <div style={{ fontSize:9, color:"#aaa" }}>· lembrete WhatsApp</div>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Data e hora */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
-          <div>
-            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Data</label>
-            <input type="date" value={date} onChange={e=>setDate(e.target.value)}
-              style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
-          </div>
-          <div>
-            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Horário</label>
-            <input type="time" value={time} onChange={e=>setTime(e.target.value)}
-              style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
-          </div>
-        </div>
-
-        {/* Paciente */}
-        <div style={{ marginBottom:12 }}>
-          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Paciente</label>
-          <select value={patId} onChange={e=>setPatId(e.target.value)}
-            style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", background:"#fff", outline:"none" }}>
-            <option value="">— Sem paciente específico —</option>
-            {ps.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </div>
-
-        {/* Profissional */}
-        <div style={{ marginBottom:12 }}>
-          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Profissional</label>
-          <select value={staffId} onChange={e=>setStaff(e.target.value)}
-            style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", background:"#fff", outline:"none" }}>
-            <option value="">— Selecione —</option>
-            {staffTeam.map(m => <option key={m.id} value={m.id}>{m.name} ({m.label||m.role})</option>)}
-          </select>
-        </div>
-
-        {/* Descrição */}
-        <div style={{ marginBottom:14 }}>
-          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Descrição (opcional)</label>
-          <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ex: Avaliação de exames mês 2"
-            style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
-        </div>
-
-        {/* Observações */}
-        <div style={{ marginBottom:18 }}>
-          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Observações</label>
-          <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={2} placeholder="Informações adicionais..."
-            style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box" }}/>
-        </div>
-
-        {/* Aviso de lembrete */}
-        {APPT_TYPES[type]?.reminder && (
-          <div style={{ background:S.blueBg, border:`1px solid ${S.blue}30`, borderRadius:8, padding:"8px 12px", marginBottom:14, display:"flex", alignItems:"center", gap:8, fontSize:11, color:S.blue }}>
-            <Bell size={12}/> Lembrete automático por WhatsApp será enviado 1 dia antes.
-          </div>
-        )}
-
-        <div style={{ display:"flex", gap:8 }}>
-          <button onClick={handleSave} disabled={saving}
-            style={{ flex:1, padding:11, background:saving?G[400]:G[600], color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:saving?"not-allowed":"pointer", fontFamily:"inherit" }}>
-            {saving?"Salvando...":"Salvar evento"}
-          </button>
-          <button onClick={onClose} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:9, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CalendarPage({ ps, team, onSel, mob }) {
-  const [view,      setView]      = useState("week");
-  const [anchor,    setAnchor]    = useState(new Date());
-  const [appts,     setAppts]     = useState([]);
-  const [showNew,   setShowNew]   = useState(false);
-  const [editAppt,  setEditAppt]  = useState(null);
-  const [loading,   setLoading]   = useState(false);
-
-  // Carrega agendamentos da API
-  const loadAppts = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await authFetch('/api/appointments');
-      if (res.ok) setAppts(await res.json());
-    } catch { /* usa array vazio */ }
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { loadAppts(); }, [loadAppts]);
-
-  // Eventos gerados do programa (pesagens previstas, avaliações)
-  const programEvents = useMemo(() => {
-    const evs = [];
-    ps.forEach(p => {
-      if (!p.sd) return;
-      const sd = new Date(p.sd + 'T12:00:00');
-      for (let w = 1; w <= 16; w++) {
-        evs.push({ id:`${p.id}-w${w}`, date: addDays(sd,(w-1)*7), type:"pesagem", label:`Sem. ${w} — Pesagem`, patient:p, color:S.blue, isProgram:true });
-      }
-      for (let m = 1; m <= 4; m++) {
-        evs.push({ id:`${p.id}-m${m}`, date: addDays(sd,(m-1)*28), type:"avaliacao", label:`Mês ${m} — Avaliação`, patient:p, color:S.pur, isProgram:true });
-      }
-    });
-    return evs;
-  }, [ps]);
-
-  // Agendamentos reais da API
-  const apptEvents = useMemo(() => appts.map(a => {
-    const t = APPT_TYPES[a.type] || APPT_TYPES.OUTRO;
-    const patName = a.patient?.user?.name || a.title || "Evento";
-    return { id:`appt-${a.id}`, date: new Date(a.date), type:a.type, label: a.title || t.label, patient: a.patient ? { id: a.patientId, name: patName } : null, color: t.color, isProgram:false, raw:a };
-  }), [appts]);
-
-  const allEvents = [...programEvents, ...apptEvents];
-
-  // Cálculo do período exibido
-  const viewDays = view==="day"?1:view==="week"?7:view==="biweek"?14:30;
-  const startDate = (() => {
-    if (view==="day") return anchor;
-    if (view==="month") { const d=new Date(anchor); d.setDate(1); return d; }
-    const d=new Date(anchor); d.setDate(d.getDate()-d.getDay()); return d;
-  })();
-  const numDays = view==="month" ? new Date(anchor.getFullYear(),anchor.getMonth()+1,0).getDate() : viewDays;
-  const days = Array.from({length:numDays},(_,i)=>{ const d=new Date(startDate); d.setDate(d.getDate()+i); return d; });
-
-  const eventsOnDay = d => allEvents.filter(e => {
-    const ed = new Date(e.date);
-    return ed.getFullYear()===d.getFullYear() && ed.getMonth()===d.getMonth() && ed.getDate()===d.getDate();
-  }).sort((a,b)=>new Date(a.date)-new Date(b.date));
-
-  const isToday = d => { const t=new Date(); return d.getFullYear()===t.getFullYear()&&d.getMonth()===t.getMonth()&&d.getDate()===t.getDate(); };
-  const move = n => { const d=new Date(anchor); d.setDate(d.getDate()+n*viewDays); setAnchor(d); };
-
-  const deleteAppt = async (id) => {
-    if (!confirm("Remover este evento?")) return;
-    await authFetch(`/api/appointments/${id}`, { method:'DELETE' });
-    setAppts(prev => prev.filter(a => a.id !== id));
-  };
-
-  const cols = view==="day"?"1fr":mob?"repeat(2,1fr)":view==="month"?"repeat(7,1fr)":`repeat(${Math.min(viewDays,7)},1fr)`;
-
-  const monthLabel = format(anchor, "MMMM yyyy");
-
-  return (
-    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-      {showNew && <NewApptModal ps={ps} team={team} onClose={()=>setShowNew(false)} onSave={a=>{ setAppts(prev=>[...prev,a]); setShowNew(false); }} />}
-      {editAppt && <NewApptModal ps={ps} team={team} initial={editAppt} onClose={()=>setEditAppt(null)} onSave={a=>{ setAppts(prev=>prev.map(x=>x.id===a.id?a:x)); setEditAppt(null); }} />}
-
-      {/* Cabeçalho */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
-        <div style={{ display:"flex", gap:4 }}>
-          {[["day","Dia"],["week","Semana"],["biweek","Quinzena"],["month","Mês"]].map(([k,l])=>(
-            <div key={k} onClick={()=>setView(k)} style={{ padding:"6px 14px", borderRadius:20, fontSize:11, cursor:"pointer", fontWeight:view===k?600:400, background:view===k?G[600]:"#fff", color:view===k?"#fff":G[700], border:`1px solid ${view===k?G[600]:G[300]}`, transition:"all 0.15s" }}>{l}</div>
-          ))}
-        </div>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <div onClick={()=>move(-1)} style={{ cursor:"pointer", padding:"6px 10px", borderRadius:7, background:"#fff", border:`1px solid ${G[200]}`, fontSize:14 }}>‹</div>
-          <span style={{ fontSize:12, fontWeight:600, color:G[800], minWidth:110, textAlign:"center", textTransform:"capitalize" }}>{monthLabel}</span>
-          <div onClick={()=>setAnchor(new Date())} style={{ cursor:"pointer", padding:"6px 10px", borderRadius:7, background:G[50], border:`1px solid ${G[200]}`, fontSize:11, color:G[700] }}>Hoje</div>
-          <div onClick={()=>move(1)} style={{ cursor:"pointer", padding:"6px 10px", borderRadius:7, background:"#fff", border:`1px solid ${G[200]}`, fontSize:14 }}>›</div>
-          <button onClick={()=>setShowNew(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-            <Plus size={12}/>Novo evento
-          </button>
-        </div>
-      </div>
-
-      {/* Legenda */}
-      <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
-        {[{c:S.blue,l:"Pesagem prevista"},{c:S.pur,l:"Avaliação mensal"},{c:"#2980B9",l:"Consulta médica"},{c:S.pur,l:"Consulta nutri"},{c:S.yel,l:"Exame"},{c:G[500],l:"Evento interno"}].filter((v,i,a)=>a.findIndex(x=>x.l===v.l)===i).map(({c,l})=>(
-          <div key={l} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, color:G[600] }}>
-            <div style={{ width:8, height:8, borderRadius:2, background:c }}/>
-            {l}
-          </div>
-        ))}
-      </div>
-
-      {/* Grid */}
-      <div style={{ display:"grid", gridTemplateColumns:cols, gap:6 }}>
-        {/* Cabeçalho dias da semana no modo mês */}
-        {view==="month" && ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map(d=>(
-          <div key={d} style={{ textAlign:"center", fontSize:9, fontWeight:600, color:G[500], padding:"4px 0", textTransform:"uppercase", letterSpacing:"0.05em" }}>{d}</div>
-        ))}
-        {days.map((d, i) => {
-          const devs = eventsOnDay(d);
-          const today = isToday(d);
-          const maxShow = view==="month"?2:6;
-          return (
-            <div key={i} style={{ background:"#fff", borderRadius:10, border:`1.5px solid ${today?G[400]:G[100]}`, padding:"8px 10px", minHeight:view==="month"?72:110, position:"relative" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:5 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                  <span style={{ fontSize:view==="month"?12:13, fontWeight:today?800:600, color:today?G[700]:G[800], lineHeight:1 }}>{format(d,"dd")}</span>
-                  {view!=="month" && <span style={{ fontSize:9, color:"#bbb", textTransform:"uppercase" }}>{format(d,"EEE")}</span>}
-                  {today && <span style={{ background:G[500], color:"#fff", fontSize:8, padding:"1px 5px", borderRadius:6, fontWeight:700 }}>Hoje</span>}
-                </div>
-                <div onClick={()=>{ setShowNew(true); }} style={{ opacity:0, cursor:"pointer", fontSize:14, color:G[400] }} className="add-ev">+</div>
-              </div>
-              {devs.length===0 && view!=="month" && <div style={{ fontSize:9, color:"#e0e0e0", textAlign:"center", marginTop:12 }}>—</div>}
-              {devs.slice(0,maxShow).map(ev => {
-                const Ic = (APPT_TYPES[ev.type]?.icon) || CalendarDays;
-                return (
-                  <div key={ev.id}
-                    style={{ display:"flex", alignItems:"flex-start", gap:4, padding:"3px 6px", borderRadius:6, marginBottom:3, cursor:"pointer", background:`${ev.color}14`, border:`1px solid ${ev.color}28`, position:"relative" }}
-                    onClick={()=>{ if(ev.patient) onSel(ev.patient.id); }}>
-                    <Ic size={9} color={ev.color} style={{ marginTop:2, flexShrink:0 }}/>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:9, fontWeight:600, color:ev.color, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{ev.label}</div>
-                      {ev.patient && <div style={{ fontSize:9, color:"#aaa", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{ev.patient.name?.split(" ")[0]}</div>}
-                    </div>
-                    {!ev.isProgram && ev.raw && (
-                      <div onClick={e=>{ e.stopPropagation(); deleteAppt(ev.raw.id); }}
-                        style={{ fontSize:10, color:"#ccc", cursor:"pointer", padding:"0 2px", flexShrink:0 }} title="Remover">✕</div>
-                    )}
-                  </div>
-                );
-              })}
-              {devs.length>maxShow && <div style={{ fontSize:9, color:G[500], marginTop:2, cursor:"pointer" }} onClick={()=>setView("day")}>+{devs.length-maxShow} mais</div>}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════
-   MÓDULO DE COMUNICAÇÃO
-═══════════════════════════════════════════════ */
-
-// Variáveis disponíveis para uso nos templates
-const TEMPLATE_VARS = [
-  { key:"nome",          label:"Nome do paciente" },
-  { key:"plano",         label:"Plano" },
-  { key:"peso_inicial",  label:"Peso inicial (kg)" },
-  { key:"peso_atual",    label:"Peso atual (kg)" },
-  { key:"peso_perdido",  label:"Total perdido (kg)" },
-  { key:"variacao_peso", label:"Variação semana (kg)" },
-  { key:"massa_magra",   label:"Massa magra (kg)" },
-  { key:"massa_gorda",   label:"Massa gorda (kg)" },
-  { key:"semana",        label:"Semana atual" },
-  { key:"ciclo",         label:"Ciclo atual" },
-  { key:"data_inicio",   label:"Data de início" },
-  { key:"data_evento",   label:"Data do evento" },
-  { key:"profissional",  label:"Nome do profissional" },
-];
-
-const CATEG_LABELS = {
-  boas_vindas:"Boas-vindas", resultado:"Resultado", conquista:"Conquista",
-  lembrete:"Lembrete", agendamento:"Agendamento", custom:"Personalizado"
-};
-const CATEG_COLORS = {
-  boas_vindas:S.grn, resultado:S.blue, conquista:S.pur,
-  lembrete:S.yel, agendamento:"#2980B9", custom:G[500]
-};
-
-// ── Editor / Criador de template
-function TemplateEditor({ initial, onSave, onClose }) {
-  const [name,   setName]   = useState(initial?.name    || "");
-  const [categ,  setCateg]  = useState(initial?.category|| "custom");
-  const [body,   setBody]   = useState(initial?.body    || "");
-  const [saving, setSaving] = useState(false);
-  const textRef = useRef();
-
-  const insertVar = (key) => {
-    const el = textRef.current;
-    if (!el) return;
-    const start = el.selectionStart, end = el.selectionEnd;
-    const tag = `{{${key}}}`;
-    const newBody = body.slice(0,start) + tag + body.slice(end);
-    setBody(newBody);
-    setTimeout(() => { el.selectionStart = el.selectionEnd = start + tag.length; el.focus(); }, 0);
-  };
-
-  const handleSave = async () => {
-    if (!name.trim() || !body.trim()) return showToast("Preencha nome e texto.","error");
-    setSaving(true);
-    try {
-      const url    = initial ? `/api/templates/${initial.id}` : '/api/templates';
-      const method = initial ? 'PUT' : 'POST';
-      const res    = await authFetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, category: categ, body }) });
-      const data   = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      onSave(data);
-    } catch(e) { showToast(e.message,"error"); }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"#fff", width:"100%", maxWidth:560, borderRadius:16, padding:24, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", maxHeight:"92vh", overflowY:"auto" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
-          <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>{initial?"Editar template":"Novo template"}</span>
-          <div onClick={onClose} style={{ cursor:"pointer", padding:"4px 8px", borderRadius:6, background:G[50], color:"#aaa" }}>✕</div>
-        </div>
-
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
-          <div>
-            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Nome do template</label>
-            <input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex: Parabéns semana X"
-              style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
-          </div>
-          <div>
-            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Categoria</label>
-            <select value={categ} onChange={e=>setCateg(e.target.value)}
-              style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", background:"#fff", outline:"none" }}>
-              {Object.entries(CATEG_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
-            </select>
-          </div>
-        </div>
-
-        {/* Inserir variáveis */}
-        <div style={{ marginBottom:8 }}>
-          <div style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:5 }}>Inserir variável no cursor:</div>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
-            {TEMPLATE_VARS.map(v=>(
-              <div key={v.key} onClick={()=>insertVar(v.key)}
-                style={{ padding:"3px 9px", borderRadius:14, fontSize:10, cursor:"pointer", background:G[100], color:G[700], border:`1px solid ${G[200]}`, fontFamily:"monospace" }}>
-                {`{{${v.key}}}`}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ marginBottom:16 }}>
-          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Texto da mensagem</label>
-          <textarea ref={textRef} value={body} onChange={e=>setBody(e.target.value)} rows={10}
-            placeholder={`Olá {{nome}},\n\nSua mensagem aqui...`}
-            style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box", lineHeight:1.6 }}/>
-          <div style={{ fontSize:10, color:"#bbb", marginTop:3 }}>{body.length} caracteres</div>
-        </div>
-
-        <div style={{ display:"flex", gap:8 }}>
-          <button onClick={handleSave} disabled={saving}
-            style={{ flex:1, padding:11, background:saving?G[400]:G[600], color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:saving?"not-allowed":"pointer", fontFamily:"inherit" }}>
-            {saving?"Salvando...":"Salvar template"}
-          </button>
-          <button onClick={onClose} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:9, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/// Gera cards visuais do sistema a partir dos dados reais do paciente
-function generateSystemCard(type, p) {
-  const W = 600, H = type === 'scores' ? 380 : 300;
-  const canvas = document.createElement('canvas');
-  canvas.width = W; canvas.height = H;
-  const ctx = canvas.getContext('2d');
-
-  // Fundo
-  const grad = ctx.createLinearGradient(0, 0, W, H);
-  grad.addColorStop(0, '#FBF7EE'); grad.addColorStop(1, '#F5ECDA');
-  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#A8872E'; ctx.fillRect(0, 0, 6, H);
-
-  // Cabeçalho
-  ctx.fillStyle = '#C4A44E'; ctx.font = 'bold 10px sans-serif';
-  ctx.fillText('INSTITUTO DRA. MARIANA WOGEL — PROGRAMA SER LIVRE', 22, 20);
-  ctx.fillStyle = '#4E3D12'; ctx.font = 'bold 18px sans-serif';
-  const titles = { weight:'Evolução de Peso', composition:'Composição Corporal', scores:'Scores Clínicos', progress:'Progresso do Programa' };
-  ctx.fillText(titles[type] || type, 22, 44);
-  ctx.fillStyle = '#8B6D1E'; ctx.font = '12px sans-serif';
-  ctx.fillText(p.name, 22, 62);
-  ctx.strokeStyle = '#EBDAB5'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(22, 74); ctx.lineTo(W-22, 74); ctx.stroke();
-
-  const hist = p.history || [];
-  const lastH = hist[hist.length-1] || {};
-
-  if (type === 'weight') {
-    const perdido = Math.max(0, (p.iw||0) - (p.cw||0));
-    ctx.fillStyle = '#4E3D12'; ctx.font = 'bold 52px sans-serif';
-    ctx.fillText(`${p.cw || '—'}kg`, 22, 148);
-    ctx.fillStyle = '#aaa'; ctx.font = '12px sans-serif'; ctx.fillText('PESO ATUAL', 22, 165);
-    ctx.fillStyle = S.grn; ctx.font = 'bold 22px sans-serif';
-    ctx.fillText(`-${perdido.toFixed(1)}kg total perdido`, 22, 205);
-    ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif';
-    ctx.fillText(`Peso inicial: ${p.iw||'—'}kg   Semana: ${p.week||'—'}/16   Ciclo: ${p.cycle||1}`, 22, 228);
-    ctx.fillStyle = '#D4B978'; ctx.font = '10px sans-serif';
-    ctx.fillText('Acompanhe sua evolução no app Programa Ser Livre', 22, H-14);
-  }
-
-  if (type === 'composition') {
-    const mm = lastH.massaMagra || 0;
-    const mg = lastH.massaGordura || 0;
-    const tot = mm + mg || 1;
-    ctx.fillStyle = '#2980B9'; ctx.font = 'bold 44px sans-serif'; ctx.fillText(`${mm||'—'}kg`, 30, 148);
-    ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif'; ctx.fillText('MASSA MAGRA', 30, 165);
-    ctx.fillStyle = '#F39C12'; ctx.font = 'bold 44px sans-serif'; ctx.fillText(`${mg||'—'}kg`, 310, 148);
-    ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif'; ctx.fillText('MASSA GORDA', 310, 165);
-    if (mm || mg) {
-      const barY = 185, barH = 18, barW = W - 44;
-      ctx.fillStyle = '#2980B9'; ctx.fillRect(22, barY, barW*(mm/tot), barH);
-      ctx.fillStyle = '#F39C12'; ctx.fillRect(22 + barW*(mm/tot), barY, barW*(mg/tot), barH);
-      ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif';
-      ctx.fillText(`Magra ${(mm/tot*100).toFixed(0)}%   Gorda ${(mg/tot*100).toFixed(0)}%`, 22, 220);
-    }
-    ctx.fillStyle = '#D4B978'; ctx.font = '10px sans-serif';
-    ctx.fillText('Programa Ser Livre — Instituto Dra. Mariana Wogel', 22, H-14);
-  }
-
-  if (type === 'progress') {
-    const pct = Math.round(((p.week||1)/16)*100);
-    ctx.fillStyle = '#E8DFC8'; ctx.fillRect(22, 90, W-44, 22);
-    ctx.fillStyle = '#A8872E'; ctx.fillRect(22, 90, (W-44)*(pct/100), 22);
-    ctx.fillStyle = '#4E3D12'; ctx.font = 'bold 14px sans-serif'; ctx.fillText(`${pct}% concluído — Semana ${p.week||1} de 16`, 22, 82);
-    const plan = PLANS.find(x=>x.id===p.plan);
-    ctx.fillStyle = '#8B6D1E'; ctx.font = '13px sans-serif'; ctx.fillText(`Plano: ${plan?.name||p.plan}   Ciclo: ${p.cycle||1}`, 22, 138);
-    const perdido = Math.max(0, (p.iw||0)-(p.cw||0));
-    ctx.fillStyle = S.grn; ctx.font = 'bold 32px sans-serif'; ctx.fillText(`-${perdido.toFixed(1)}kg`, 22, 188);
-    ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif'; ctx.fillText('perdido até agora', 22, 206);
-    ctx.fillStyle = '#D4B978'; ctx.font = '10px sans-serif';
-    ctx.fillText('Programa Ser Livre — Instituto Dra. Mariana Wogel', 22, H-14);
-  }
-
-  if (type === 'scores') {
-    const sh = p.scoreHistory || [];
-    const last = sh[sh.length-1];
-    if (last) {
-      const cMet = (last.m.gv||0)+(last.m.mm||0)+(last.m.pcr||0)+(last.m.fer||0)+(last.m.hb||0)+(last.m.au||0)+(last.m.th||0)+(last.m.ca||0);
-      const cBe  = (last.b.gi||0)+(last.b.lib||0)+(last.b.dor||0)+(last.b.au||0)+(last.b.en||0)+(last.b.so||0);
-      const cMn  = (last.n.co||0)+(last.n.ge||0)+(last.n.mv||0);
-      const scores = [{l:'Score Metabólico',v:cMet,max:24,c:'#8E44AD'},{l:'Score Bem-Estar',v:cBe,max:18,c:'#27AE60'},{l:'Score Mental',v:cMn,max:9,c:'#2980B9'}];
-      let y = 100;
-      scores.forEach(s => {
-        ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif'; ctx.fillText(s.l, 22, y);
-        ctx.fillStyle = '#E8DFC8'; ctx.fillRect(22, y+6, W-44, 20);
-        ctx.fillStyle = s.c; ctx.fillRect(22, y+6, (W-44)*(s.v/s.max), 20);
-        ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif'; ctx.fillText(`${s.v}/${s.max}`, 30, y+20);
-        y += 50;
-      });
-      ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif'; ctx.fillText(`Avaliação: ${last.month||'—'}`, 22, y+10);
-    } else {
-      ctx.fillStyle = '#ccc'; ctx.font = '14px sans-serif'; ctx.fillText('Sem scores registrados', 22, 140);
-    }
-    ctx.fillStyle = '#D4B978'; ctx.font = '10px sans-serif';
-    ctx.fillText('Programa Ser Livre — Instituto Dra. Mariana Wogel', 22, H-14);
-  }
-
-  return canvas.toDataURL('image/png').split(',')[1];
-}
-
-// ── Composer: seleciona template + paciente(s) + preview + envia
-function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
-  const [step,       setStep]       = useState(1); // 1=template 2=pacientes 3=preview
-  const [tmplId,     setTmplId]     = useState(null);
-  const [customBody, setCustomBody] = useState("");
-  const [useCustom,  setUseCustom]  = useState(false);
-  const [selPats,    setSelPats]    = useState(initialPatientId ? [initialPatientId] : []);
-  const [preview,    setPreview]    = useState(null);
-  const [editedMsg,  setEditedMsg]  = useState(null); // preview editável
-  const [extraVars,  setExtraVars]  = useState({});
-  const [attachment,    setAttachment]    = useState(null); // { base64, mimeType, fileName }
-  const [showCardMenu, setShowCardMenu]  = useState(false);
-  const attachRef = useRef();
-  const [sending,    setSending]    = useState(false);
-  const [result,     setResult]     = useState(null);
-  const [categFilter,setCategFilter]= useState("all");
-
-  const selTmpl = templates.find(t=>t.id===tmplId);
-  const body = useCustom ? customBody : (selTmpl?.body || "");
-
-  const filteredTmpls = categFilter==="all" ? templates : templates.filter(t=>t.category===categFilter);
-
-  const loadPreview = async () => {
-    if (!body) return;
-    const firstPat = selPats[0];
-    try {
-      let rendered = body;
-      if (firstPat && tmplId && !useCustom) {
-        const res = await authFetch(`/api/templates/${tmplId}/preview`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ patientId: firstPat, extraVars })
-        });
-        if (res.ok) { const d = await res.json(); rendered = d.rendered; }
-      } else {
-        // Preview local com dados do paciente do mock
-        const p = ps.find(x=>x.id===firstPat);
-        if (p) {
-          const perdido = Math.max(0,(p.iw||0)-(p.cw||0)).toFixed(1);
-          const vars = { nome:p.name, plano:p.plan, peso_inicial:p.iw||'—', peso_atual:p.cw||'—', peso_perdido:perdido, semana:p.week||1, ciclo:p.cycle||1, variacao_peso:'—', massa_magra:'—', massa_gorda:'—', data_inicio:'—', data_evento:'—', profissional:'—', ...extraVars };
-          rendered = body.replace(/{{(\w+)}}/g, (_,k)=>vars[k]??`{{${k}}}`);
-        }
-      }
-      setPreview(rendered);
-      setEditedMsg(rendered); // inicializa o textarea editável com o preview
-    } catch { setPreview(body); setEditedMsg(body); }
-  };
-
-  useEffect(() => { if (step===3) loadPreview(); }, [step]);
-
-  const togglePat = (id) => setSelPats(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
-
-  const handleSend = async () => {
-    if (!selPats.length) return showToast("Selecione ao menos um paciente.","warning");
-    if (!body) return showToast("Selecione ou escreva uma mensagem.","warning");
-    setSending(true);
-    try {
-      // Usa o texto editado no preview como customBody (inclui variáveis já substituídas)
-      // Se o usuário editou, envia como mensagem custom; senão usa template normal
-      const finalBody = editedMsg || body;
-      const isEdited = editedMsg && editedMsg !== preview;
-      const res = await authFetch('/api/messages/send', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({
-          templateId: (!useCustom && tmplId && !isEdited) ? tmplId : null,
-          patientIds: selPats,
-          customBody: finalBody,
-          extraVars
-        })
-      });
-      const data = await res.json();
-      setResult(data);
-      if (data.sent > 0) onSent?.();
-
-      // Envia mídia anexada (se houver) para cada paciente com telefone
-      if (attachment) {
-        for (const patId of selPats) {
-          const pat = ps.find(x => x.id === patId);
-          if (!pat?.phone) continue;
-          try {
-            await authFetch('/api/whatsapp/send-media', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                patientId:   patId,
-                patientName: pat.name,
-                phone:       pat.phone,
-                base64:      attachment.base64,
-                mimeType:    attachment.mimeType,
-                fileName:    attachment.fileName,
-                caption:     attachment.caption || '',
-              }),
-            });
-          } catch(e) { showToast('Erro ao enviar mídia','warning'); }
-        }
-      }
-    } catch(e) { showToast(e.message,"error"); }
-    finally { setSending(false); }
-  };
-
-  const handleFileAttach = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const base64 = ev.target.result.split(',')[1];
-      setAttachment({ base64, mimeType: file.type, fileName: file.name });
-    };
-    reader.readAsDataURL(file);
-  };
-
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"#fff", width:"100%", maxWidth:640, borderRadius:16, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", maxHeight:"94vh", display:"flex", flexDirection:"column" }}>
-        {/* Header */}
-        <div style={{ padding:"18px 24px", borderBottom:`1px solid ${G[100]}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
-          <div>
-            <div style={{ fontSize:15, fontWeight:700, color:G[800] }}>Disparar mensagem</div>
-            <div style={{ display:"flex", gap:6, marginTop:6 }}>
-              {["Template","Pacientes","Preview"].map((l,i)=>(
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:4, fontSize:11 }}>
-                  <div style={{ width:18, height:18, borderRadius:"50%", background:step>i+1?S.grn:step===i+1?G[600]:G[200], color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:700 }}>
-                    {step>i+1?<Check size={9}/>:i+1}
-                  </div>
-                  <span style={{ color:step===i+1?G[800]:"#bbb", fontWeight:step===i+1?600:400 }}>{l}</span>
-                  {i<2 && <span style={{ color:"#ddd" }}>›</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div onClick={onClose} style={{ cursor:"pointer", padding:"4px 8px", borderRadius:6, background:G[50], color:"#aaa" }}>✕</div>
-        </div>
-
-        <div style={{ flex:1, overflowY:"auto", padding:"18px 24px" }}>
-          {/* Step 1: Template */}
-          {step===1 && (
-            <div>
-              {/* Filtro por categoria */}
-              <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:14 }}>
-                <div onClick={()=>setCategFilter("all")} style={{ padding:"4px 12px", borderRadius:16, fontSize:10, cursor:"pointer", fontWeight:categFilter==="all"?600:400, background:categFilter==="all"?G[600]:"#fff", color:categFilter==="all"?"#fff":G[600], border:`1px solid ${G[300]}` }}>Todos</div>
-                {Object.entries(CATEG_LABELS).map(([k,v])=>(
-                  <div key={k} onClick={()=>setCategFilter(k)} style={{ padding:"4px 12px", borderRadius:16, fontSize:10, cursor:"pointer", fontWeight:categFilter===k?600:400, background:categFilter===k?CATEG_COLORS[k]:"#fff", color:categFilter===k?"#fff":CATEG_COLORS[k]||G[600], border:`1px solid ${CATEG_COLORS[k]||G[300]}` }}>{v}</div>
-                ))}
-              </div>
-
-              {/* Toggle mensagem custom */}
-              <div onClick={()=>setUseCustom(v=>!v)} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 12px", borderRadius:9, border:`1.5px solid ${useCustom?G[500]:G[200]}`, background:useCustom?G[50]:"#fafafa", cursor:"pointer", marginBottom:12 }}>
-                <div style={{ width:18, height:18, borderRadius:4, border:`2px solid ${useCustom?G[500]:G[300]}`, background:useCustom?G[600]:"#fff", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  {useCustom&&<Check size={10} color="#fff"/>}
-                </div>
-                <span style={{ fontSize:12, fontWeight:500, color:G[700] }}>Escrever mensagem personalizada</span>
-              </div>
-
-              {useCustom ? (
-                <textarea value={customBody} onChange={e=>setCustomBody(e.target.value)} rows={10} placeholder={`Olá {{nome}},\n\nEscreva sua mensagem...`}
-                  style={{ width:"100%", padding:"10px 12px", borderRadius:9, border:`1.5px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box", lineHeight:1.6 }}/>
-              ) : (
-                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                  {filteredTmpls.map(t=>(
-                    <div key={t.id} onClick={()=>setTmplId(t.id)}
-                      style={{ padding:"10px 14px", borderRadius:10, border:`1.5px solid ${tmplId===t.id?(CATEG_COLORS[t.category]||G[500]):G[100]}`, background:tmplId===t.id?`${CATEG_COLORS[t.category]||G[500]}0A`:"#fafafa", cursor:"pointer", transition:"all 0.15s" }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                        <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{t.name}</div>
-                        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                          {t.isSystem && <span style={{ fontSize:9, padding:"2px 6px", borderRadius:8, background:G[100], color:G[600] }}>sistema</span>}
-                          <span style={{ fontSize:10, padding:"2px 8px", borderRadius:8, background:`${CATEG_COLORS[t.category]||G[500]}20`, color:CATEG_COLORS[t.category]||G[600] }}>{CATEG_LABELS[t.category]||t.category}</span>
-                        </div>
-                      </div>
-                      <div style={{ fontSize:10, color:"#aaa", marginTop:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.body.replace(/\n/g," ")}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Step 2: Pacientes */}
-          {step===2 && (
-            <div>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-                <div style={{ fontSize:12, color:G[700] }}><strong>{selPats.length}</strong> selecionado(s)</div>
-                <div style={{ display:"flex", gap:8 }}>
-                  <span onClick={()=>setSelPats(ps.map(p=>p.id))} style={{ fontSize:11, color:G[600], cursor:"pointer", textDecoration:"underline" }}>Todos</span>
-                  <span onClick={()=>setSelPats([])} style={{ fontSize:11, color:"#aaa", cursor:"pointer", textDecoration:"underline" }}>Limpar</span>
-                </div>
-              </div>
-              {ps.map(p=>(
-                <div key={p.id} onClick={()=>togglePat(p.id)}
-                  style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:9, marginBottom:5, cursor:"pointer", border:`1.5px solid ${selPats.includes(p.id)?G[400]:G[100]}`, background:selPats.includes(p.id)?G[50]:"#fafafa" }}>
-                  <div style={{ width:18, height:18, borderRadius:4, border:`2px solid ${selPats.includes(p.id)?G[500]:G[300]}`, background:selPats.includes(p.id)?G[600]:"#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                    {selPats.includes(p.id)&&<Check size={10} color="#fff"/>}
-                  </div>
-                  <Av name={p.name} size={28}/>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:12, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
-                    <div style={{ fontSize:10, color:"#aaa" }}>{p.phone || "Sem telefone"}</div>
-                  </div>
-                  {!p.phone && <span style={{ fontSize:9, color:S.red, background:S.redBg, padding:"2px 6px", borderRadius:6 }}>sem tel.</span>}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Step 3: Preview + envio */}
-          {step===3 && (
-            <div>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                <div style={{ fontSize:12, fontWeight:600, color:G[700] }}>
-                  Mensagem — edite antes de enviar
-                </div>
-                <button onClick={()=>loadPreview()}
-                  style={{ fontSize:10, padding:"4px 10px", borderRadius:7, background:G[50], border:`1px solid ${G[200]}`, color:G[600], cursor:"pointer", fontFamily:"inherit" }}>
-                  ↻ Recarregar variáveis
-                </button>
-              </div>
-
-              {/* Variáveis extras para recarregar */}
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:10 }}>
-                {["data_evento","profissional","semana"].map(k=>(
-                  <div key={k}>
-                    <label style={{ fontSize:9, color:"#bbb", display:"block", marginBottom:2 }}>{`{{${k}}}`}</label>
-                    <input value={extraVars[k]||""} onChange={e=>setExtraVars(v=>({...v,[k]:e.target.value}))}
-                      placeholder="preencher"
-                      style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:`1px solid ${G[200]}`, fontSize:10, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
-                  </div>
-                ))}
-              </div>
-
-              {/* Textarea editável */}
-              <textarea
-                value={editedMsg ?? preview ?? "Carregando..."}
-                onChange={e=>setEditedMsg(e.target.value)}
-                rows={10}
-                style={{ width:"100%", padding:"12px 14px", borderRadius:12, border:`1.5px solid ${G[200]}`, fontSize:12, color:"#333", lineHeight:1.7, fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box", background:"#fafafa" }}
-              />
-
-              {/* Anexo de arquivo ou card do sistema */}
-              <div style={{ marginTop:10, marginBottom:6 }}>
-                <input ref={attachRef} type="file" accept="image/*,application/pdf" onChange={handleFileAttach} style={{ display:"none" }}/>
-                {!attachment ? (
-                  <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-                    {/* Gerar do sistema */}
-                    <div style={{ position:"relative" }}>
-                      <button onClick={()=>setShowCardMenu(v=>!v)}
-                        style={{ width:"100%", padding:"9px", borderRadius:9, border:`1.5px solid ${G[300]}`, background:G[50], color:G[700], fontSize:11, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6, fontWeight:600 }}>
-                        📊 Gerar card do sistema
-                      </button>
-                      {showCardMenu && (() => {
-                        const firstPat = ps.find(x => x.id === selPats[0]);
-                        const cardOpts = [
-                          { k:'weight',      l:'Card de Peso',              emoji:'⚖️' },
-                          { k:'composition', l:'Card de Composição Corporal', emoji:'💪' },
-                          { k:'progress',    l:'Card de Progresso do Programa', emoji:'📈' },
-                          { k:'scores',      l:'Card de Scores Clínicos',   emoji:'🧬' },
-                        ];
-                        return (
-                          <div style={{ position:"absolute", top:"100%", left:0, right:0, zIndex:10, background:"#fff", border:`1px solid ${G[200]}`, borderRadius:10, boxShadow:"0 8px 24px rgba(0,0,0,0.12)", overflow:"hidden", marginTop:3 }}>
-                            {!firstPat ? (
-                              <div style={{ padding:"12px 14px", fontSize:11, color:"#aaa" }}>Selecione ao menos 1 paciente no passo 2</div>
-                            ) : cardOpts.map(opt => (
-                              <div key={opt.k} onClick={()=>{
-                                const b64 = generateSystemCard(opt.k, firstPat);
-                                setAttachment({ base64:b64, mimeType:'image/jpeg', fileName:`${opt.k}-${firstPat.name.split(' ')[0]}.jpg`, caption:opt.l });
-                                setShowCardMenu(false);
-                              }} style={{ padding:"10px 14px", display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:12, color:G[800], borderBottom:`1px solid ${G[50]}` }}
-                              onMouseEnter={e=>e.currentTarget.style.background=G[50]}
-                              onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
-                                <span>{opt.emoji}</span>{opt.l}
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                    {/* Upload manual */}
-                    <button onClick={()=>attachRef.current?.click()}
-                      style={{ width:"100%", padding:"7px", borderRadius:9, border:`1.5px dashed ${G[300]}`, background:"#fafafa", color:"#aaa", fontSize:10, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-                      📎 Ou anexar arquivo do dispositivo
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px", borderRadius:9, border:`1.5px solid ${S.blue}`, background:S.blueBg }}>
-                    <span style={{ fontSize:13 }}>{attachment.mimeType?.startsWith('image') ? '🖼️' : '📄'}</span>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:11, fontWeight:600, color:G[800], overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{attachment.fileName}</div>
-                      <input value={attachment.caption||''} onChange={e=>setAttachment(a=>({...a,caption:e.target.value}))}
-                        placeholder="Legenda (opcional)" style={{ marginTop:3, width:"100%", padding:"4px 0", border:"none", background:"transparent", fontSize:10, color:"#aaa", fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
-                    </div>
-                    <div onClick={()=>setAttachment(null)} style={{ cursor:"pointer", color:"#ccc", fontSize:14, flexShrink:0 }}>✕</div>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ background:G[50], borderRadius:9, padding:"10px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
-                <span style={{ fontSize:12, color:G[700] }}>Enviar para <strong>{selPats.length}</strong> paciente(s){attachment ? ' + anexo' : ''}</span>
-                <span style={{ fontSize:11, color:S.grn }}>{selPats.filter(id=>ps.find(p=>p.id===id)?.phone).length} com WhatsApp</span>
-              </div>
-
-              {result && (
-                <div style={{ background: result.sent>0?S.grnBg:S.redBg, borderRadius:9, padding:"10px 14px", marginTop:10 }}>
-                  <div style={{ fontSize:13, fontWeight:600, color: result.sent>0?S.grn:S.red }}>
-                    {result.sent>0 ? `${result.sent}/${result.total} mensagens enviadas` : "Nenhuma mensagem enviada"}
-                  </div>
-                  {result.results?.filter(r=>!r.ok).map((r,i)=>(
-                    <div key={i} style={{ fontSize:11, color:S.red, marginTop:3 }}>
-                      {ps.find(p=>p.id===r.patientId)?.name}: {r.reason}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding:"14px 24px", borderTop:`1px solid ${G[100]}`, display:"flex", gap:8, flexShrink:0 }}>
-          {step>1 && !result && <button onClick={()=>setStep(s=>s-1)} style={{ padding:"10px 18px", background:G[100], color:G[800], border:"none", borderRadius:9, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>‹ Voltar</button>}
-          {step<3 && (
-            <button onClick={()=>{ if(step===1&&!body&&!useCustom&&!tmplId) return showToast("Selecione um template.","warning"); if(step===2&&!selPats.length) return showToast("Selecione ao menos um paciente.","warning"); setStep(s=>s+1); }}
-              style={{ flex:1, padding:"10px 18px", background:G[600], color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-              Próximo ›
-            </button>
-          )}
-          {step===3 && !result && (
-            <button onClick={handleSend} disabled={sending}
-              style={{ flex:1, padding:"10px 18px", background:sending?G[400]:S.grn, color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:sending?"not-allowed":"pointer", fontFamily:"inherit" }}>
-              {sending?"Enviando...":"Enviar mensagens"}
-            </button>
-          )}
-          {result && <button onClick={onClose} style={{ flex:1, padding:"10px 18px", background:G[600], color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Fechar</button>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Página principal de comunicação
-function CommsPage({ ps, team, mob }) {
-  const [templates,    setTemplates]    = useState([]);
-  const [history,      setHistory]      = useState([]);
-  const [tab,          setTab]          = useState("templates");
-  const [showEditor,   setShowEditor]   = useState(false);
-  const [editTmpl,     setEditTmpl]     = useState(null);
-  const [showComposer, setShowComposer] = useState(false);
-  const [loading,      setLoading]      = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [tr, hr] = await Promise.all([
-        authFetch('/api/templates').then(r=>r.ok?r.json():[]),
-        authFetch('/api/messages/history?limit=30').then(r=>r.ok?r.json():[]),
-      ]);
-      setTemplates(Array.isArray(tr)?tr:[]);
-      setHistory(Array.isArray(hr)?hr:[]);
-    } catch { }
-    setLoading(false);
-  }, []);
-
-  useEffect(()=>{ load(); },[load]);
-
-  const duplicate = async (id) => {
-    const res = await authFetch(`/api/templates/${id}/duplicate`, { method:'POST' });
-    if (res.ok) { const t = await res.json(); setTemplates(prev=>[...prev,t]); }
-  };
-
-  const deleteT = async (id) => {
-    if (!confirm("Remover template?")) return;
-    const res = await authFetch(`/api/templates/${id}`, { method:'DELETE' });
-    if (res.ok) setTemplates(prev=>prev.filter(t=>t.id!==id));
-  };
-
-  const STATUS_COLOR = { sent:S.grn, failed:S.red, pending:S.yel };
-  const STATUS_LABEL = { sent:"Enviado", failed:"Falhou", pending:"Pendente" };
-
-  return (
-    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-      {showEditor && <TemplateEditor initial={editTmpl} onClose={()=>{ setShowEditor(false); setEditTmpl(null); }} onSave={t=>{ setTemplates(prev=>editTmpl?prev.map(x=>x.id===t.id?t:x):[...prev,t]); setShowEditor(false); setEditTmpl(null); }}/>}
-      {showComposer && <MessageComposer ps={ps} templates={templates} onClose={()=>setShowComposer(false)} onSent={load}/>}
-
-      {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
-        <div style={{ display:"flex", gap:4 }}>
-          {[["templates","Templates"],["history","Histórico"]].map(([k,l])=>(
-            <div key={k} onClick={()=>setTab(k)} style={{ padding:"6px 16px", borderRadius:20, fontSize:11, cursor:"pointer", fontWeight:tab===k?600:400, background:tab===k?G[600]:"#fff", color:tab===k?"#fff":G[700], border:`1px solid ${tab===k?G[600]:G[300]}` }}>{l}</div>
-          ))}
-        </div>
-        <div style={{ display:"flex", gap:8 }}>
-          {tab==="templates" && <button onClick={()=>{ setEditTmpl(null); setShowEditor(true); }} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px", borderRadius:8, background:"#fff", color:G[700], border:`1px solid ${G[300]}`, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}><Plus size={12}/>Novo template</button>}
-          <button onClick={()=>setShowComposer(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-            <Zap size={12}/>Disparar mensagem
-          </button>
-        </div>
-      </div>
-
-      {loading && <div style={{ textAlign:"center", padding:40, color:"#ccc", fontSize:12 }}>Carregando...</div>}
-
-      {/* Templates */}
-      {!loading && tab==="templates" && (
-        <div style={{ display:"grid", gridTemplateColumns: mob?"1fr":"repeat(2,1fr)", gap:10 }}>
-          {templates.map(t=>{
-            const cc = CATEG_COLORS[t.category]||G[500];
-            return (
-              <div key={t.id} style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[100]}`, padding:"14px 16px", boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
-                  <div style={{ flex:1, minWidth:0, marginRight:8 }}>
-                    <div style={{ fontSize:13, fontWeight:600, color:G[800], overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.name}</div>
-                    <div style={{ display:"flex", gap:6, marginTop:4, flexWrap:"wrap" }}>
-                      <span style={{ fontSize:9, padding:"2px 7px", borderRadius:8, background:`${cc}18`, color:cc, fontWeight:600 }}>{CATEG_LABELS[t.category]||t.category}</span>
-                      {t.isSystem && <span style={{ fontSize:9, padding:"2px 7px", borderRadius:8, background:G[100], color:G[500] }}>sistema</span>}
-                    </div>
-                  </div>
-                  <div style={{ display:"flex", gap:6, flexShrink:0 }}>
-                    <div onClick={()=>duplicate(t.id)} title="Duplicar" style={{ cursor:"pointer", padding:"4px 8px", borderRadius:6, background:G[50], fontSize:10, color:G[600] }}>Duplicar</div>
-                    {!t.isSystem && <>
-                      <div onClick={()=>{ setEditTmpl(t); setShowEditor(true); }} title="Editar" style={{ cursor:"pointer", padding:"4px 8px", borderRadius:6, background:G[50], fontSize:10, color:G[600] }}>Editar</div>
-                      <div onClick={()=>deleteT(t.id)} title="Excluir" style={{ cursor:"pointer", padding:"4px 8px", borderRadius:6, background:S.redBg, fontSize:10, color:S.red }}>✕</div>
-                    </>}
-                  </div>
-                </div>
-                <div style={{ fontSize:11, color:"#888", lineHeight:1.5, overflow:"hidden", maxHeight:48 }}>{t.body.replace(/\n/g," ").slice(0,120)}{t.body.length>120?"...":""}</div>
-                <div style={{ marginTop:10, display:"flex", gap:4, flexWrap:"wrap" }}>
-                  {(t.body.match(/{{(\w+)}}/g)||[]).slice(0,5).map(v=>(
-                    <span key={v} style={{ fontSize:9, padding:"1px 6px", borderRadius:6, background:G[100], color:G[600], fontFamily:"monospace" }}>{v}</span>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-          {templates.length===0 && <div style={{ gridColumn:"1/-1", textAlign:"center", padding:40, color:"#ccc" }}>Nenhum template encontrado.</div>}
-        </div>
-      )}
-
-      {/* Histórico */}
-      {!loading && tab==="history" && (
-        <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[100]}`, overflow:"hidden" }}>
-          {history.length===0 && <div style={{ padding:40, textAlign:"center", color:"#ccc", fontSize:12 }}>Nenhuma mensagem enviada ainda.</div>}
-          {history.map((log,i)=>(
-            <div key={log.id} style={{ padding:"12px 16px", borderBottom:i<history.length-1?`1px solid ${G[50]}`:"none", display:"flex", alignItems:"flex-start", gap:12 }}>
-              <div style={{ width:8, height:8, borderRadius:"50%", background:STATUS_COLOR[log.status]||"#ccc", marginTop:5, flexShrink:0 }}/>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:4 }}>
-                  <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{log.patient?.user?.name || log.phone}</div>
-                  <div style={{ fontSize:10, color:"#aaa" }}>{safeFmt(log.createdAt,"dd/MM HH:mm")}</div>
-                </div>
-                {log.template && <div style={{ fontSize:10, color:G[500], marginTop:1 }}>{log.template.name}</div>}
-                <div style={{ fontSize:11, color:"#888", marginTop:3, lineHeight:1.4, overflow:"hidden", maxHeight:36 }}>{log.body.slice(0,100)}{log.body.length>100?"...":""}</div>
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
-                  <span style={{ fontSize:9, color:STATUS_COLOR[log.status], fontWeight:600 }}>{STATUS_LABEL[log.status]||log.status}</span>
-                  {log.sentBy && <span style={{ fontSize:9, color:"#ccc" }}>por {log.sentBy.name}</span>}
-                  <span style={{ fontSize:9, color:"#ccc" }}>{log.phone}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Mini histórico de comunicação dentro do paciente
-function PatientCommsTab({ p, mob }) {
-  const [history,      setHistory]      = useState([]);
-  const [templates,    setTemplates]    = useState([]);
-  const [showComposer, setShowComposer] = useState(false);
-  const [loading,      setLoading]      = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [hr, tr] = await Promise.all([
-        authFetch(`/api/messages/history?patientId=${p.id}&limit=20`).then(r=>r.ok?r.json():[]),
-        authFetch('/api/templates').then(r=>r.ok?r.json():[]),
-      ]);
-      setHistory(Array.isArray(hr)?hr:[]);
-      setTemplates(Array.isArray(tr)?tr:[]);
-    } catch {}
-    setLoading(false);
-  }, [p.id]);
-
-  useEffect(()=>{ load(); },[load]);
-
-  const STATUS_COLOR = { sent:S.grn, failed:S.red, pending:S.yel };
-
-  return (
-    <div>
-      {showComposer && <MessageComposer ps={[p]} templates={templates} onClose={()=>setShowComposer(false)} onSent={load} initialPatientId={p.id}/>}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-        <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Comunicação</span>
-        <button onClick={()=>setShowComposer(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-          <Zap size={11}/>Enviar mensagem
-        </button>
-      </div>
-      {!p.phone && <div style={{ background:S.yelBg, border:`1px solid ${S.yel}30`, borderRadius:8, padding:"8px 12px", fontSize:11, color:S.yel, marginBottom:12 }}>Paciente sem telefone cadastrado — WhatsApp não disponível.</div>}
-      {loading && <div style={{ textAlign:"center", padding:20, color:"#ccc", fontSize:12 }}>Carregando...</div>}
-      {!loading && history.length===0 && <div style={{ textAlign:"center", padding:24, color:"#ccc", fontSize:12 }}>Nenhuma mensagem enviada para este paciente.</div>}
-      {!loading && history.map((log,i)=>(
-        <div key={log.id} style={{ display:"flex", gap:10, padding:"10px 12px", borderRadius:9, marginBottom:6, background:G[50], border:`1px solid ${G[100]}` }}>
-          <div style={{ width:7, height:7, borderRadius:"50%", background:STATUS_COLOR[log.status]||"#ccc", marginTop:4, flexShrink:0 }}/>
-          <div style={{ flex:1 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              {log.template && <span style={{ fontSize:10, fontWeight:600, color:G[600] }}>{log.template.name}</span>}
-              <span style={{ fontSize:10, color:"#aaa" }}>{safeFmt(log.createdAt,"dd/MM HH:mm")}</span>
-            </div>
-            <div style={{ fontSize:11, color:"#777", marginTop:3, lineHeight:1.5, whiteSpace:"pre-wrap" }}>{log.body.slice(0,160)}{log.body.length>160?"...":""}</div>
-            {log.sentBy && <div style={{ fontSize:10, color:"#bbb", marginTop:2 }}>por {log.sentBy.name}</div>}
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
@@ -3639,24 +1881,11 @@ export default function App() {
   // Carrega dados do servidor na inicialização
   useEffect(() => {
     Promise.all([
-      authFetch('/api/state/patients').then(r => r.ok ? r.json() : null).catch(() => null),
-      authFetch('/api/state/team').then(r => r.ok ? r.json() : null).catch(() => null),
-      authFetch('/api/state/activity').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/state/patients').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/state/team').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/state/activity').then(r => r.ok ? r.json() : null).catch(() => null),
     ]).then(([pData, tData, aData]) => {
-      if (Array.isArray(pData) && pData.length > 0) {
-        // Normaliza campos que podem faltar em pacientes legados
-        const normalized = pData.map(p => ({
-          ...p,
-          iw:           p.iw   || p.cw   || 0,
-          cw:           p.cw   || p.iw   || 0,
-          week:         p.week || 1,
-          cycle:        p.cycle || 1,
-          history:      Array.isArray(p.history)      ? p.history      : [],
-          scoreHistory: Array.isArray(p.scoreHistory) ? p.scoreHistory : [],
-          eng:          p.eng  ?? 100,
-        }));
-        setPs(normalized);
-      }
+      if (Array.isArray(pData) && pData.length > 0) setPs(pData);
       if (Array.isArray(tData) && tData.length > 0) setTeam(tData);
       if (Array.isArray(aData) && aData.length > 0) setActivityLog(aData);
       setDbLoaded(true);
@@ -3668,7 +1897,7 @@ export default function App() {
     if (!dbLoaded) return;
     clearTimeout(saveTimer.current[key]);
     saveTimer.current[key] = setTimeout(() => {
-      authFetch(`/api/state/${key}`, {
+      fetch(`/api/state/${key}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -3681,18 +1910,13 @@ export default function App() {
   useEffect(() => { saveToApi('activity',  activityLog); }, [activityLog, saveToApi]);
 
   const addLog = ({ action, patientId, patientName, detail }) => {
-    const usr = currentUser || { id:1, name:"Dra. Mariana Wogel" };
-    const entry = { id: Date.now(), date: new Date().toISOString(), memberId: usr.id||1, memberName: usr.name||"Dra. Mariana Wogel", action, patientId, patientName, detail };
+    const entry = { id: Date.now(), date: new Date().toISOString(), memberId:1, memberName:"Dra. Mariana Wogel", action, patientId, patientName, detail };
     setActivityLog(prev=>[entry,...prev]);
   };
   const SC = genSC(ps);
 
-  const [lg,   setLg]   = useState(() => { try { return localStorage.getItem('serlivre_session')==='1'; } catch { return false; } });
-  const [mode, setMode] = useState(() => { try { return localStorage.getItem('serlivre_mode')||'admin'; } catch { return 'admin'; } });
-  // Usuário logado atualmente (nome + role para exibição na sidebar e logs)
-  const [currentUser, setCurrentUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('serlivre_current_user') || 'null'); } catch { return null; }
-  });
+  const [lg,   setLg]   = useState(false);
+  const [mode, setMode] = useState("admin");
   const [page, setPage] = useState("dash");
   const [sid,  setSid]  = useState(null);
   const [so,   setSo]   = useState(true);
@@ -3703,121 +1927,46 @@ export default function App() {
   const sp  = ps.find(p => p.id===sid);
   const go  = id => { setSid(id); setPage("det"); };
 
-  // Mensagem rápida (atalhos do dashboard)
-  const [quickMsg,   setQuickMsg]   = useState(null); // {pids:[], ctx:''}
-  const [appTmpls,   setAppTmpls]   = useState([]);
-  useEffect(() => {
-    if (!dbLoaded) return;
-    authFetch('/api/templates').then(r=>r.ok?r.json():[]).then(t=>{ if(Array.isArray(t)) setAppTmpls(t); }).catch(()=>{});
-  }, [dbLoaded]);
-
-  // Alertas resolvidos (persiste em localStorage)
-  const [dismissed, setDismissed] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('serlivre_dismissed') || '{}'); } catch { return {}; }
-  });
-
-  // Portal onboarding — DEVE ficar aqui (fora de qualquer condicional) para não violar as Rules of Hooks
-  const [portalSeen, setPortalSeen] = useState(() => {
-    try {
-      const pid = ps[0]?.id;
-      if (!pid) return true;
-      return localStorage.getItem(`serlivre_portal_seen_${pid}`) === '1';
-    } catch { return true; }
-  });
-  const closeOnboarding = () => {
-    setPortalSeen(true);
-    try { localStorage.setItem(`serlivre_portal_seen_${ps[0]?.id}`, '1'); } catch {}
-  };
-  const dismissAlert = (patientId, alertKey) => {
-    const key = `${patientId}_${alertKey}`;
-    setDismissed(prev => {
-      const next = { ...prev, [key]: Date.now() };
-      localStorage.setItem('serlivre_dismissed', JSON.stringify(next));
-      return next;
-    });
-    showToast('Alerta resolvido', 'success');
-  };
-
   /* alertas críticos */
   const ac = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); }).length;
 
-  const titles = { dash:"Dashboard", pat:"Pacientes", det:sp?.name||"", alert:"Central de alertas", team:"Equipe", cal:"Calendário", comms:"Comunicação" };
+  const titles = { dash:"Dashboard", pat:"Pacientes", det:sp?.name||"", alert:"Central de alertas", team:"Equipe" };
   const nav = [
     {k:"dash",  l:"Dashboard", i:LayoutDashboard},
     {k:"pat",   l:"Pacientes", i:Users},
-    {k:"cal",   l:"Calendário",i:CalendarDays},
-    {k:"comms", l:"Mensagens", i:Zap},
     {k:"alert", l:"Alertas",   i:AlertTriangle},
     {k:"team",  l:"Equipe",    i:Shield},
   ];
 
   /* ─── Carregando dados do servidor ─── */
   if (!dbLoaded) return (
-    <div style={{ minHeight:"100vh", background:`linear-gradient(135deg,${G[800]},${G[900]} 50%,#1a1a2e)`, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.6; transform:scale(0.95); } }
-        @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-      `}</style>
-      <div style={{ textAlign:"center", color:"#fff", animation:"fadeUp 0.6s ease both" }}>
-        <div style={{ position:"relative", width:72, height:72, margin:"0 auto 20px" }}>
-          <div style={{ position:"absolute", inset:0, borderRadius:"50%", border:`3px solid ${G[700]}` }}/>
-          <div style={{ position:"absolute", inset:0, borderRadius:"50%", border:`3px solid transparent`, borderTopColor:G[300], animation:"spin 1s linear infinite" }}/>
-          <div style={{ position:"absolute", inset:8, borderRadius:"50%", background:`linear-gradient(135deg,${G[500]},${G[700]})`, display:"flex", alignItems:"center", justifyContent:"center", animation:"pulse 2s ease infinite" }}>
-            <Shield size={22} color="#fff"/>
-          </div>
+    <div style={{ minHeight:"100vh", background:`linear-gradient(135deg,${G[800]},${G[900]})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ textAlign:"center", color:"#fff" }}>
+        <div style={{ width:48, height:48, borderRadius:"50%", background:`linear-gradient(135deg,${G[400]},${G[600]})`, margin:"0 auto 16px", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Shield size={22} color="#fff"/>
         </div>
-        <img src="http://dramarianawogel.com.br/wp-content/uploads/2026/03/INSTITUTO-PNG-BRANCO.webp" alt="" style={{ height:36, objectFit:"contain", marginBottom:12, opacity:0.9 }} onError={e=>e.target.style.display="none"}/>
-        <div style={{ fontSize:14, fontWeight:600, opacity:0.9 }}>Programa Ser Livre</div>
-        <div style={{ fontSize:11, opacity:0.45, marginTop:6, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-          <div style={{ width:4, height:4, borderRadius:"50%", background:G[300], animation:"pulse 1s ease infinite" }}/>
-          <div style={{ width:4, height:4, borderRadius:"50%", background:G[300], animation:"pulse 1s ease 0.2s infinite" }}/>
-          <div style={{ width:4, height:4, borderRadius:"50%", background:G[300], animation:"pulse 1s ease 0.4s infinite" }}/>
-        </div>
+        <div style={{ fontSize:16, fontWeight:600 }}>Programa Ser Livre</div>
+        <div style={{ fontSize:12, opacity:0.5, marginTop:6 }}>Carregando dados...</div>
+        <div style={{ width:32, height:3, background:G[400], borderRadius:2, margin:"14px auto 0", animation:"pulse 1s infinite" }}/>
       </div>
     </div>
   );
 
   /* ─── Não logado ─── */
-  const doLogout = () => {
-    setLg(false); setCurrentUser(null);
-    try { localStorage.removeItem('serlivre_session'); localStorage.removeItem('serlivre_mode'); localStorage.removeItem('serlivre_current_user'); } catch {}
-  };
-  if (!lg) return <Login onLogin={(m, email) => {
-    setLg(true); setMode(m);
-    // Identifica membro da equipe pelo email para mostrar nome correto
-    const member = team.find(t => t.email?.toLowerCase() === email?.toLowerCase?.());
-    const usr = member || { name: "Dra. Mariana Wogel", role:"admin", label:"Administradora" };
-    setCurrentUser(usr);
-    try {
-      localStorage.setItem('serlivre_session','1');
-      localStorage.setItem('serlivre_mode',m);
-      localStorage.setItem('serlivre_current_user', JSON.stringify(usr));
-    } catch {}
-  }}/>;
+  if (!lg) return <Login onLogin={m => { setLg(true); setMode(m); }}/>;
 
   /* ─── PORTAL DO PACIENTE ─── */
   if (mode==="paciente") {
     const pp = ps[0];
-    // portalSeen e closeOnboarding já declarados acima (fora do if) para respeitar Rules of Hooks
-    if (!pp) return (
-      <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:W[50] }}>
-        <div style={{ textAlign:"center", color:"#aaa" }}>
-          <div style={{ fontSize:32, marginBottom:8 }}>⏳</div>
-          <div style={{ fontSize:13 }}>Carregando dados...</div>
-        </div>
-      </div>
-    );
     return (
       <div style={{ fontFamily:"'Outfit','Inter',system-ui,sans-serif", background:W[50], minHeight:"100vh", color:"#2C2C2A" }}>
-        {!portalSeen && pp && <PortalOnboarding name={pp.name} onClose={closeOnboarding}/>}
         <div style={{ maxWidth:480, margin:"0 auto", padding:"10px 12px 40px" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
               <Shield size={16} color={G[500]}/>
               <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Ser Livre</span>
             </div>
-            <div onClick={doLogout} style={{ cursor:"pointer", padding:4 }}>
+            <div onClick={()=>setLg(false)} style={{ cursor:"pointer", padding:4 }}>
               <LogOut size={14} color="#bbb"/>
             </div>
           </div>
@@ -3830,21 +1979,8 @@ export default function App() {
   /* ─── CONTEÚDO ADMIN ─── */
   const content = (
     <>
-      {quickMsg && (
-        <div style={{ position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,0.55)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={e=>{if(e.target===e.currentTarget)setQuickMsg(null);}}>
-          <MessageComposer
-            ps={quickMsg.pids ? ps.filter(p=>quickMsg.pids.includes(p.id)) : ps}
-            templates={appTmpls}
-            onClose={()=>setQuickMsg(null)}
-            onSent={()=>{ setQuickMsg(null); showToast('Mensagem(s) enviada(s)!'); }}
-          />
-        </div>
-      )}
-      {page==="dash"  && <Dash  ps={ps} onSel={go} mob={mob} onQuickMsg={(pids,ctx)=>setQuickMsg({pids,ctx})}/>}
-      {page==="cal"   && <CalendarPage ps={ps} team={team} onSel={go} mob={mob}/>}
-      {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)}
-          onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(()=>showToast('Erro ao excluir paciente','error')); }}
-          onBulkDelete={ids=>{ setPs(prev=>prev.filter(x=>!ids.includes(x.id))); ids.forEach(id=>apiDeletePatient(id).catch(()=>showToast('Erro ao excluir paciente','error'))); }}/>}
+      {page==="dash"  && <Dash  ps={ps} onSel={go} mob={mob}/>}
+      {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)} onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(err=>console.warn('API delete failed:', err.message)); }}/>}
       {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}
         onSaveScores={scores=>{ setPs(prev=>prev.map(x=>{ if(x.id!==sp.id) return x; const h=x.history||[]; return {...x,history:h.length>0?[...h.slice(0,-1),{...h[h.length-1],...scores}]:[{...scores}]}; })); addLog({action:"scores",patientId:sp.id,patientName:sp.name,detail:"Scores metabólicos atualizados"}); }}
         onAddWeighIn={entry=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,cw:entry.weight,history:[...(x.history||[]),entry]}:x)); }}
@@ -3852,12 +1988,11 @@ export default function App() {
         onChangePlan={newPlan=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,plan:newPlan}:x)); }}
         activityLog={activityLog}
         onLog={addLog}
-        onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(()=>showToast('Erro ao excluir paciente','error')); setPage("pat"); }}
-        onFinish={id=>{ apiFinishProgram(id).catch(()=>showToast('Erro ao finalizar programa','error')); addLog({action:"finalizado",patientId:sp.id,patientName:sp.name,detail:"Programa finalizado"}); }}
-        onRestart={id=>{ setPs(prev=>prev.map(x=>x.id===id?{...x,cycle:(x.cycle||1)+1,week:1}:x)); apiRestartProgram(id).catch(()=>showToast('Erro ao reiniciar programa','error')); addLog({action:"reinicio",patientId:sp.id,patientName:sp.name,detail:`Novo ciclo iniciado: C${(sp.cycle||1)+1}`}); }}
+        onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(err=>console.warn('API delete failed:', err.message)); setPage("pat"); }}
+        onFinish={id=>{ apiFinishProgram(id).catch(err=>console.warn('API finish failed:', err.message)); addLog({action:"finalizado",patientId:sp.id,patientName:sp.name,detail:"Programa finalizado"}); }}
+        onRestart={id=>{ setPs(prev=>prev.map(x=>x.id===id?{...x,cycle:(x.cycle||1)+1,week:1}:x)); apiRestartProgram(id).catch(err=>console.warn('API restart failed:', err.message)); addLog({action:"reinicio",patientId:sp.id,patientName:sp.name,detail:`Novo ciclo iniciado: C${(sp.cycle||1)+1}`}); }}
         onEdit={upd=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,...upd}:x)); }}/>}
-      {page==="comms" && <CommsPage ps={ps} team={team} mob={mob}/>}
-      {page==="alert" && <Alerts ps={ps} onSel={go} dismissed={dismissed} onDismiss={dismissAlert}/>}
+      {page==="alert" && <Alerts ps={ps} onSel={go}/>}
       {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog}/>}
     </>
   );
@@ -3865,7 +2000,6 @@ export default function App() {
   /* ─── MOBILE ─── */
   if (mob) return (
     <div style={{ fontFamily:"'Outfit','Inter',system-ui,sans-serif", background:W[50], minHeight:"100vh", color:"#2C2C2A", paddingBottom:62 }}>
-      <ToastContainer/>
       {/* Top bar */}
       <div style={{ position:"sticky", top:0, zIndex:50, background:"#fff", borderBottom:`1px solid ${G[200]}`, padding:"10px 12px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
@@ -3877,12 +2011,12 @@ export default function App() {
             <Bell size={16} color={G[600]}/>
             {ac>0 && <div style={{ position:"absolute", top:-3, right:-3, width:12, height:12, borderRadius:"50%", background:S.red, color:"#fff", fontSize:8, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>{ac}</div>}
           </div>
-          <div onClick={doLogout} style={{ cursor:"pointer" }}><LogOut size={14} color="#bbb"/></div>
+          <div onClick={()=>setLg(false)} style={{ cursor:"pointer" }}><LogOut size={14} color="#bbb"/></div>
         </div>
       </div>
       {/* Conteúdo */}
       <div style={{ padding:"10px 12px" }}>
-        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setPs(prev=>[...prev,np]); addLog({action:"cadastro",patientId:np.id,patientName:np.name,detail:"Novo paciente cadastrado"}); apiCreatePatient({ name:np.name, email:np.email, phone:np.phone, plan:np.plan, birthDate:np.birthDate, initialWeight:np.iw }).catch(()=>showToast('Erro ao cadastrar paciente na API','error')); }}/>}
+        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setPs(prev=>[...prev,np]); addLog({action:"cadastro",patientId:np.id,patientName:np.name,detail:"Novo paciente cadastrado"}); apiCreatePatient({ name:np.name, email:np.email, phone:np.phone, plan:np.plan, birthDate:np.birthDate, initialWeight:np.iw }).catch(err=>console.warn('API patient creation failed (SMTP may not be configured):', err.message)); }}/>}
         {content}</div>
       {/* Bottom nav */}
       <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:`1px solid ${G[200]}`, display:"flex", justifyContent:"space-around", padding:"6px 0 max(6px,env(safe-area-inset-bottom))", zIndex:50 }}>
@@ -3903,19 +2037,15 @@ export default function App() {
   /* ─── DESKTOP ─── */
   return (
     <div style={{ fontFamily:"'Outfit','Inter',system-ui,sans-serif", background:W[50], minHeight:"100vh", color:"#2C2C2A" }}>
-      <ToastContainer/>
       {/* Sidebar */}
       <div style={{ width:220, background:`linear-gradient(180deg,${G[800]},${G[900]})`, color:"#fff", position:"fixed", top:0, left:0, height:"100vh", zIndex:100, display:"flex", flexDirection:"column", transform:so?"none":"translateX(-220px)", transition:"transform 0.3s" }}>
         <div style={{ padding:"16px 14px", borderBottom:`1px solid ${G[700]}` }}>
-          <img
-            src="http://dramarianawogel.com.br/wp-content/uploads/2026/03/INSTITUTO-PNG-BRANCO.webp"
-            alt="Instituto Dra. Mariana Wogel"
-            style={{ height:40, maxWidth:"100%", objectFit:"contain", display:"block" }}
-            onError={e=>{ e.target.style.display="none"; e.target.nextSibling.style.display="flex"; }}
-          />
-          <div style={{ display:"none", alignItems:"center", gap:7 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:7 }}>
             <Shield size={18} color={G[300]}/>
-            <div style={{ fontSize:14, fontWeight:600 }}>Ser Livre</div>
+            <div>
+              <div style={{ fontSize:14, fontWeight:600 }}>Ser Livre</div>
+              <div style={{ fontSize:9, opacity:0.4 }}>Dra. Mariana Wogel</div>
+            </div>
           </div>
         </div>
         <div style={{ flex:1, paddingTop:8 }}>
@@ -3930,12 +2060,12 @@ export default function App() {
           })}
         </div>
         <div style={{ padding:"12px 14px", borderTop:`1px solid ${G[700]}`, display:"flex", alignItems:"center", gap:7 }}>
-          <Av name={currentUser?.name || "Mariana Wogel"} size={28} src={currentUser?.id ? ta[currentUser.id] : ta[1]}/>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:11, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{currentUser?.name?.split(" ").slice(0,2).join(" ") || "Dra. Mariana"}</div>
-            <div style={{ fontSize:9, opacity:0.4 }}>{currentUser?.label || "Administradora"}</div>
+          <Av name="Mariana Wogel" size={28} src={ta[1]}/>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:11, fontWeight:500 }}>Dra. Mariana</div>
+            <div style={{ fontSize:9, opacity:0.3 }}>Admin</div>
           </div>
-          <LogOut size={12} style={{ cursor:"pointer", opacity:0.4 }} onClick={doLogout}/>
+          <LogOut size={12} style={{ cursor:"pointer", opacity:0.3 }} onClick={()=>setLg(false)}/>
         </div>
       </div>
 
@@ -3952,7 +2082,7 @@ export default function App() {
           </div>
         </div>
         
-        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setPs(prev=>[...prev,np]); addLog({action:"cadastro",patientId:np.id,patientName:np.name,detail:"Novo paciente cadastrado"}); apiCreatePatient({ name:np.name, email:np.email, phone:np.phone, plan:np.plan, birthDate:np.birthDate, initialWeight:np.iw }).catch(()=>showToast('Erro ao cadastrar paciente na API','error')); }}/>}
+        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setPs(prev=>[...prev,np]); addLog({action:"cadastro",patientId:np.id,patientName:np.name,detail:"Novo paciente cadastrado"}); apiCreatePatient({ name:np.name, email:np.email, phone:np.phone, plan:np.plan, birthDate:np.birthDate, initialWeight:np.iw }).catch(err=>console.warn('API patient creation failed (SMTP may not be configured):', err.message)); }}/>}
         {content}
       </div>
     </div>
