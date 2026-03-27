@@ -13,8 +13,38 @@ import {
   LogOut, ChevronRight, Search, Bell, TrendingUp, TrendingDown,
   Activity, Shield, User, Lock, Menu, Check, Download,
   ArrowLeft, Camera, Star, Award, Flame, Target, Zap, BarChart3,
-  Trophy, CalendarDays, Weight, Home, Heart, Brain, RefreshCw, Plus, Settings, UserPlus, Cake, FileSignature, Save
+  Trophy, CalendarDays, Calendar, Weight, Home, Heart, Brain, RefreshCw, Plus, Settings, UserPlus, Cake, FileSignature, Save, MessageCircle
 } from "lucide-react";
+
+/* ════════════════════════════════════════════
+   TOAST — Notificações globais
+═══════════════════════════════════════════════ */
+let _toastFn = null;
+function showToast(msg, type = 'success') { if (_toastFn) _toastFn(msg, type); }
+
+function ToastContainer() {
+  const [toasts, setToasts] = useState([]);
+  useEffect(() => {
+    _toastFn = (msg, type) => {
+      const id = Date.now() + Math.random();
+      setToasts(p => [...p, { id, msg, type }]);
+      setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4000);
+    };
+    return () => { _toastFn = null; };
+  }, []);
+  if (!toasts.length) return null;
+  const TC = { success:'#27AE60', error:'#C0392B', warning:'#F39C12', info:'#2980B9' };
+  const TI = { success:'✓', error:'✕', warning:'!', info:'ℹ' };
+  return (
+    <div style={{ position:'fixed', bottom:74, right:16, zIndex:9999, display:'flex', flexDirection:'column', gap:6, maxWidth:300, pointerEvents:'none' }}>
+      {toasts.map(t => (
+        <div key={t.id} style={{ background: TC[t.type]||TC.success, color:'#fff', padding:'10px 14px', borderRadius:10, fontSize:12, fontWeight:500, boxShadow:'0 4px 20px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:14, fontWeight:700, flexShrink:0 }}>{TI[t.type]||'✓'}</span>{t.msg}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /* ════════════════════════════════════════════
    DESIGN TOKENS
@@ -66,6 +96,24 @@ const TIER = {
 const TODAY = new Date();
 const fmt   = d => { const dt = new Date(d); return `${String(dt.getDate()).padStart(2,"0")}/${String(dt.getMonth()+1).padStart(2,"0")}`; };
 const addD  = (d, n) => { const r = new Date(d); r.setDate(r.getDate()+n); return r; };
+// Calcula semana atual baseado na data de início do ciclo (sd)
+const calcWeek = (p) => {
+  if (!p.sd) return p.week || 1;
+  const days = Math.floor((TODAY - new Date(p.sd)) / (1000 * 60 * 60 * 24));
+  return Math.min(Math.max(Math.floor(days / 7) + 1, 1), 16);
+};
+
+// Calcula engajamento automaticamente baseado em pesagens vs semanas no programa
+const calcEng = (p) => {
+  const weeks = calcWeek(p);
+  const weighins = (p.history||[]).length;
+  if (weeks <= 0) return p.eng ?? 100;
+  // Proporção de semanas com pesagem registrada (máx 100%)
+  const ratio = Math.min(weighins / weeks, 1);
+  // Penaliza levemente se poucos registros: 70% peso pesagens + 30% do valor manual existente
+  const manual = p.eng ?? 80;
+  return Math.round(ratio * 70 + (manual / 100) * 30);
+};
 
 /* ════════════════════════════════════════════
    DADOS INICIAIS (PERSISTENTES)
@@ -295,7 +343,7 @@ function SI({ label, value, onChange, opts }) {
 /* ════════════════════════════════════════════
    DASHBOARD — Dra. Mariana
 ═══════════════════════════════════════════════ */
-function Dash({  ps, onSel, mob }) {
+function Dash({ ps, onSel, mob, onQuickMsg }) {
   const [df, setDf] = useState("all");
   const SC = genSC(ps);
 
@@ -341,7 +389,7 @@ function Dash({  ps, onSel, mob }) {
 
   // Perda total no período
   const tl   = ps.reduce((a,p) => a + periodWeightLoss(p), 0);
-  const ae   = Math.round(ps.reduce((a,p) => a+p.eng, 0)/ps.length);
+  const ae   = Math.round(ps.reduce((a,p) => a+calcEng(p), 0)/ps.length);
   const cr   = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); });
   const el   = ps.filter(p => { const sc=SC[p.id]; return sc&&cM(sc.m)>=21; });
   const rTod = ps.filter(p => p.nr && fmt(p.nr)===fmt(TODAY));
@@ -353,7 +401,7 @@ function Dash({  ps, onSel, mob }) {
     const n=s.n||1;
     return [{p:"Composição",v:+(s.c/n).toFixed(1)},{p:"Inflamação",v:+(s.i/n).toFixed(1)},{p:"Glicêmico",v:+(s.g/n).toFixed(1)},{p:"Cardiovascular",v:+(s.v/n).toFixed(1)}];
   }, [ps]);
-  const engD = useMemo(() => ps.map(p=>({n:p.name.split(" ")[0],e:p.eng})).sort((a,b)=>b.e-a.e), [ps]);
+  const engD = useMemo(() => ps.map(p=>({n:p.name.split(" ")[0],e:calcEng(p)})).sort((a,b)=>b.e-a.e), [ps]);
   const wbw  = useMemo(() => {
     const w=[];
     for(let i=1;i<=16;i++){let s=0,n=0; ps.forEach(p=>{if(!p.iw)return; const h=p.history||[];if(h[i-1]!==undefined){s+=p.iw-(h[i-1]?.weight||0);n++;}}); w.push({s:`S${i}`,v:n?+(s/n).toFixed(1):0});}
@@ -373,14 +421,57 @@ function Dash({  ps, onSel, mob }) {
   const gc  = mob ? "1fr" : "repeat(4,1fr)";
   const gc2 = mob ? "1fr" : "1fr 1fr";
 
+  const gerarRelatorioCohort = () => {
+    const el = document.createElement('div');
+    el.style.cssText = 'padding:24px;font-family:Outfit,Inter,sans-serif;color:#2C2C2A;background:#fff;width:750px';
+    const now = format(new Date(), "dd/MM/yyyy HH:mm");
+    el.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #8B6D1E;padding-bottom:12px;margin-bottom:20px">
+        <div><div style="font-size:20px;font-weight:700;color:#4E3D12">Programa Ser Livre</div><div style="font-size:11px;color:#999">Instituto Dra. Mariana Wogel · Relatório consolidado gerado em ${now}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+        ${[
+          ['Total de pacientes', ps.length],
+          ['Perda coletiva', tl.toFixed(1)+'kg'],
+          ['Média por paciente', (tl/ps.length).toFixed(1)+'kg'],
+          ['Engajamento médio', ae+'%'],
+        ].map(([l,v])=>`<div style="background:#FBF7EE;border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:#8B6D1E;font-weight:600">${l}</div><div style="font-size:18px;font-weight:700;color:#4E3D12">${v}</div></div>`).join('')}
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead><tr style="background:#FBF7EE">
+          ${['Paciente','Plano','Semana','Peso Inicial','Peso Atual','Perda','%','Engajamento'].map(h=>`<th style="text-align:left;padding:7px 8px;font-weight:600;color:#6E5517;border-bottom:1px solid #EBDAB5">${h}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+          ${ps.map((p,i)=>`<tr style="background:${i%2===0?'#FEFCF9':'#fff'}">
+            <td style="padding:7px 8px;font-weight:500">${p.name}</td>
+            <td style="padding:7px 8px;color:#8B6D1E">${PLANS.find(x=>x.id===p.plan)?.name||p.plan}</td>
+            <td style="padding:7px 8px">S${calcWeek(p)}/16</td>
+            <td style="padding:7px 8px">${(p.iw||0).toFixed(1)}kg</td>
+            <td style="padding:7px 8px;font-weight:600">${(p.cw||0).toFixed(1)}kg</td>
+            <td style="padding:7px 8px;color:#27AE60;font-weight:600">-${Math.max(0,(p.iw||0)-(p.cw||0)).toFixed(1)}kg</td>
+            <td style="padding:7px 8px;color:#27AE60">${p.iw?((p.iw-p.cw)/p.iw*100).toFixed(1):0}%</td>
+            <td style="padding:7px 8px">${calcEng(p)}%</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    `;
+    document.body.appendChild(el);
+    html2pdf().set({ margin:8, filename:`relatorio-cohort-${format(new Date(),'yyyy-MM')}.pdf`, html2canvas:{scale:2}, jsPDF:{orientation:'landscape',unit:'mm',format:'a4'} }).from(el).save().then(()=>{ document.body.removeChild(el); showToast('Relatório PDF gerado!'); });
+  };
+
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-      {/* Filtro período */}
-      <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-        <span style={{ fontSize:11, color:G[600], fontWeight:500 }}>Período:</span>
-        {[["all","Todos"],["week","7d"],["month","30d"],["quarter","90d"],["120d","120d"]].map(([k,l]) => (
-          <div key={k} onClick={()=>setDf(k)} style={{ padding:"5px 12px", borderRadius:20, fontSize:11, cursor:"pointer", fontWeight:df===k?600:400, background:df===k?G[600]:"#fff", color:df===k?"#fff":G[700], border:`1px solid ${df===k?G[600]:G[300]}` }}>{l}</div>
-        ))}
+      {/* Filtro período + botão relatório */}
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center", justifyContent:"space-between" }}>
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+          <span style={{ fontSize:11, color:G[600], fontWeight:500 }}>Período:</span>
+          {[["all","Todos"],["week","7d"],["month","30d"],["quarter","90d"],["120d","120d"]].map(([k,l]) => (
+            <div key={k} onClick={()=>setDf(k)} style={{ padding:"5px 12px", borderRadius:20, fontSize:11, cursor:"pointer", fontWeight:df===k?600:400, background:df===k?G[600]:"#fff", color:df===k?"#fff":G[700], border:`1px solid ${df===k?G[600]:G[300]}` }}>{l}</div>
+          ))}
+        </div>
+        <button onClick={gerarRelatorioCohort} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>
+          <Download size={11}/>Relatório Cohort
+        </button>
       </div>
 
       {/* KPIs linha 1 */}
@@ -396,7 +487,7 @@ function Dash({  ps, onSel, mob }) {
         <Mt value={`${(tl/ps.length).toFixed(1)}kg`} label="Média por paciente"  icon={Weight}/>
         <Mt value={el.length}          label="Score elite"         icon={Trophy}        color={S.pur} sub={el.map(p=>p.name.split(" ")[0]).join(", ")||"—"}/>
         <Mt value={rTod.length}        label="Retornos hoje"       icon={CalendarDays}  color={S.blue} sub={rTod.map(p=>p.name.split(" ")[0]).join(", ")||"Nenhum"}/>
-        <Mt value={`${Math.round(ps.filter(p=>p.eng>=80).length/ps.length*100)}%`} label="Engajamento alto" icon={Zap} color={S.grn}/>
+        <Mt value={`${Math.round(ps.filter(p=>calcEng(p)>=80).length/ps.length*100)}%`} label="Engajamento alto" icon={Zap} color={S.grn}/>
       </div>
 
       {/* KPIs composição corporal */}
@@ -428,9 +519,12 @@ function Dash({  ps, onSel, mob }) {
       {/* Calendário + Conquistas */}
       <div style={{ display:"grid", gridTemplateColumns:gc2, gap:12 }}>
         <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
             <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Retornos próximos 7 dias</span>
-            <CalendarDays size={15} color={G[400]}/>
+            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+              {rWk.length>0 && onQuickMsg && <button onClick={e=>{e.stopPropagation();onQuickMsg(rWk.map(p=>p.id),'retorno');}} style={{ display:"flex", alignItems:"center", gap:3, padding:"3px 8px", borderRadius:6, background:S.blueBg, color:S.blue, border:`1px solid ${S.blue}30`, cursor:"pointer", fontSize:10, fontWeight:600, fontFamily:"inherit" }}><Zap size={10}/>Enviar</button>}
+              <CalendarDays size={15} color={G[400]}/>
+            </div>
           </div>
           {rWk.length===0 ? <div style={{ fontSize:12, color:"#ccc", padding:8, textAlign:"center" }}>Nenhum</div>
             : rWk.map(p => {
@@ -449,7 +543,10 @@ function Dash({  ps, onSel, mob }) {
         </div>
 
         <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
-          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Conquistas da semana</div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+            <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Conquistas da semana</span>
+            {onQuickMsg && <button onClick={()=>onQuickMsg(ps.map(p=>p.id),'conquistas')} style={{ display:"flex", alignItems:"center", gap:3, padding:"3px 8px", borderRadius:6, background:S.grnBg, color:S.grn, border:`1px solid ${S.grn}30`, cursor:"pointer", fontSize:10, fontWeight:600, fontFamily:"inherit" }}><Zap size={10}/>Parabéns</button>}
+          </div>
           {achievements.map((a,i) => (
             <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 0", borderBottom:i<achievements.length-1?`1px solid ${G[50]}`:"none" }}>
               <a.i size={14} color={a.c}/><span style={{ fontSize:11, color:G[800] }}>{a.l}</span>
@@ -502,7 +599,10 @@ function Dash({  ps, onSel, mob }) {
         </div>
 
         <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
-          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Top resultados — maior perda %</div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+            <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Top resultados — maior perda %</span>
+            {onQuickMsg && <button onClick={()=>onQuickMsg(top.map(p=>p.id),'top')} style={{ display:"flex", alignItems:"center", gap:3, padding:"3px 8px", borderRadius:6, background:`${G[500]}18`, color:G[600], border:`1px solid ${G[400]}40`, cursor:"pointer", fontSize:10, fontWeight:600, fontFamily:"inherit" }}><Zap size={10}/>Parabenizar</button>}
+          </div>
           {top.map((p,i) => (
             <div key={p.id} onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px", borderRadius:7, marginBottom:4, cursor:"pointer", background:i===0?`${G[500]}0A`:W[50] }}>
               <span style={{ fontSize:16, fontWeight:700, color:i===0?G[500]:G[300], width:20 }}>{i+1}</span>
@@ -523,9 +623,12 @@ function Dash({  ps, onSel, mob }) {
       {/* Críticos destaque */}
       {cr.length>0 && (
         <div style={{ background:S.redBg, borderRadius:12, border:`1px solid ${S.red}30`, padding:"14px 16px" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
-            <AlertTriangle size={14} color={S.red}/>
-            <span style={{ fontSize:13, fontWeight:600, color:S.red }}>Críticos — atenção imediata</span>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+              <AlertTriangle size={14} color={S.red}/>
+              <span style={{ fontSize:13, fontWeight:600, color:S.red }}>Críticos — atenção imediata</span>
+            </div>
+            {onQuickMsg && <button onClick={()=>onQuickMsg(cr.map(p=>p.id),'criticos')} style={{ display:"flex", alignItems:"center", gap:3, padding:"3px 8px", borderRadius:6, background:S.redBg, color:S.red, border:`1px solid ${S.red}30`, cursor:"pointer", fontSize:10, fontWeight:600, fontFamily:"inherit" }}><Zap size={10}/>Contatar</button>}
           </div>
           {cr.map(p => { const sc=SC[p.id]; const m=cM(sc.m); const b=cB(sc.b); return (
             <div key={p.id} onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 8px", borderRadius:7, marginBottom:3, background:"rgba(255,255,255,0.6)", cursor:"pointer" }}>
@@ -552,15 +655,17 @@ function Dash({  ps, onSel, mob }) {
               <tr key={p.id} onClick={()=>onSel(p.id)} style={{ cursor:"pointer" }}>
                 <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><div style={{ display:"flex", alignItems:"center", gap:6 }}><Av name={p.name} size={22}/><span style={{ fontWeight:500 }}>{p.name}</span></div></td>
                 <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}`, color:G[600], fontSize:10 }}>{PLANS.find(x=>x.id===p.plan)?.name}</td>
-                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><strong>{p.week}</strong>/16</td>
+                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><strong>{calcWeek(p)}</strong>/16</td>
                 <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={ms.c} bg={ms.bg}>{ms.e}{m}</Bg></td>
                 <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={bs.c} bg={bs.bg}>{bs.e}{b}</Bg></td>
                 <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={ns.c} bg={ns.bg}>{ns.e}{n}</Bg></td>
                 <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}>
+                  {(()=>{ const e=calcEng(p); return (<>
                   <div style={{ height:5, width:44, background:G[100], borderRadius:3, overflow:"hidden" }}>
-                    <div style={{ height:"100%", width:`${p.eng}%`, background:p.eng>=80?S.grn:p.eng>=60?S.yel:S.red, borderRadius:3 }}/>
+                    <div style={{ height:"100%", width:`${e}%`, background:e>=80?S.grn:e>=60?S.yel:S.red, borderRadius:3 }}/>
                   </div>
-                  <div style={{ fontSize:9, color:"#aaa" }}>{p.eng}%</div>
+                  <div style={{ fontSize:9, color:"#aaa" }}>{e}%</div>
+                  </>); })()}
                 </td>
                 <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}`, color:S.grn, fontWeight:600 }}>-{(p.iw-p.cw).toFixed(1)}kg</td>
               </tr>
@@ -936,7 +1041,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                     </div>
                   ))}
                   <div style={{ display:"flex", gap:8 }}>
-                    <button onClick={()=>{ const upd={name:editName,email:editEmail,phone:editPhone,birthDate:editBirth}; onEdit&&onEdit(upd); apiUpdatePatient(p.id,upd).catch(err=>console.warn('API update failed:',err.message)); setShowEditModal(false); }} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
+                    <button onClick={()=>{ const upd={name:editName,email:editEmail,phone:editPhone,birthDate:editBirth}; onEdit&&onEdit(upd); apiUpdatePatient(p.id,upd).then(()=>showToast('Dados atualizados')).catch(()=>showToast('Erro ao salvar dados','error')); setShowEditModal(false); }} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
                     <button onClick={()=>setShowEditModal(false)} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
                   </div>
                 </div>
@@ -1424,34 +1529,49 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
 /* ════════════════════════════════════════════
    ALERTAS
 ═══════════════════════════════════════════════ */
-function Alerts({  ps, onSel }) {
+function Alerts({ ps, onSel, dismissed = {}, onDismiss }) {
   const SC = genSC(ps);
   const data = ps.map(p => {
     const sc=SC[p.id]; if(!sc) return null;
     const m=cM(sc.m), b=cB(sc.b), n=cN(sc.n);
     const al=[];
-    if(m<=12)         al.push({t:"r",l:"Met crítico",       s:`${m}/24`,a:"Ataque+detox"});
-    if(m>=13&&m<=16)  al.push({t:"y",l:"Met transição",       s:`${m}/24`,a:"Ajustes"});
-    if(b<10)          al.push({t:"r",l:"Bem-estar crítico",  s:`${b}/18`,a:"Médica"});
-    if(b>=10&&b<=13)  al.push({t:"y",l:"Bem-estar alerta",   s:`${b}/18`,a:"Nutri"});
-    if(n<=4)          al.push({t:"r",l:"Recaída",            s:`${n}/9`, a:"Sessão individual"});
-    if(n>=5&&n<=7)    al.push({t:"y",l:"Mental construção",  s:`${n}/9`, a:"Reforço"});
+    if(m<=12         && !dismissed[`${p.id}_met_r`])  al.push({t:"r",k:"met_r", l:"Met crítico",       s:`${m}/24`,a:"Ataque+detox"});
+    if(m>=13&&m<=16  && !dismissed[`${p.id}_met_y`])  al.push({t:"y",k:"met_y", l:"Met transição",     s:`${m}/24`,a:"Ajustes"});
+    if(b<10          && !dismissed[`${p.id}_bem_r`])  al.push({t:"r",k:"bem_r", l:"Bem-estar crítico", s:`${b}/18`,a:"Médica"});
+    if(b>=10&&b<=13  && !dismissed[`${p.id}_bem_y`])  al.push({t:"y",k:"bem_y", l:"Bem-estar alerta",  s:`${b}/18`,a:"Nutri"});
+    if(n<=4          && !dismissed[`${p.id}_men_r`])  al.push({t:"r",k:"men_r", l:"Recaída",           s:`${n}/9`, a:"Sessão individual"});
+    if(n>=5&&n<=7    && !dismissed[`${p.id}_men_y`])  al.push({t:"y",k:"men_y", l:"Mental construção", s:`${n}/9`, a:"Reforço"});
     return al.length ? {...p,al} : null;
   }).filter(Boolean);
   const reds = data.filter(p=>p.al.some(a=>a.t==="r"));
   const yels = data.filter(p=>p.al.every(a=>a.t==="y"));
 
+  const btnR = { display:"flex", alignItems:"center", gap:3, padding:"2px 8px", borderRadius:5, background:S.grnBg, color:S.grn, border:`1px solid ${S.grn}30`, cursor:"pointer", fontSize:10, fontWeight:600, fontFamily:"inherit", flexShrink:0 };
+
   return (
     <div>
+      {(reds.length>0||yels.length>0) && (
+        <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>
+          <button onClick={()=>{ data.forEach(p=>p.al.forEach(a=>onDismiss&&onDismiss(p.id,a.k))); }} style={{ ...btnR, background:S.grnBg }}><Check size={10}/>Resolver todos</button>
+        </div>
+      )}
       {reds.length>0 && (
         <div style={{ marginBottom:16 }}>
           <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:8 }}>
             <div style={{ width:9, height:9, borderRadius:"50%", background:S.red }}/><span style={{ fontWeight:600, color:S.red, fontSize:13 }}>Vermelhos — Dra. Mariana</span>
           </div>
           {reds.map(p => (
-            <div key={p.id} onClick={()=>onSel(p.id)} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.red}`, padding:"10px 12px", marginBottom:5, cursor:"pointer" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}><Av name={p.name} size={24}/><span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span></div>
-              {p.al.filter(a=>a.t==="r").map((a,i) => <div key={i} style={{ fontSize:11, padding:"3px 8px", background:S.redBg, borderRadius:5, marginBottom:2 }}>🔴 {a.l} ({a.s}) — <strong>{a.a}</strong></div>)}
+            <div key={p.id} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.red}`, padding:"10px 12px", marginBottom:5 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                <div onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:8, flex:1, cursor:"pointer" }}><Av name={p.name} size={24}/><span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span></div>
+                <button onClick={()=>p.al.filter(a=>a.t==="r").forEach(a=>onDismiss&&onDismiss(p.id,a.k))} style={btnR}><Check size={10}/>Resolver</button>
+              </div>
+              {p.al.filter(a=>a.t==="r").map((a,i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
+                  <div style={{ flex:1, fontSize:11, padding:"3px 8px", background:S.redBg, borderRadius:5 }}>🔴 {a.l} ({a.s}) — <strong>{a.a}</strong></div>
+                  <button onClick={()=>onDismiss&&onDismiss(p.id,a.k)} style={{ ...btnR, fontSize:9, padding:"2px 6px" }}>✓</button>
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -1462,14 +1582,22 @@ function Alerts({  ps, onSel }) {
             <div style={{ width:9, height:9, borderRadius:"50%", background:S.yel }}/><span style={{ fontWeight:600, color:S.yel, fontSize:13 }}>Amarelos — equipe</span>
           </div>
           {yels.map(p => (
-            <div key={p.id} onClick={()=>onSel(p.id)} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.yel}`, padding:"10px 12px", marginBottom:5, cursor:"pointer" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}><Av name={p.name} size={24}/><span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span></div>
-              {p.al.map((a,i) => <div key={i} style={{ fontSize:11, padding:"3px 8px", background:S.yelBg, borderRadius:5, marginBottom:2 }}>🟡 {a.l} ({a.s}) — {a.a}</div>)}
+            <div key={p.id} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.yel}`, padding:"10px 12px", marginBottom:5 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                <div onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:8, flex:1, cursor:"pointer" }}><Av name={p.name} size={24}/><span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span></div>
+                <button onClick={()=>p.al.forEach(a=>onDismiss&&onDismiss(p.id,a.k))} style={btnR}><Check size={10}/>Resolver</button>
+              </div>
+              {p.al.map((a,i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
+                  <div style={{ flex:1, fontSize:11, padding:"3px 8px", background:S.yelBg, borderRadius:5 }}>🟡 {a.l} ({a.s}) — {a.a}</div>
+                  <button onClick={()=>onDismiss&&onDismiss(p.id,a.k)} style={{ ...btnR, fontSize:9, padding:"2px 6px" }}>✓</button>
+                </div>
+              ))}
             </div>
           ))}
         </div>
       )}
-      {data.length===0 && <div style={{ textAlign:"center", padding:30 }}><div style={{ fontSize:32 }}>🟢</div><div style={{ fontSize:14, fontWeight:600, color:S.grn, marginTop:6 }}>Todos bem!</div></div>}
+      {data.length===0 && <div style={{ textAlign:"center", padding:30 }}><div style={{ fontSize:32 }}>🟢</div><div style={{ fontSize:14, fontWeight:600, color:S.grn, marginTop:6 }}>Todos bem!</div><div style={{ fontSize:12, color:"#aaa", marginTop:4 }}>Nenhum alerta ativo</div></div>}
     </div>
   );
 }
@@ -1595,19 +1723,41 @@ function TeamP({ team, setTeam, ta, setTa, activityLog }) {
 /* ════════════════════════════════════════════
    PORTAL DO PACIENTE (Read-only)
 ═══════════════════════════════════════════════ */
-function Portal({  p, av, setAv }) {
-  const SC = genSC([p]);
+function Portal({ p, av, setAv }) {
+  const SC   = genSC([p]);
   const sc   = SC[p.id];
   const met  = cM(sc?.m); const be=cB(sc?.b); const mn=cN(sc?.n);
   const pm   = sc ? pM(sc.m) : {comp:0,infl:0,glic:0,card:0};
   const hist = HIST(p.id);
   const plan = PLANS.find(x=>x.id===p.plan);
-  const pct  = Math.round((p.week||1)/16*100);
-  const tasks=[
-    {d:true, l:"Tirzepatida aplicada"},
-    {d:true, l:"Pesagem semanal"},
-    {d:false,l:"Treino 2 — Pulsare"},
+  const tier = TIER[plan?.tier||3];
+  const currentWeek = calcWeek(p);
+  const pct  = Math.round(currentWeek/16*100);
+
+  // Última pesagem
+  const lastH    = (p.history||[]).slice(-1)[0];
+  const lastDate = lastH?.date ? new Date(lastH.date) : null;
+  const daysSinceWeigh = lastDate ? Math.floor((TODAY-lastDate)/(1000*60*60*24)) : null;
+
+  // Próximo retorno
+  const nextRet = p.nr ? new Date(p.nr) : null;
+  const daysToRet = nextRet ? Math.ceil((nextRet-TODAY)/(1000*60*60*24)) : null;
+
+  // Semana de exames
+  const examWeek = [4,8,16].includes(currentWeek);
+
+  // Itens esperados esta semana baseado no plano
+  const weekItems = [
+    { l:"Tirzepatida aplicada",             done: lastH?.date ? daysSinceWeigh <= 7 : false },
+    { l:"Pesagem semanal",                  done: daysSinceWeigh !== null && daysSinceWeigh <= 7 },
+    { l:`Treino 1 — Pulsare`,               done: false },
+    ...(tier.tr>=2 ? [{ l:"Treino 2 — Pulsare", done:false }] : []),
+    ...(tier.tr>=3 ? [{ l:"Treino 3 — Pulsare", done:false }] : []),
+    ...(tier.psi   ? [{ l:`Sessão psicologia (${tier.psi})`, done:false }] : []),
+    ...(examWeek   ? [{ l:"Exames laboratoriais (semana especial)", done:false }] : []),
   ];
+
+  const doneCount = weekItems.filter(x=>x.done).length;
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
@@ -1620,7 +1770,7 @@ function Portal({  p, av, setAv }) {
             <div style={{ fontSize:18, fontWeight:700 }}>Olá, {p.name.split(" ")[0]}!</div>
           </div>
         </div>
-        <div style={{ fontSize:11, opacity:0.6 }}>Plano {plan?.name} • Semana {p.week||1}/16</div>
+        <div style={{ fontSize:11, opacity:0.6 }}>Plano {plan?.name} • Semana {currentWeek}/16</div>
         <div style={{ height:6, background:"rgba(255,255,255,0.15)", borderRadius:3, marginTop:8, overflow:"hidden" }}>
           <div style={{ height:"100%", width:`${pct}%`, background:G[300], borderRadius:3 }}/>
         </div>
@@ -1629,10 +1779,30 @@ function Portal({  p, av, setAv }) {
         </div>
       </div>
 
-      {/* Métricas de peso */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+      {/* Métricas de peso + próximo retorno */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
         <Mt value={p.cw ? `${p.cw}kg` : "—"} label="Peso atual" icon={Weight}/>
         <Mt value={(p.iw&&p.cw) ? `-${(p.iw-p.cw).toFixed(1)}kg` : "—"} label="Já perdeu" icon={TrendingUp} color={S.grn}/>
+        <Mt value={daysToRet!==null ? (daysToRet===0?"Hoje":`${daysToRet}d`) : "—"} label="Próx. retorno" icon={Calendar} color={daysToRet<=2?S.red:G[600]}/>
+      </div>
+
+      {/* Minha semana */}
+      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Minha semana {currentWeek}</div>
+          <div style={{ fontSize:11, fontWeight:600, color:doneCount===weekItems.length?S.grn:G[500] }}>{doneCount}/{weekItems.length} concluídos</div>
+        </div>
+        {examWeek && <div style={{ background:"#FEF9E7", border:`1px solid #F9E79F`, borderRadius:6, padding:"5px 8px", fontSize:10, color:"#8B6D1E", marginBottom:8 }}>Semana especial — exames laboratoriais indicados</div>}
+        {weekItems.map((t,i) => (
+          <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 0", borderBottom:i<weekItems.length-1?`1px solid ${G[50]}`:"none" }}>
+            <div style={{ width:18, height:18, borderRadius:4, flexShrink:0, background:t.done?S.grnBg:G[100], border:`2px solid ${t.done?S.grn:G[300]}`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+              {t.done && <Check size={10} color={S.grn}/>}
+            </div>
+            <span style={{ fontSize:12, color:t.done?"#bbb":G[900], textDecoration:t.done?"line-through":"none" }}>{t.l}</span>
+          </div>
+        ))}
+        {daysSinceWeigh !== null && <div style={{ fontSize:9, color:"#bbb", marginTop:6 }}>Última pesagem: há {daysSinceWeigh} dia(s)</div>}
+        <div style={{ fontSize:9, color:"#ccc", marginTop:4, textAlign:"center" }}>Preenchido pela equipe — visualização apenas</div>
       </div>
 
       {/* Scores */}
@@ -1648,45 +1818,35 @@ function Portal({  p, av, setAv }) {
         })}
       </div>
 
-      {/* Progresso da semana (read-only) */}
-      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:8 }}>Progresso da semana</div>
-        {tasks.map((t,i) => (
-          <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 0", borderBottom:i<tasks.length-1?`1px solid ${G[50]}`:"none" }}>
-            <div style={{ width:18, height:18, borderRadius:4, background:t.d?S.grnBg:G[100], border:`2px solid ${t.d?S.grn:G[300]}`, display:"flex", alignItems:"center", justifyContent:"center" }}>
-              {t.d && <Check size={10} color={S.grn}/>}
-            </div>
-            <span style={{ fontSize:12, color:t.d?"#bbb":G[900], textDecoration:t.d?"line-through":"none" }}>{t.l}</span>
-          </div>
-        ))}
-        <div style={{ fontSize:9, color:"#ccc", marginTop:6, textAlign:"center" }}>Preenchido pela equipe — visualização apenas</div>
-      </div>
-
       {/* Curva de peso */}
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
         <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Curva de peso</div>
-        <ResponsiveContainer width="100%" height={160}>
-          <AreaChart data={(p.history||[]).map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
-            <defs><linearGradient id="gpt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.grn} stopOpacity={0.2}/><stop offset="100%" stopColor={S.grn} stopOpacity={0}/></linearGradient></defs>
-            <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis domain={["dataMin-2","dataMax+1"]} tick={{fontSize:9,fill:"#bbb"}}/>
-            <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Area type="monotone" dataKey="w" stroke={S.grn} fill="url(#gpt)" strokeWidth={2}/>
-          </AreaChart>
-        </ResponsiveContainer>
+        {(p.history||[]).length > 0 ? (
+          <ResponsiveContainer width="100%" height={160}>
+            <AreaChart data={(p.history||[]).map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
+              <defs><linearGradient id="gpt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.grn} stopOpacity={0.2}/><stop offset="100%" stopColor={S.grn} stopOpacity={0}/></linearGradient></defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis domain={["dataMin-2","dataMax+1"]} tick={{fontSize:9,fill:"#bbb"}}/>
+              <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Area type="monotone" dataKey="w" stroke={S.grn} fill="url(#gpt)" strokeWidth={2}/>
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : <div style={{ textAlign:"center", color:"#ccc", fontSize:12, padding:20 }}>Sem pesagens registradas ainda</div>}
       </div>
 
       {/* Evolução scores */}
-      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Evolução dos scores</div>
-        <ResponsiveContainer width="100%" height={170}>
-          <LineChart data={hist}>
-            <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="mo" tick={{fontSize:9,fill:G[700]}}/><YAxis tick={{fontSize:9,fill:"#bbb"}}/>
-            <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Legend iconType="circle" wrapperStyle={{fontSize:9}}/>
-            <Line type="monotone" dataKey="met" name="Met"    stroke={G[500]} strokeWidth={2} dot={{r:2}}/>
-            <Line type="monotone" dataKey="be"  name="Bem"    stroke={S.grn}  strokeWidth={2} dot={{r:2}}/>
-            <Line type="monotone" dataKey="mn"  name="Mental" stroke={S.pur}  strokeWidth={2} dot={{r:2}}/>
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+      {hist.length > 0 && (
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Evolução dos scores</div>
+          <ResponsiveContainer width="100%" height={170}>
+            <LineChart data={hist}>
+              <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="mo" tick={{fontSize:9,fill:G[700]}}/><YAxis tick={{fontSize:9,fill:"#bbb"}}/>
+              <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Legend iconType="circle" wrapperStyle={{fontSize:9}}/>
+              <Line type="monotone" dataKey="met" name="Met"    stroke={G[500]} strokeWidth={2} dot={{r:2}}/>
+              <Line type="monotone" dataKey="be"  name="Bem"    stroke={S.grn}  strokeWidth={2} dot={{r:2}}/>
+              <Line type="monotone" dataKey="mn"  name="Mental" stroke={S.pur}  strokeWidth={2} dot={{r:2}}/>
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* Radar metabólico */}
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
@@ -1697,6 +1857,15 @@ function Portal({  p, av, setAv }) {
             <Radar dataKey="v" stroke={G[500]} fill={G[400]} fillOpacity={0.2} strokeWidth={2}/>
           </RadarChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* Contato com equipe */}
+      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:8 }}>Fale com a equipe</div>
+        <div style={{ fontSize:11, color:G[600], marginBottom:10 }}>Dúvidas, sintomas ou intercorrências? Fale diretamente com a equipe pelo WhatsApp.</div>
+        <a href="https://wa.me/5524999999999" target="_blank" rel="noopener noreferrer" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px", borderRadius:8, background:"#25D366", color:"#fff", fontSize:12, fontWeight:600, textDecoration:"none", cursor:"pointer" }}>
+          <MessageCircle size={14}/>WhatsApp da equipe
+        </a>
       </div>
 
       <button onClick={()=>{ const el=document.getElementById(`portal-rel-${p.id}`); if(el) html2pdf().set({margin:10,filename:`meu-relatorio.pdf`,html2canvas:{scale:2},jsPDF:{format:"a4"}}).from(el).save(); }} style={{ width:"100%", padding:"10px", borderRadius:8, background:"transparent", border:`1px solid ${G[300]}`, color:G[700], fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
@@ -1868,10 +2037,10 @@ function WeighInModal({ p, onClose, onSave, onLog }) {
                 caption:   `📊 Resultado visual — Semana ${weekNum}`,
               }),
             });
-            if (!mRes.ok) console.warn('[Card] falha HTTP:', mRes.status);
+            if (!mRes.ok) showToast('Falha ao enviar card visual','warning');
             const mData = await mRes.json().catch(()=>({}));
-            if (!mData.ok) console.warn('[Card] Evolution API rejeitou:', mData);
-          } catch (e) { console.warn('Erro ao enviar card:', e); }
+            if (!mData.ok) showToast('Evolution API rejeitou o card','warning');
+          } catch (e) { showToast('Erro ao enviar card visual','warning'); }
         }
 
         setWaStatus(ok1 ? 'ok' : 'err');
@@ -2790,7 +2959,7 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
                 caption:     attachment.caption || '',
               }),
             });
-          } catch(e) { console.warn('Erro ao enviar mídia:', e); }
+          } catch(e) { showToast('Erro ao enviar mídia','warning'); }
         }
       }
     } catch(e) { alert(e.message); }
@@ -3283,6 +3452,28 @@ export default function App() {
   const sp  = ps.find(p => p.id===sid);
   const go  = id => { setSid(id); setPage("det"); };
 
+  // Mensagem rápida (atalhos do dashboard)
+  const [quickMsg,   setQuickMsg]   = useState(null); // {pids:[], ctx:''}
+  const [appTmpls,   setAppTmpls]   = useState([]);
+  useEffect(() => {
+    if (!dbLoaded) return;
+    authFetch('/api/templates').then(r=>r.ok?r.json():[]).then(t=>{ if(Array.isArray(t)) setAppTmpls(t); }).catch(()=>{});
+  }, [dbLoaded]);
+
+  // Alertas resolvidos (persiste em localStorage)
+  const [dismissed, setDismissed] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('serlivre_dismissed') || '{}'); } catch { return {}; }
+  });
+  const dismissAlert = (patientId, alertKey) => {
+    const key = `${patientId}_${alertKey}`;
+    setDismissed(prev => {
+      const next = { ...prev, [key]: Date.now() };
+      localStorage.setItem('serlivre_dismissed', JSON.stringify(next));
+      return next;
+    });
+    showToast('Alerta resolvido', 'success');
+  };
+
   /* alertas críticos */
   const ac = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); }).length;
 
@@ -3350,11 +3541,21 @@ export default function App() {
   /* ─── CONTEÚDO ADMIN ─── */
   const content = (
     <>
-      {page==="dash"  && <Dash  ps={ps} onSel={go} mob={mob}/>}
+      {quickMsg && (
+        <div style={{ position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,0.55)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={e=>{if(e.target===e.currentTarget)setQuickMsg(null);}}>
+          <MessageComposer
+            ps={quickMsg.pids ? ps.filter(p=>quickMsg.pids.includes(p.id)) : ps}
+            templates={appTmpls}
+            onClose={()=>setQuickMsg(null)}
+            onSent={()=>{ setQuickMsg(null); showToast('Mensagem(s) enviada(s)!'); }}
+          />
+        </div>
+      )}
+      {page==="dash"  && <Dash  ps={ps} onSel={go} mob={mob} onQuickMsg={(pids,ctx)=>setQuickMsg({pids,ctx})}/>}
       {page==="cal"   && <CalendarPage ps={ps} team={team} onSel={go} mob={mob}/>}
       {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)}
-          onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(err=>console.warn('API delete failed:', err.message)); }}
-          onBulkDelete={ids=>{ setPs(prev=>prev.filter(x=>!ids.includes(x.id))); ids.forEach(id=>apiDeletePatient(id).catch(err=>console.warn('API bulk delete failed:', err.message))); }}/>}
+          onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(()=>showToast('Erro ao excluir paciente','error')); }}
+          onBulkDelete={ids=>{ setPs(prev=>prev.filter(x=>!ids.includes(x.id))); ids.forEach(id=>apiDeletePatient(id).catch(()=>showToast('Erro ao excluir paciente','error'))); }}/>}
       {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}
         onSaveScores={scores=>{ setPs(prev=>prev.map(x=>{ if(x.id!==sp.id) return x; const h=x.history||[]; return {...x,history:h.length>0?[...h.slice(0,-1),{...h[h.length-1],...scores}]:[{...scores}]}; })); addLog({action:"scores",patientId:sp.id,patientName:sp.name,detail:"Scores metabólicos atualizados"}); }}
         onAddWeighIn={entry=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,cw:entry.weight,history:[...(x.history||[]),entry]}:x)); }}
@@ -3362,12 +3563,12 @@ export default function App() {
         onChangePlan={newPlan=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,plan:newPlan}:x)); }}
         activityLog={activityLog}
         onLog={addLog}
-        onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(err=>console.warn('API delete failed:', err.message)); setPage("pat"); }}
-        onFinish={id=>{ apiFinishProgram(id).catch(err=>console.warn('API finish failed:', err.message)); addLog({action:"finalizado",patientId:sp.id,patientName:sp.name,detail:"Programa finalizado"}); }}
-        onRestart={id=>{ setPs(prev=>prev.map(x=>x.id===id?{...x,cycle:(x.cycle||1)+1,week:1}:x)); apiRestartProgram(id).catch(err=>console.warn('API restart failed:', err.message)); addLog({action:"reinicio",patientId:sp.id,patientName:sp.name,detail:`Novo ciclo iniciado: C${(sp.cycle||1)+1}`}); }}
+        onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(()=>showToast('Erro ao excluir paciente','error')); setPage("pat"); }}
+        onFinish={id=>{ apiFinishProgram(id).catch(()=>showToast('Erro ao finalizar programa','error')); addLog({action:"finalizado",patientId:sp.id,patientName:sp.name,detail:"Programa finalizado"}); }}
+        onRestart={id=>{ setPs(prev=>prev.map(x=>x.id===id?{...x,cycle:(x.cycle||1)+1,week:1}:x)); apiRestartProgram(id).catch(()=>showToast('Erro ao reiniciar programa','error')); addLog({action:"reinicio",patientId:sp.id,patientName:sp.name,detail:`Novo ciclo iniciado: C${(sp.cycle||1)+1}`}); }}
         onEdit={upd=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,...upd}:x)); }}/>}
       {page==="comms" && <CommsPage ps={ps} team={team} mob={mob}/>}
-      {page==="alert" && <Alerts ps={ps} onSel={go}/>}
+      {page==="alert" && <Alerts ps={ps} onSel={go} dismissed={dismissed} onDismiss={dismissAlert}/>}
       {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog}/>}
     </>
   );
@@ -3375,6 +3576,7 @@ export default function App() {
   /* ─── MOBILE ─── */
   if (mob) return (
     <div style={{ fontFamily:"'Outfit','Inter',system-ui,sans-serif", background:W[50], minHeight:"100vh", color:"#2C2C2A", paddingBottom:62 }}>
+      <ToastContainer/>
       {/* Top bar */}
       <div style={{ position:"sticky", top:0, zIndex:50, background:"#fff", borderBottom:`1px solid ${G[200]}`, padding:"10px 12px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
@@ -3391,7 +3593,7 @@ export default function App() {
       </div>
       {/* Conteúdo */}
       <div style={{ padding:"10px 12px" }}>
-        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setPs(prev=>[...prev,np]); addLog({action:"cadastro",patientId:np.id,patientName:np.name,detail:"Novo paciente cadastrado"}); apiCreatePatient({ name:np.name, email:np.email, phone:np.phone, plan:np.plan, birthDate:np.birthDate, initialWeight:np.iw }).catch(err=>console.warn('API patient creation failed (SMTP may not be configured):', err.message)); }}/>}
+        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setPs(prev=>[...prev,np]); addLog({action:"cadastro",patientId:np.id,patientName:np.name,detail:"Novo paciente cadastrado"}); apiCreatePatient({ name:np.name, email:np.email, phone:np.phone, plan:np.plan, birthDate:np.birthDate, initialWeight:np.iw }).catch(()=>showToast('Erro ao cadastrar paciente na API','error')); }}/>}
         {content}</div>
       {/* Bottom nav */}
       <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:`1px solid ${G[200]}`, display:"flex", justifyContent:"space-around", padding:"6px 0 max(6px,env(safe-area-inset-bottom))", zIndex:50 }}>
@@ -3412,6 +3614,7 @@ export default function App() {
   /* ─── DESKTOP ─── */
   return (
     <div style={{ fontFamily:"'Outfit','Inter',system-ui,sans-serif", background:W[50], minHeight:"100vh", color:"#2C2C2A" }}>
+      <ToastContainer/>
       {/* Sidebar */}
       <div style={{ width:220, background:`linear-gradient(180deg,${G[800]},${G[900]})`, color:"#fff", position:"fixed", top:0, left:0, height:"100vh", zIndex:100, display:"flex", flexDirection:"column", transform:so?"none":"translateX(-220px)", transition:"transform 0.3s" }}>
         <div style={{ padding:"16px 14px", borderBottom:`1px solid ${G[700]}` }}>
@@ -3460,7 +3663,7 @@ export default function App() {
           </div>
         </div>
         
-        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setPs(prev=>[...prev,np]); addLog({action:"cadastro",patientId:np.id,patientName:np.name,detail:"Novo paciente cadastrado"}); apiCreatePatient({ name:np.name, email:np.email, phone:np.phone, plan:np.plan, birthDate:np.birthDate, initialWeight:np.iw }).catch(err=>console.warn('API patient creation failed (SMTP may not be configured):', err.message)); }}/>}
+        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setPs(prev=>[...prev,np]); addLog({action:"cadastro",patientId:np.id,patientName:np.name,detail:"Novo paciente cadastrado"}); apiCreatePatient({ name:np.name, email:np.email, phone:np.phone, plan:np.plan, birthDate:np.birthDate, initialWeight:np.iw }).catch(()=>showToast('Erro ao cadastrar paciente na API','error')); }}/>}
         {content}
       </div>
     </div>

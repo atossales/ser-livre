@@ -651,6 +651,19 @@ app.get('/api/alerts', authRequired, async (req, res) => {
   }
 });
 
+// Resolver alerta
+app.patch('/api/alerts/:id/resolve', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM', 'NUTRICIONISTA', 'PSICOLOGA', 'TREINADOR'), async (req, res) => {
+  try {
+    const alert = await prisma.alert.update({
+      where: { id: parseInt(req.params.id) },
+      data: { resolved: true, resolvedAt: new Date() }
+    });
+    res.json(alert);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ════════════════════════════════════════════
 //  DASHBOARD (métricas agregadas)
 // ════════════════════════════════════════════
