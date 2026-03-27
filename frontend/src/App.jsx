@@ -641,37 +641,66 @@ function Dash({ ps, onSel, mob, onQuickMsg }) {
         </div>
       )}
 
-      {/* Tabela resumo */}
-      <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:mob?"10px":"14px 16px", overflowX:"auto" }}>
+      {/* Tabela resumo — desktop full / mobile cards */}
+      <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:mob?"10px":"14px 16px" }}>
         <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Todos os pacientes</div>
-        <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:0, fontSize:11, minWidth:560 }}>
-          <thead><tr>{["Paciente","Plano","Sem","Met","Bem","Ment","Eng%","Evol"].map(h =>
-            <th key={h} style={{ textAlign:"left", padding:"6px 8px", borderBottom:`2px solid ${G[300]}`, color:G[700], fontWeight:600, fontSize:9, textTransform:"uppercase", letterSpacing:"0.04em" }}>{h}</th>
-          )}</tr></thead>
-          <tbody>{ps.map(p => {
-            const sc=SC[p.id]; const m=cM(sc?.m); const b=cB(sc?.b); const n=cN(sc?.n);
-            const ms=sM(m); const bs=sB(b); const ns=sN(n);
-            return (
-              <tr key={p.id} onClick={()=>onSel(p.id)} style={{ cursor:"pointer" }}>
-                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><div style={{ display:"flex", alignItems:"center", gap:6 }}><Av name={p.name} size={22}/><span style={{ fontWeight:500 }}>{p.name}</span></div></td>
-                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}`, color:G[600], fontSize:10 }}>{PLANS.find(x=>x.id===p.plan)?.name}</td>
-                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><strong>{calcWeek(p)}</strong>/16</td>
-                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={ms.c} bg={ms.bg}>{ms.e}{m}</Bg></td>
-                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={bs.c} bg={bs.bg}>{bs.e}{b}</Bg></td>
-                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={ns.c} bg={ns.bg}>{ns.e}{n}</Bg></td>
-                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}>
-                  {(()=>{ const e=calcEng(p); return (<>
-                  <div style={{ height:5, width:44, background:G[100], borderRadius:3, overflow:"hidden" }}>
-                    <div style={{ height:"100%", width:`${e}%`, background:e>=80?S.grn:e>=60?S.yel:S.red, borderRadius:3 }}/>
+        {mob ? (
+          /* ── MOBILE: cards compactos ── */
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            {ps.map(p => {
+              const sc=SC[p.id]; const m=cM(sc?.m); const b=cB(sc?.b);
+              const ms=sM(m); const bs=sB(b); const e=calcEng(p);
+              return (
+                <div key={p.id} onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 10px", borderRadius:8, border:`1px solid ${G[100]}`, cursor:"pointer", background:G[50] }}>
+                  <Av name={p.name} size={32}/>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:600, fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
+                    <div style={{ display:"flex", gap:5, marginTop:3, flexWrap:"wrap" }}>
+                      <Bg color={ms.c} bg={ms.bg}>{ms.e}{m}</Bg>
+                      <Bg color={bs.c} bg={bs.bg}>{bs.e}{b}</Bg>
+                    </div>
                   </div>
-                  <div style={{ fontSize:9, color:"#aaa" }}>{e}%</div>
-                  </>); })()}
-                </td>
-                <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}`, color:S.grn, fontWeight:600 }}>-{(p.iw-p.cw).toFixed(1)}kg</td>
-              </tr>
-            );
-          })}</tbody>
-        </table>
+                  <div style={{ textAlign:"right", flexShrink:0 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:S.grn }}>-{(p.iw-p.cw).toFixed(1)}kg</div>
+                    <div style={{ fontSize:9, color:"#aaa", marginTop:2 }}>S{calcWeek(p)} • {e}%</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* ── DESKTOP: tabela completa ── */
+          <div style={{ overflowX:"auto" }}>
+            <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:0, fontSize:11, minWidth:560 }}>
+              <thead><tr>{["Paciente","Plano","Sem","Met","Bem","Ment","Eng%","Evol"].map(h =>
+                <th key={h} style={{ textAlign:"left", padding:"6px 8px", borderBottom:`2px solid ${G[300]}`, color:G[700], fontWeight:600, fontSize:9, textTransform:"uppercase", letterSpacing:"0.04em" }}>{h}</th>
+              )}</tr></thead>
+              <tbody>{ps.map(p => {
+                const sc=SC[p.id]; const m=cM(sc?.m); const b=cB(sc?.b); const n=cN(sc?.n);
+                const ms=sM(m); const bs=sB(b); const ns=sN(n);
+                return (
+                  <tr key={p.id} onClick={()=>onSel(p.id)} style={{ cursor:"pointer" }}>
+                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><div style={{ display:"flex", alignItems:"center", gap:6 }}><Av name={p.name} size={22}/><span style={{ fontWeight:500 }}>{p.name}</span></div></td>
+                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}`, color:G[600], fontSize:10 }}>{PLANS.find(x=>x.id===p.plan)?.name}</td>
+                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><strong>{calcWeek(p)}</strong>/16</td>
+                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={ms.c} bg={ms.bg}>{ms.e}{m}</Bg></td>
+                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={bs.c} bg={bs.bg}>{bs.e}{b}</Bg></td>
+                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}><Bg color={ns.c} bg={ns.bg}>{ns.e}{n}</Bg></td>
+                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}` }}>
+                      {(()=>{ const e=calcEng(p); return (<>
+                      <div style={{ height:5, width:44, background:G[100], borderRadius:3, overflow:"hidden" }}>
+                        <div style={{ height:"100%", width:`${e}%`, background:e>=80?S.grn:e>=60?S.yel:S.red, borderRadius:3 }}/>
+                      </div>
+                      <div style={{ fontSize:9, color:"#aaa" }}>{e}%</div>
+                      </>); })()}
+                    </td>
+                    <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}`, color:S.grn, fontWeight:600 }}>-{(p.iw-p.cw).toFixed(1)}kg</td>
+                  </tr>
+                );
+              })}</tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1807,6 +1836,7 @@ function PortalOnboarding({ name, onClose }) {
             { icon:"📊", title:"Scores de saúde", desc:"Três pilares: metabólico, bem-estar e mental" },
             { icon:"⚖️", title:"Curva de peso",  desc:"Seu progresso de pesagem semana a semana" },
             { icon:"📅", title:"Minha semana",   desc:"Atividades previstas para a semana atual" },
+            { icon:"💬", title:"Minhas mensagens",desc:"Histórico de comunicações da equipe" },
           ].map((item,i) => (
             <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 12px", background:G[50], borderRadius:10 }}>
               <span style={{ fontSize:22 }}>{item.icon}</span>
@@ -1839,6 +1869,16 @@ function Portal({ p, av, setAv }) {
   const tier = TIER[plan?.tier||3];
   const currentWeek = calcWeek(p);
   const pct  = Math.round(currentWeek/16*100);
+
+  // Histórico de mensagens recebidas
+  const [msgs,     setMsgs]     = useState([]);
+  const [msgsLoad, setMsgsLoad] = useState(true);
+  useEffect(() => {
+    authFetch(`/api/messages/history?patientId=${p.id}&limit=10`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { setMsgs(Array.isArray(d) ? d : []); setMsgsLoad(false); })
+      .catch(() => setMsgsLoad(false));
+  }, [p.id]);
 
   // Última pesagem
   const lastH    = (p.history||[]).slice(-1)[0];
@@ -1973,6 +2013,37 @@ function Portal({ p, av, setAv }) {
             <Radar dataKey="v" stroke={G[500]} fill={G[400]} fillOpacity={0.2} strokeWidth={2}/>
           </RadarChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* Minhas mensagens */}
+      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Minhas mensagens</div>
+          {msgs.length>0 && <span style={{ fontSize:10, color:G[500] }}>{msgs.length} recebidas</span>}
+        </div>
+        {msgsLoad && <div style={{ textAlign:"center", color:"#ccc", fontSize:11, padding:"10px 0" }}>Carregando...</div>}
+        {!msgsLoad && msgs.length===0 && (
+          <div style={{ textAlign:"center", padding:"12px 0" }}>
+            <div style={{ fontSize:22, marginBottom:4 }}>💬</div>
+            <div style={{ fontSize:11, color:"#bbb" }}>Nenhuma mensagem recebida ainda</div>
+          </div>
+        )}
+        {!msgsLoad && msgs.map((m,i) => (
+          <div key={m.id||i} style={{ padding:"9px 0", borderBottom:i<msgs.length-1?`1px solid ${G[50]}`:"none" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:3 }}>
+              <span style={{ fontSize:10, fontWeight:600, color:G[600] }}>
+                {m.template?.name || "Mensagem da equipe"}
+              </span>
+              <span style={{ fontSize:9, color:"#bbb", flexShrink:0, marginLeft:8 }}>
+                {m.createdAt ? format(new Date(m.createdAt),"dd/MM HH:mm") : ""}
+              </span>
+            </div>
+            <div style={{ fontSize:11, color:"#555", lineHeight:1.5 }}>
+              {(m.body||"").slice(0,180)}{m.body?.length>180?"…":""}
+            </div>
+            {m.sentBy && <div style={{ fontSize:9, color:"#bbb", marginTop:2 }}>Enviado por {m.sentBy.name}</div>}
+          </div>
+        ))}
       </div>
 
       {/* Contato com equipe */}
