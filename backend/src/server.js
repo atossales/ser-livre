@@ -1161,20 +1161,27 @@ app.get('/api/whatsapp/status', authRequired, requireRole('ADMIN', 'MEDICA'), as
 // Enviar relatório de pesagem para paciente
 app.post('/api/whatsapp/send-report', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM', 'NUTRICIONISTA'), async (req, res) => {
   try {
-    const { patientId, weekNum, currentWeight, previousWeight, massaMagra, massaGordura } = req.body;
-    if (!patientId) return res.status(400).json({ error: 'patientId é obrigatório' });
+    const { patientId, patientName, phone: directPhone, weekNum, currentWeight, previousWeight, massaMagra, massaGordura } = req.body;
 
-    const patient = await prisma.patient.findUnique({
-      where: { id: parseInt(patientId) },
-      include: { user: { select: { name: true, phone: true } } }
-    });
-    if (!patient) return res.status(404).json({ error: 'Paciente não encontrado' });
+    let phone = directPhone || null;
+    let name  = patientName || 'Paciente';
 
-    const phone = patient.user?.phone;
-    if (!phone) return res.status(400).json({ error: 'Paciente sem telefone cadastrado' });
+    // Tenta buscar pelo Prisma apenas se o ID parecer válido (int pequeno)
+    if (patientId && parseInt(patientId) < 1e12) {
+      const patient = await prisma.patient.findUnique({
+        where: { id: parseInt(patientId) },
+        include: { user: { select: { name: true, phone: true } } }
+      });
+      if (patient) {
+        phone = patient.user?.phone || phone;
+        name  = patient.user?.name  || name;
+      }
+    }
+
+    if (!phone) return res.status(400).json({ error: 'Telefone do paciente não encontrado' });
 
     const result = await sendWeighInReport(
-      { name: patient.user.name, phone },
+      { name, phone },
       { weekNum, currentWeight, previousWeight, massaMagra, massaGordura }
     );
 
@@ -1208,20 +1215,28 @@ app.post('/api/whatsapp/send-custom', authRequired, requireRole('ADMIN', 'MEDICA
 });
 
 // Enviar mídia (imagem/PDF) junto com mensagem para paciente
-// Usa limite aumentado pois base64 de imagens pode ultrapassar 100kb padrão
-app.post('/api/whatsapp/send-media', express.json({ limit: '15mb' }), authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM', 'NUTRICIONISTA'), async (req, res) => {
+app.post('/api/whatsapp/send-media', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM', 'NUTRICIONISTA'), async (req, res) => {
   try {
-    const { patientId, base64, mimeType, fileName, caption, textMessage } = req.body;
+    const { patientId, patientName, phone: directPhone, base64, mimeType, fileName, caption, textMessage } = req.body;
     console.log(`[MEDIA ROUTE] patientId=${patientId}, mimeType=${mimeType}, fileName=${fileName}, base64 length=${base64?.length}`);
-    if (!patientId || !base64) return res.status(400).json({ error: 'patientId e base64 são obrigatórios' });
+    if (!base64) return res.status(400).json({ error: 'base64 é obrigatório' });
 
-    // Busca telefone do paciente
-    const patient = await prisma.patient.findUnique({
-      where: { id: parseInt(patientId) },
-      include: { user: { select: { name: true, phone: true } } }
-    });
-    const phone = patient?.user?.phone;
-    if (!phone) return res.status(400).json({ error: 'Paciente sem telefone cadastrado' });
+    let phone = directPhone || null;
+    let name  = patientName || 'Paciente';
+
+    // Tenta buscar pelo Prisma apenas se o ID parecer válido (int pequeno)
+    if (patientId && parseInt(patientId) < 1e12) {
+      const patient = await prisma.patient.findUnique({
+        where: { id: parseInt(patientId) },
+        include: { user: { select: { name: true, phone: true } } }
+      });
+      if (patient) {
+        phone = patient.user?.phone || phone;
+        name  = patient.user?.name  || name;
+      }
+    }
+
+    if (!phone) return res.status(400).json({ error: 'Telefone do paciente não encontrado' });
 
     const { sendMedia, sendWhatsApp } = require('./utils/whatsapp');
     const results = {};

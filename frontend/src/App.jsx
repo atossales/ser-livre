@@ -1837,6 +1837,8 @@ function WeighInModal({ p, onClose, onSave, onLog }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             patientId:      p.id,
+            patientName:    p.name,
+            phone:          p.phone,
             weekNum,
             currentWeight:  w,
             previousWeight: prevWeight,
@@ -1857,7 +1859,9 @@ function WeighInModal({ p, onClose, onSave, onLog }) {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                patientId: p.id,
+                patientId:   p.id,
+                patientName: p.name,
+                phone:       p.phone,
                 base64,
                 mimeType:  'image/jpeg',
                 fileName:  `pesagem-semana${weekNum}.jpg`,
@@ -2777,11 +2781,13 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                patientId: patId,
-                base64:    attachment.base64,
-                mimeType:  attachment.mimeType,
-                fileName:  attachment.fileName,
-                caption:   attachment.caption || '',
+                patientId:   patId,
+                patientName: pat.name,
+                phone:       pat.phone,
+                base64:      attachment.base64,
+                mimeType:    attachment.mimeType,
+                fileName:    attachment.fileName,
+                caption:     attachment.caption || '',
               }),
             });
           } catch(e) { console.warn('Erro ao enviar mídia:', e); }
