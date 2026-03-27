@@ -726,6 +726,18 @@ function PList({  ps, onSel, mob, onAdd, onDelete, onBulkDelete }) {
           </button>
         )}
       </div>
+      {f.length===0 && (
+        <div style={{ textAlign:"center", padding:"40px 20px", color:"#bbb" }}>
+          <div style={{ fontSize:36, marginBottom:10 }}>👥</div>
+          <div style={{ fontSize:14, fontWeight:600, color:G[600], marginBottom:4 }}>
+            {q || fp!=="all" ? "Nenhum paciente encontrado" : "Nenhum paciente cadastrado"}
+          </div>
+          <div style={{ fontSize:12, marginBottom:16 }}>
+            {q || fp!=="all" ? "Tente ajustar a busca ou o filtro de plano." : "Adicione seu primeiro paciente para começar."}
+          </div>
+          {!q && fp==="all" && <button onClick={onAdd} style={{ padding:"9px 20px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 }}><Plus size={13}/>Novo paciente</button>}
+        </div>
+      )}
       <div style={{ display:"grid", gap:6 }}>
         {f.map(p => {
           const sc=SC[p.id]; const m=cM(sc?.m); const ms=sM(m); const isSel=sel.has(p.id);
@@ -1178,10 +1190,43 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
       {/* ABA JORNADA */}
       {tab==="jornada" && (
         <div>
+          {/* Legenda */}
+          <div style={{ display:"flex", gap:10, marginBottom:8, flexWrap:"wrap" }}>
+            {[{c:S.grn,bg:S.grnBg,l:"Concluída"},{c:G[600],bg:G[100],l:"Atual"},{c:G[500],bg:G[50],l:"Parcial"},{c:"#bbb",bg:"#fff",l:"Futura"}].map((x,i)=>(
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:4, fontSize:9, color:"#aaa" }}>
+                <div style={{ width:8, height:8, borderRadius:2, background:x.bg, border:`1.5px solid ${x.c}` }}/>
+                {x.l}
+              </div>
+            ))}
+          </div>
           <div style={{ display:"flex", gap:5, marginBottom:12, flexWrap:"wrap" }}>
             {Array.from({length:16},(_,i)=>i+1).map(w => {
-              const sp=w===8||w===16; const cur=w===p.week; const dn=w<p.week;
-              return <div key={w} onClick={()=>setSw(w)} style={{ width:30, height:30, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", fontSize:11, fontWeight:cur?700:500, background:sw===w?G[600]:dn?S.grnBg:cur?G[100]:"#fff", color:sw===w?"#fff":dn?S.grn:G[800], border:sp?`2px solid ${G[500]}`:`1px solid ${G[200]}` }}>{w}</div>;
+              const sp  = w===8||w===16;
+              const cur = w===p.week;
+              const dn  = w<p.week;
+              const fut = w>p.week;
+              // Calcula % de conclusão do checklist desta semana
+              const cw  = cl[w];
+              const items  = cw ? [cw.tirz,cw.peso,cw.bio,...(cw.tr||[])].filter(x=>x!==null&&x!==undefined) : [];
+              const done   = items.filter(Boolean).length;
+              const total  = items.length||1;
+              const pctW   = Math.round(done/total*100);
+              const partial = dn && pctW>0 && pctW<100;
+              const full    = dn && pctW===100;
+              return (
+                <div key={w} onClick={()=>setSw(w)} style={{ position:"relative", width:30, height:30, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", fontSize:11, fontWeight:cur?700:500,
+                  background: sw===w?G[600] : full?S.grnBg : cur?G[100] : partial?"#FFF8E7" : "#fff",
+                  color:      sw===w?"#fff" : full?S.grn   : cur?G[800] : G[700],
+                  border:     sp ? `2px solid ${G[500]}` : `1px solid ${full?S.grn:partial?S.yel:cur?G[400]:G[200]}` }}>
+                  {w}
+                  {/* Dot indicator */}
+                  {dn && sw!==w && (
+                    <div style={{ position:"absolute", bottom:2, right:3, width:5, height:5, borderRadius:"50%",
+                      background: full ? S.grn : partial ? S.yel : "#ccc" }}/>
+                  )}
+                  {cur && sw!==w && <div style={{ position:"absolute", top:2, right:3, width:5, height:5, borderRadius:"50%", background:G[500] }}/>}
+                </div>
+              );
             })}
           </div>
           {cl[sw] && (
@@ -1347,7 +1392,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
             <SI label="Movimento"              value={es.n.mv} onChange={v=>setEs(pr=>({...pr,n:{...pr.n,mv:v}}))} opts={[{v:1,l:"Sedentário"},{v:2,l:"Parcial"},{v:3,l:"Completo"}]}/>
             {(()=>{ const t=cN(es.n); const s=sN(t); return <div style={{ marginTop:10, padding:"8px 12px", borderRadius:8, background:s.bg, display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600, color:s.c, fontSize:12 }}>{s.e} {t}/9 — {s.l}</span><span style={{ fontSize:11, color:s.c }}>{s.d}</span></div>; })()}
           </div>
-          <button onClick={()=>{ onSaveScores && onSaveScores(es); onAddScoreMonth && onAddScoreMonth({m:es.m,b:es.b,n:es.n}); alert("✅ Scores salvos e registrados na evolução mensal!"); }} style={{ width:"100%", padding:"11px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>💾 Salvar scores (registra no histórico mensal)</button>
+          <button onClick={()=>{ onSaveScores && onSaveScores(es); onAddScoreMonth && onAddScoreMonth({m:es.m,b:es.b,n:es.n}); showToast("Scores salvos e registrados no histórico mensal!"); }} style={{ width:"100%", padding:"11px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>💾 Salvar scores (registra no histórico mensal)</button>
         </div>
       )}
 
@@ -1550,6 +1595,29 @@ function Alerts({ ps, onSel, dismissed = {}, onDismiss }) {
 
   return (
     <div>
+      {/* Painel de resumo de severidade */}
+      {(reds.length>0||yels.length>0) ? (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
+          <div style={{ background:S.redBg, border:`1px solid ${S.red}30`, borderRadius:10, padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:36, height:36, borderRadius:"50%", background:S.red, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              <span style={{ color:"#fff", fontSize:16, fontWeight:700 }}>{reds.length}</span>
+            </div>
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:S.red }}>CRÍTICO</div>
+              <div style={{ fontSize:10, color:"#aaa" }}>Dra. Mariana</div>
+            </div>
+          </div>
+          <div style={{ background:S.yelBg, border:`1px solid ${S.yel}30`, borderRadius:10, padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:36, height:36, borderRadius:"50%", background:S.yel, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              <span style={{ color:"#fff", fontSize:16, fontWeight:700 }}>{yels.length}</span>
+            </div>
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:"#B7770A" }}>ATENÇÃO</div>
+              <div style={{ fontSize:10, color:"#aaa" }}>Equipe multidisciplinar</div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {(reds.length>0||yels.length>0) && (
         <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>
           <button onClick={()=>{ data.forEach(p=>p.al.forEach(a=>onDismiss&&onDismiss(p.id,a.k))); }} style={{ ...btnR, background:S.grnBg }}><Check size={10}/>Resolver todos</button>
@@ -1558,7 +1626,7 @@ function Alerts({ ps, onSel, dismissed = {}, onDismiss }) {
       {reds.length>0 && (
         <div style={{ marginBottom:16 }}>
           <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:8 }}>
-            <div style={{ width:9, height:9, borderRadius:"50%", background:S.red }}/><span style={{ fontWeight:600, color:S.red, fontSize:13 }}>Vermelhos — Dra. Mariana</span>
+            <div style={{ width:9, height:9, borderRadius:"50%", background:S.red }}/><span style={{ fontWeight:600, color:S.red, fontSize:13 }}>Críticos — Dra. Mariana</span>
           </div>
           {reds.map(p => (
             <div key={p.id} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.red}`, padding:"10px 12px", marginBottom:5 }}>
@@ -1579,7 +1647,7 @@ function Alerts({ ps, onSel, dismissed = {}, onDismiss }) {
       {yels.length>0 && (
         <div>
           <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:8 }}>
-            <div style={{ width:9, height:9, borderRadius:"50%", background:S.yel }}/><span style={{ fontWeight:600, color:S.yel, fontSize:13 }}>Amarelos — equipe</span>
+            <div style={{ width:9, height:9, borderRadius:"50%", background:S.yel }}/><span style={{ fontWeight:600, color:"#B7770A", fontSize:13 }}>Atenção — equipe multidisciplinar</span>
           </div>
           {yels.map(p => (
             <div key={p.id} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.yel}`, padding:"10px 12px", marginBottom:5 }}>
@@ -1721,6 +1789,44 @@ function TeamP({ team, setTeam, ta, setTa, activityLog }) {
 }
 
 /* ════════════════════════════════════════════
+   PORTAL — Onboarding (primeira visita)
+═══════════════════════════════════════════════ */
+function PortalOnboarding({ name, onClose }) {
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:500, background:"rgba(0,0,0,0.65)", display:"flex", alignItems:"flex-end", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"#fff", borderRadius:20, padding:"28px 24px", width:"100%", maxWidth:440, boxShadow:"0 -8px 40px rgba(0,0,0,0.2)" }}>
+        <div style={{ textAlign:"center", marginBottom:20 }}>
+          <div style={{ fontSize:40, marginBottom:10 }}>🌱</div>
+          <div style={{ fontSize:18, fontWeight:700, color:G[800] }}>Olá, {name.split(" ")[0]}!</div>
+          <div style={{ fontSize:13, color:"#888", marginTop:6, lineHeight:1.6 }}>
+            Seja bem-vinda à sua área pessoal do <strong style={{ color:G[700] }}>Programa Ser Livre</strong>. Aqui você acompanha seu progresso semanal, scores de saúde e evolução de peso.
+          </div>
+        </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:20 }}>
+          {[
+            { icon:"📊", title:"Scores de saúde", desc:"Três pilares: metabólico, bem-estar e mental" },
+            { icon:"⚖️", title:"Curva de peso",  desc:"Seu progresso de pesagem semana a semana" },
+            { icon:"📅", title:"Minha semana",   desc:"Atividades previstas para a semana atual" },
+          ].map((item,i) => (
+            <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 12px", background:G[50], borderRadius:10 }}>
+              <span style={{ fontSize:22 }}>{item.icon}</span>
+              <div>
+                <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{item.title}</div>
+                <div style={{ fontSize:11, color:"#aaa" }}>{item.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button onClick={onClose} style={{ width:"100%", padding:"13px", borderRadius:10, background:`linear-gradient(135deg,${G[600]},${G[700]})`, color:"#fff", border:"none", fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+          Começar 🚀
+        </button>
+        <div style={{ textAlign:"center", fontSize:10, color:"#ccc", marginTop:10 }}>Instituto Dra. Mariana Wogel</div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
    PORTAL DO PACIENTE (Read-only)
 ═══════════════════════════════════════════════ */
 function Portal({ p, av, setAv }) {
@@ -1746,15 +1852,17 @@ function Portal({ p, av, setAv }) {
   // Semana de exames
   const examWeek = [4,8,16].includes(currentWeek);
 
-  // Itens esperados esta semana baseado no plano
+  // Itens esperados esta semana — 3 estados: done/pending/waiting
+  // "waiting" = a equipe não registrou ainda (não temos dados para confirmar)
+  const weighedThisWeek = daysSinceWeigh !== null && daysSinceWeigh <= 7;
   const weekItems = [
-    { l:"Tirzepatida aplicada",             done: lastH?.date ? daysSinceWeigh <= 7 : false },
-    { l:"Pesagem semanal",                  done: daysSinceWeigh !== null && daysSinceWeigh <= 7 },
-    { l:`Treino 1 — Pulsare`,               done: false },
-    ...(tier.tr>=2 ? [{ l:"Treino 2 — Pulsare", done:false }] : []),
-    ...(tier.tr>=3 ? [{ l:"Treino 3 — Pulsare", done:false }] : []),
-    ...(tier.psi   ? [{ l:`Sessão psicologia (${tier.psi})`, done:false }] : []),
-    ...(examWeek   ? [{ l:"Exames laboratoriais (semana especial)", done:false }] : []),
+    { l:"Tirzepatida aplicada", done: weighedThisWeek,  waiting: !weighedThisWeek && daysSinceWeigh !== null },
+    { l:"Pesagem semanal",      done: weighedThisWeek,  waiting: daysSinceWeigh === null },
+    { l:"Treino 1 — Pulsare",   done: false,            waiting: true },
+    ...(tier.tr>=2 ? [{ l:"Treino 2 — Pulsare",            done:false, waiting:true }] : []),
+    ...(tier.tr>=3 ? [{ l:"Treino 3 — Pulsare",            done:false, waiting:true }] : []),
+    ...(tier.psi   ? [{ l:`Sessão psicologia (${tier.psi})`,done:false, waiting:true }] : []),
+    ...(examWeek   ? [{ l:"Exames laboratoriais",           done:false, waiting:true }] : []),
   ];
 
   const doneCount = weekItems.filter(x=>x.done).length;
@@ -1794,11 +1902,18 @@ function Portal({ p, av, setAv }) {
         </div>
         {examWeek && <div style={{ background:"#FEF9E7", border:`1px solid #F9E79F`, borderRadius:6, padding:"5px 8px", fontSize:10, color:"#8B6D1E", marginBottom:8 }}>Semana especial — exames laboratoriais indicados</div>}
         {weekItems.map((t,i) => (
-          <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 0", borderBottom:i<weekItems.length-1?`1px solid ${G[50]}`:"none" }}>
-            <div style={{ width:18, height:18, borderRadius:4, flexShrink:0, background:t.done?S.grnBg:G[100], border:`2px solid ${t.done?S.grn:G[300]}`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:i<weekItems.length-1?`1px solid ${G[50]}`:"none" }}>
+            <div style={{ width:18, height:18, borderRadius:4, flexShrink:0,
+              background: t.done ? S.grnBg : t.waiting ? G[50] : G[100],
+              border: `2px solid ${t.done ? S.grn : t.waiting ? G[200] : G[300]}`,
+              display:"flex", alignItems:"center", justifyContent:"center" }}>
               {t.done && <Check size={10} color={S.grn}/>}
+              {t.waiting && <span style={{ fontSize:8, color:G[400] }}>…</span>}
             </div>
-            <span style={{ fontSize:12, color:t.done?"#bbb":G[900], textDecoration:t.done?"line-through":"none" }}>{t.l}</span>
+            <span style={{ fontSize:12, flex:1,
+              color: t.done ? "#bbb" : t.waiting ? G[500] : G[900],
+              textDecoration: t.done ? "line-through" : "none" }}>{t.l}</span>
+            {t.waiting && !t.done && <span style={{ fontSize:9, color:G[400], flexShrink:0, fontStyle:"italic" }}>aguardando</span>}
           </div>
         ))}
         {daysSinceWeigh !== null && <div style={{ fontSize:9, color:"#bbb", marginTop:6 }}>Última pesagem: há {daysSinceWeigh} dia(s)</div>}
@@ -1850,9 +1965,10 @@ function Portal({ p, av, setAv }) {
 
       {/* Radar metabólico */}
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Radar metabólico</div>
+        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:2 }}>Seus 4 pilares metabólicos</div>
+        <div style={{ fontSize:10, color:"#aaa", marginBottom:6 }}>Quanto maior a área, melhor sua saúde</div>
         <ResponsiveContainer width="100%" height={180}>
-          <RadarChart data={[{p:"Comp",v:pm.comp},{p:"Infl",v:pm.infl},{p:"Glic",v:pm.glic},{p:"Card",v:pm.card}]} outerRadius={60}>
+          <RadarChart data={[{p:"Gordura",v:pm.comp},{p:"Inflamação",v:pm.infl},{p:"Glicemia",v:pm.glic},{p:"Coração",v:pm.card}]} outerRadius={60}>
             <PolarGrid stroke={G[200]}/><PolarAngleAxis dataKey="p" tick={{fontSize:10,fill:G[700]}}/><PolarRadiusAxis domain={[0,6]} tick={{fontSize:8,fill:"#ddd"}}/>
             <Radar dataKey="v" stroke={G[500]} fill={G[400]} fillOpacity={0.2} strokeWidth={2}/>
           </RadarChart>
@@ -1868,8 +1984,38 @@ function Portal({ p, av, setAv }) {
         </a>
       </div>
 
-      <button onClick={()=>{ const el=document.getElementById(`portal-rel-${p.id}`); if(el) html2pdf().set({margin:10,filename:`meu-relatorio.pdf`,html2canvas:{scale:2},jsPDF:{format:"a4"}}).from(el).save(); }} style={{ width:"100%", padding:"10px", borderRadius:8, background:"transparent", border:`1px solid ${G[300]}`, color:G[700], fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-        <Download size={13}/>Baixar relatório PDF
+      <button onClick={()=>{
+        const html = `<div style="font-family:sans-serif;padding:24px;max-width:540px;margin:0 auto">
+          <div style="background:linear-gradient(135deg,#6E5517,#332810);border-radius:12px;padding:20px;color:#fff;margin-bottom:20px">
+            <div style="font-size:9px;opacity:0.5;margin-bottom:4px">Programa Ser Livre — Instituto Dra. Mariana Wogel</div>
+            <div style="font-size:20px;font-weight:700">${p.name}</div>
+            <div style="font-size:11px;opacity:0.6;margin-top:4px">Plano ${plan?.name||p.plan} • Semana ${currentWeek}/16 • Gerado em ${format(TODAY,'dd/MM/yyyy')}</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+            <div style="border:1px solid #EBDAB5;border-radius:8px;padding:12px;text-align:center"><div style="font-size:9px;color:#8B6D1E;text-transform:uppercase;margin-bottom:4px">Peso atual</div><div style="font-size:22px;font-weight:700;color:#4E3D12">${p.cw||'—'}kg</div></div>
+            <div style="border:1px solid #EBDAB5;border-radius:8px;padding:12px;text-align:center"><div style="font-size:9px;color:#8B6D1E;text-transform:uppercase;margin-bottom:4px">Já perdeu</div><div style="font-size:22px;font-weight:700;color:#27AE60">${(p.iw&&p.cw)?`-${(p.iw-p.cw).toFixed(1)}kg`:'—'}</div></div>
+            <div style="border:1px solid #EBDAB5;border-radius:8px;padding:12px;text-align:center"><div style="font-size:9px;color:#8B6D1E;text-transform:uppercase;margin-bottom:4px">Semana</div><div style="font-size:22px;font-weight:700;color:#4E3D12">${currentWeek}/16</div></div>
+          </div>
+          <div style="border:1px solid #EBDAB5;border-radius:8px;padding:14px;margin-bottom:14px">
+            <div style="font-size:12px;font-weight:600;color:#4E3D12;margin-bottom:10px">Scores de saúde</div>
+            ${[{l:"Saúde metabólica",v:met,m:24},{l:"Bem-estar",v:be,m:18},{l:"Blindagem mental",v:mn,m:9}].map(s=>`
+              <div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span style="color:#6E5517">${s.l}</span><span style="font-weight:700;color:#4E3D12">${s.v}/${s.m}</span></div>
+              <div style="height:5px;background:#F5ECDA;border-radius:3px"><div style="height:100%;width:${Math.round(s.v/s.m*100)}%;background:#A8872E;border-radius:3px"></div></div></div>`).join('')}
+          </div>
+          ${(p.history||[]).length>0?`<div style="border:1px solid #EBDAB5;border-radius:8px;padding:14px">
+            <div style="font-size:12px;font-weight:600;color:#4E3D12;margin-bottom:10px">Histórico de pesagens</div>
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+              <thead><tr style="background:#FBF7EE"><th style="padding:6px 8px;text-align:left;color:#6E5517">Semana</th><th style="padding:6px 8px;text-align:right;color:#6E5517">Peso</th><th style="padding:6px 8px;text-align:right;color:#6E5517">Variação</th></tr></thead>
+              <tbody>${(p.history||[]).map((h,i)=>`<tr><td style="padding:6px 8px">S${i+1}</td><td style="padding:6px 8px;text-align:right;font-weight:600">${h.weight}kg</td><td style="padding:6px 8px;text-align:right;color:${i>0&&h.weight<(p.history[i-1]?.weight||h.weight)?'#27AE60':'#C0392B'}">${i>0?`${(h.weight-(p.history[i-1]?.weight||h.weight)).toFixed(1)}kg`:'—'}</td></tr>`).join('')}</tbody>
+            </table></div>`:''}
+          <div style="text-align:center;font-size:9px;color:#bbb;margin-top:20px;padding-top:16px;border-top:1px solid #EBDAB5">Instituto Dra. Mariana Wogel — Programa Ser Livre — ${format(TODAY,'yyyy')}</div>
+        </div>`;
+        const el = document.createElement('div');
+        el.innerHTML = html;
+        document.body.appendChild(el);
+        html2pdf().set({ margin:0, filename:`relatorio-${p.name.split(' ')[0].toLowerCase()}.pdf`, html2canvas:{scale:2}, jsPDF:{format:'a4'} }).from(el).save().then(()=>document.body.removeChild(el));
+      }} style={{ width:"100%", padding:"10px", borderRadius:8, background:"transparent", border:`1px solid ${G[300]}`, color:G[700], fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+        <Download size={13}/>Baixar meu relatório PDF
       </button>
       <div style={{ textAlign:"center", fontSize:9, color:"#ccc", padding:"6px 0" }}>Instituto Dra. Mariana Wogel • Dados preenchidos pela equipe clínica</div>
     </div>
@@ -1976,7 +2122,7 @@ function WeighInModal({ p, onClose, onSave, onLog }) {
     const w    = parseFloat(peso);
     const mVal = parseFloat(mm||0);
     const gVal = parseFloat(mg||0);
-    if (!w) return alert("Informe o peso.");
+    if (!w) return showToast("Informe o peso.","error");
 
     // Peso anterior (último registro)
     const prevEntry = p.history?.[p.history.length - 1];
@@ -2162,7 +2308,7 @@ function NewMemberModal({ onClose, onSave }) {
   const [phone,     setPhone]     = useState("");
 
   const handleSave = () => {
-    if (!nome.trim()) return alert("Informe o nome.");
+    if (!nome.trim()) return showToast("Informe o nome do membro.","error");
     const roleInfo = ROLES.find(r=>r.id===role);
     const nm = { id: Date.now(), name: nome.trim(), role, label: roleInfo?.label||role, specialty, email, phone, color: roleInfo?.color||G[600], createdAt: new Date().toISOString() };
     onSave(nm);
@@ -2206,17 +2352,29 @@ function NewMemberModal({ onClose, onSave }) {
    MODAL NOVO PACIENTE
 ═══════════════════════════════════════════════ */
 function NewLeadModal({ onClose, onSave }) {
-  const [nome, setNome]   = useState("");
-  const [nasc, setNasc]   = useState("");
-  const [peso, setPeso]   = useState("");
+  const [nome,  setNome]  = useState("");
+  const [nasc,  setNasc]  = useState("");
+  const [peso,  setPeso]  = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [plan, setPlan]   = useState("essential");
+  const [plan,  setPlan]  = useState("essential");
+  const [errs,  setErrs]  = useState({});
+
+  const validate = () => {
+    const e = {};
+    if (!nome.trim())                                     e.nome  = "Nome obrigatório";
+    if (!email.trim())                                    e.email = "E-mail obrigatório";
+    else if (!/\S+@\S+\.\S+/.test(email.trim()))         e.email = "E-mail inválido";
+    if (!nasc)                                            e.nasc  = "Data de nascimento obrigatória";
+    const w = parseFloat(peso);
+    if (!peso || isNaN(w) || w <= 0)                     e.peso  = "Peso inválido (ex: 80.5)";
+    setErrs(e);
+    return Object.keys(e).length === 0;
+  };
 
   const handleSave = () => {
+    if (!validate()) return;
     const w = parseFloat(peso);
-    if (!nome.trim() || !nasc || !w) return alert("Preencha nome, nascimento e peso.");
-    if (!email.trim()) return alert("Preencha o e-mail do paciente.");
     const np = {
       id: Date.now(), name: nome.trim(), plan, cycle: 1, week: 1,
       birthDate: nasc, phone, email, sd: new Date().toISOString(),
@@ -2228,24 +2386,30 @@ function NewLeadModal({ onClose, onSave }) {
     onClose();
   };
 
+  const fields = [
+    { key:"nome",  label:"Nome completo *", val:nome,  set:setNome,  type:"text",   ph:"Ana Carolina Silva" },
+    { key:"email", label:"E-mail *",        val:email, set:setEmail, type:"email",  ph:"paciente@email.com" },
+    { key:"nasc",  label:"Nascimento *",    val:nasc,  set:setNasc,  type:"date",   ph:"" },
+    { key:"peso",  label:"Peso inicial (kg) *", val:peso, set:setPeso, type:"number", ph:"80.5" },
+    { key:"phone", label:"Telefone",        val:phone, set:setPhone, type:"tel",    ph:"(24) 99999-0000" },
+  ];
+
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"#fff", width:"100%", maxWidth:420, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:420, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)", maxHeight:"90vh", overflowY:"auto" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
           <span style={{ fontSize:16, fontWeight:700, color:G[800] }}>Novo paciente</span>
           <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50] }}>✕</div>
         </div>
-        {[
-          { label:"Nome completo", val:nome, set:setNome, type:"text", ph:"Ana Carolina Silva" },
-          { label:"E-mail *", val:email, set:setEmail, type:"email", ph:"paciente@email.com" },
-          { label:"Data de nascimento", val:nasc, set:setNasc, type:"date", ph:"" },
-          { label:"Peso inicial (kg)", val:peso, set:setPeso, type:"number", ph:"80.5" },
-          { label:"Telefone", val:phone, set:setPhone, type:"tel", ph:"(24) 99999-0000" },
-        ].map(f => (
-          <div key={f.label} style={{ marginBottom:12 }}>
-            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
-            <input type={f.type} value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph}
-              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+        {fields.map(f => (
+          <div key={f.key} style={{ marginBottom:12 }}>
+            <label style={{ fontSize:11, fontWeight:500, color:errs[f.key]?S.red:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
+            <input type={f.type} value={f.val}
+              onChange={e=>{ f.set(e.target.value); if(errs[f.key]) setErrs(prev=>({...prev,[f.key]:undefined})); }}
+              onBlur={()=>validate()}
+              placeholder={f.ph}
+              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1.5px solid ${errs[f.key]?S.red:G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box", transition:"border-color 0.15s" }}/>
+            {errs[f.key] && <div style={{ fontSize:10, color:S.red, marginTop:3 }}>⚠ {errs[f.key]}</div>}
           </div>
         ))}
         <div style={{ marginBottom:16 }}>
@@ -2380,7 +2544,7 @@ function NewApptModal({ ps, team, onClose, onSave, initial }) {
   const typeInfo = APPT_TYPES[type];
 
   const handleSave = async () => {
-    if (!date) return alert("Selecione a data.");
+    if (!date) return showToast("Selecione a data.","error");
     setSaving(true);
     const dt = new Date(`${date}T${time||"09:00"}:00`);
     const body = {
@@ -2395,7 +2559,7 @@ function NewApptModal({ ps, team, onClose, onSave, initial }) {
       const data   = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro');
       onSave(data);
-    } catch(e) { alert(e.message); }
+    } catch(e) { showToast(e.message,"error"); }
     finally { setSaving(false); }
   };
 
@@ -2698,7 +2862,7 @@ function TemplateEditor({ initial, onSave, onClose }) {
   };
 
   const handleSave = async () => {
-    if (!name.trim() || !body.trim()) return alert("Preencha nome e texto.");
+    if (!name.trim() || !body.trim()) return showToast("Preencha nome e texto.","error");
     setSaving(true);
     try {
       const url    = initial ? `/api/templates/${initial.id}` : '/api/templates';
@@ -2707,7 +2871,7 @@ function TemplateEditor({ initial, onSave, onClose }) {
       const data   = await res.json();
       if (!res.ok) throw new Error(data.error);
       onSave(data);
-    } catch(e) { alert(e.message); }
+    } catch(e) { showToast(e.message,"error"); }
     finally { setSaving(false); }
   };
 
@@ -2919,8 +3083,8 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
   const togglePat = (id) => setSelPats(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
 
   const handleSend = async () => {
-    if (!selPats.length) return alert("Selecione ao menos um paciente.");
-    if (!body) return alert("Selecione ou escreva uma mensagem.");
+    if (!selPats.length) return showToast("Selecione ao menos um paciente.","warning");
+    if (!body) return showToast("Selecione ou escreva uma mensagem.","warning");
     setSending(true);
     try {
       // Usa o texto editado no preview como customBody (inclui variáveis já substituídas)
@@ -2962,7 +3126,7 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
           } catch(e) { showToast('Erro ao enviar mídia','warning'); }
         }
       }
-    } catch(e) { alert(e.message); }
+    } catch(e) { showToast(e.message,"error"); }
     finally { setSending(false); }
   };
 
@@ -3184,7 +3348,7 @@ function MessageComposer({ ps, templates, onClose, onSent, initialPatientId }) {
         <div style={{ padding:"14px 24px", borderTop:`1px solid ${G[100]}`, display:"flex", gap:8, flexShrink:0 }}>
           {step>1 && !result && <button onClick={()=>setStep(s=>s-1)} style={{ padding:"10px 18px", background:G[100], color:G[800], border:"none", borderRadius:9, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>‹ Voltar</button>}
           {step<3 && (
-            <button onClick={()=>{ if(step===1&&!body&&!useCustom&&!tmplId) return alert("Selecione um template."); if(step===2&&!selPats.length) return alert("Selecione ao menos um paciente."); setStep(s=>s+1); }}
+            <button onClick={()=>{ if(step===1&&!body&&!useCustom&&!tmplId) return showToast("Selecione um template.","warning"); if(step===2&&!selPats.length) return showToast("Selecione ao menos um paciente.","warning"); setStep(s=>s+1); }}
               style={{ flex:1, padding:"10px 18px", background:G[600], color:"#fff", border:"none", borderRadius:9, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
               Próximo ›
             </button>
@@ -3440,8 +3604,8 @@ export default function App() {
   };
   const SC = genSC(ps);
 
-  const [lg,   setLg]   = useState(false);
-  const [mode, setMode] = useState("admin");
+  const [lg,   setLg]   = useState(() => { try { return localStorage.getItem('serlivre_session')==='1'; } catch { return false; } });
+  const [mode, setMode] = useState(() => { try { return localStorage.getItem('serlivre_mode')||'admin'; } catch { return 'admin'; } });
   const [page, setPage] = useState("dash");
   const [sid,  setSid]  = useState(null);
   const [so,   setSo]   = useState(true);
@@ -3515,20 +3679,24 @@ export default function App() {
   );
 
   /* ─── Não logado ─── */
-  if (!lg) return <Login onLogin={m => { setLg(true); setMode(m); }}/>;
+  const doLogout = () => { setLg(false); try { localStorage.removeItem('serlivre_session'); localStorage.removeItem('serlivre_mode'); } catch {} };
+  if (!lg) return <Login onLogin={m => { setLg(true); setMode(m); try { localStorage.setItem('serlivre_session','1'); localStorage.setItem('serlivre_mode',m); } catch {} }}/>;
 
   /* ─── PORTAL DO PACIENTE ─── */
   if (mode==="paciente") {
     const pp = ps[0];
+    const [portalSeen, setPortalSeen] = useState(() => { try { return localStorage.getItem(`serlivre_portal_seen_${pp?.id}`)==='1'; } catch { return true; } });
+    const closeOnboarding = () => { setPortalSeen(true); try { localStorage.setItem(`serlivre_portal_seen_${pp?.id}`,'1'); } catch {} };
     return (
       <div style={{ fontFamily:"'Outfit','Inter',system-ui,sans-serif", background:W[50], minHeight:"100vh", color:"#2C2C2A" }}>
+        {!portalSeen && pp && <PortalOnboarding name={pp.name} onClose={closeOnboarding}/>}
         <div style={{ maxWidth:480, margin:"0 auto", padding:"10px 12px 40px" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
               <Shield size={16} color={G[500]}/>
               <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Ser Livre</span>
             </div>
-            <div onClick={()=>setLg(false)} style={{ cursor:"pointer", padding:4 }}>
+            <div onClick={doLogout} style={{ cursor:"pointer", padding:4 }}>
               <LogOut size={14} color="#bbb"/>
             </div>
           </div>
@@ -3588,7 +3756,7 @@ export default function App() {
             <Bell size={16} color={G[600]}/>
             {ac>0 && <div style={{ position:"absolute", top:-3, right:-3, width:12, height:12, borderRadius:"50%", background:S.red, color:"#fff", fontSize:8, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>{ac}</div>}
           </div>
-          <div onClick={()=>setLg(false)} style={{ cursor:"pointer" }}><LogOut size={14} color="#bbb"/></div>
+          <div onClick={doLogout} style={{ cursor:"pointer" }}><LogOut size={14} color="#bbb"/></div>
         </div>
       </div>
       {/* Conteúdo */}
@@ -3646,7 +3814,7 @@ export default function App() {
             <div style={{ fontSize:11, fontWeight:500 }}>Dra. Mariana</div>
             <div style={{ fontSize:9, opacity:0.3 }}>Admin</div>
           </div>
-          <LogOut size={12} style={{ cursor:"pointer", opacity:0.3 }} onClick={()=>setLg(false)}/>
+          <LogOut size={12} style={{ cursor:"pointer", opacity:0.3 }} onClick={doLogout}/>
         </div>
       </div>
 
