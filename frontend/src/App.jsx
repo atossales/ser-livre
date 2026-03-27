@@ -346,7 +346,7 @@ function Dash({  ps, onSel, mob }) {
   const el   = ps.filter(p => { const sc=SC[p.id]; return sc&&cM(sc.m)>=21; });
   const rTod = ps.filter(p => p.nr && fmt(p.nr)===fmt(TODAY));
   const rWk  = ps.filter(p => { if(!p.nr)return false; const d=new Date(p.nr).getTime(); return d>=TODAY.getTime()&&d<=addD(TODAY,7).getTime(); }).sort((a,b)=>new Date(a.nr)-new Date(b.nr));
-  const top  = useMemo(() => ps.map(p=>({...p,pct:((p.iw-p.cw)/p.iw*100)})).sort((a,b)=>b.pct-a.pct).slice(0,3), [ps]);
+  const top  = useMemo(() => ps.map(p=>({...p,pct:(p.iw&&p.cw)?((p.iw-p.cw)/p.iw*100):0})).sort((a,b)=>b.pct-a.pct).slice(0,3), [ps]);
   const pavg = useMemo(() => {
     const s={c:0,i:0,g:0,v:0,n:0};
     ps.forEach(p => { const sc=SC[p.id]; if(!sc)return; const pm=pM(sc.m); s.c+=pm.comp; s.i+=pm.infl; s.g+=pm.glic; s.v+=pm.card; s.n++; });
@@ -356,7 +356,7 @@ function Dash({  ps, onSel, mob }) {
   const engD = useMemo(() => ps.map(p=>({n:p.name.split(" ")[0],e:p.eng})).sort((a,b)=>b.e-a.e), [ps]);
   const wbw  = useMemo(() => {
     const w=[];
-    for(let i=1;i<=16;i++){let s=0,n=0; ps.forEach(p=>{const h=p.history||[];if(h[i-1]!==undefined){s+=p.iw-(h[i-1]?.weight||0);n++;}}); w.push({s:`S${i}`,v:n?+(s/n).toFixed(1):0});}
+    for(let i=1;i<=16;i++){let s=0,n=0; ps.forEach(p=>{if(!p.iw)return; const h=p.history||[];if(h[i-1]!==undefined){s+=p.iw-(h[i-1]?.weight||0);n++;}}); w.push({s:`S${i}`,v:n?+(s/n).toFixed(1):0});}
     return w;
   }, [ps]);
 
@@ -744,10 +744,10 @@ function RelTab({ p, mob, plan, met, be, mn }) {
         <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
           <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>⚖️ Evolução de peso</div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:10 }}>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.iw}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Peso inicial</div></div>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.cw}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Peso atual</div></div>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>-{(p.iw-p.cw).toFixed(1)}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Perdido</div></div>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>{(((p.iw-p.cw)/p.iw)*100).toFixed(1)}%</div><div style={{ fontSize:9, color:"#aaa" }}>Redução</div></div>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.iw?`${p.iw}kg`:"—"}</div><div style={{ fontSize:9, color:"#aaa" }}>Peso inicial</div></div>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.cw?`${p.cw}kg`:"—"}</div><div style={{ fontSize:9, color:"#aaa" }}>Peso atual</div></div>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>{(p.iw&&p.cw)?`-${(p.iw-p.cw).toFixed(1)}kg`:"—"}</div><div style={{ fontSize:9, color:"#aaa" }}>Perdido</div></div>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>{(p.iw&&p.cw)?`${(((p.iw-p.cw)/p.iw)*100).toFixed(1)}%`:"—"}</div><div style={{ fontSize:9, color:"#aaa" }}>Redução</div></div>
           </div>
           {histFilt.length > 0 && (
             <div style={{ overflowX:"auto" }}>
@@ -903,10 +903,10 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
       {tab==="ficha" && (
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           <div style={{ display:"grid", gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)", gap:6 }}>
-            <Mt value={`${p.iw}kg`} label="Peso inicial"/>
-            <Mt value={`${p.cw}kg`} label="Peso atual"/>
-            <Mt value={`-${(p.iw-p.cw).toFixed(1)}kg`} label="Evolução" color={S.grn}/>
-            <Mt value={`${Math.round((p.iw-p.cw)/p.iw*100)}%`} label="Perda total"/>
+            <Mt value={p.iw?`${p.iw}kg`:"—"} label="Peso inicial"/>
+            <Mt value={p.cw?`${p.cw}kg`:"—"} label="Peso atual"/>
+            <Mt value={(p.iw&&p.cw)?`-${(p.iw-p.cw).toFixed(1)}kg`:"—"} label="Evolução" color={S.grn}/>
+            <Mt value={(p.iw&&p.cw)?`${Math.round((p.iw-p.cw)/p.iw*100)}%`:"—"} label="Perda total"/>
           </div>
           <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px", fontSize:12 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, flexWrap:"wrap", gap:6 }}>
@@ -1602,7 +1602,7 @@ function Portal({  p, av, setAv }) {
   const pm   = sc ? pM(sc.m) : {comp:0,infl:0,glic:0,card:0};
   const hist = HIST(p.id);
   const plan = PLANS.find(x=>x.id===p.plan);
-  const pct  = Math.round(p.week/16*100);
+  const pct  = Math.round((p.week||1)/16*100);
   const tasks=[
     {d:true, l:"Tirzepatida aplicada"},
     {d:true, l:"Pesagem semanal"},
@@ -1620,7 +1620,7 @@ function Portal({  p, av, setAv }) {
             <div style={{ fontSize:18, fontWeight:700 }}>Olá, {p.name.split(" ")[0]}!</div>
           </div>
         </div>
-        <div style={{ fontSize:11, opacity:0.6 }}>Plano {plan?.name} • Semana {p.week}/16</div>
+        <div style={{ fontSize:11, opacity:0.6 }}>Plano {plan?.name} • Semana {p.week||1}/16</div>
         <div style={{ height:6, background:"rgba(255,255,255,0.15)", borderRadius:3, marginTop:8, overflow:"hidden" }}>
           <div style={{ height:"100%", width:`${pct}%`, background:G[300], borderRadius:3 }}/>
         </div>
@@ -1631,8 +1631,8 @@ function Portal({  p, av, setAv }) {
 
       {/* Métricas de peso */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-        <Mt value={`${p.cw}kg`} label="Peso atual" icon={Weight}/>
-        <Mt value={`-${(p.iw-p.cw).toFixed(1)}kg`} label="Já perdeu" icon={TrendingUp} color={S.grn}/>
+        <Mt value={p.cw ? `${p.cw}kg` : "—"} label="Peso atual" icon={Weight}/>
+        <Mt value={(p.iw&&p.cw) ? `-${(p.iw-p.cw).toFixed(1)}kg` : "—"} label="Já perdeu" icon={TrendingUp} color={S.grn}/>
       </div>
 
       {/* Scores */}
@@ -1666,7 +1666,7 @@ function Portal({  p, av, setAv }) {
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
         <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Curva de peso</div>
         <ResponsiveContainer width="100%" height={160}>
-          <AreaChart data={p.history.map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
+          <AreaChart data={(p.history||[]).map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
             <defs><linearGradient id="gpt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.grn} stopOpacity={0.2}/><stop offset="100%" stopColor={S.grn} stopOpacity={0}/></linearGradient></defs>
             <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis domain={["dataMin-2","dataMax+1"]} tick={{fontSize:9,fill:"#bbb"}}/>
             <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Area type="monotone" dataKey="w" stroke={S.grn} fill="url(#gpt)" strokeWidth={2}/>
@@ -3222,7 +3222,20 @@ export default function App() {
       authFetch('/api/state/team').then(r => r.ok ? r.json() : null).catch(() => null),
       authFetch('/api/state/activity').then(r => r.ok ? r.json() : null).catch(() => null),
     ]).then(([pData, tData, aData]) => {
-      if (Array.isArray(pData) && pData.length > 0) setPs(pData);
+      if (Array.isArray(pData) && pData.length > 0) {
+        // Normaliza campos que podem faltar em pacientes legados
+        const normalized = pData.map(p => ({
+          ...p,
+          iw:           p.iw   || p.cw   || 0,
+          cw:           p.cw   || p.iw   || 0,
+          week:         p.week || 1,
+          cycle:        p.cycle || 1,
+          history:      Array.isArray(p.history)      ? p.history      : [],
+          scoreHistory: Array.isArray(p.scoreHistory) ? p.scoreHistory : [],
+          eng:          p.eng  ?? 100,
+        }));
+        setPs(normalized);
+      }
       if (Array.isArray(tData) && tData.length > 0) setTeam(tData);
       if (Array.isArray(aData) && aData.length > 0) setActivityLog(aData);
       setDbLoaded(true);
