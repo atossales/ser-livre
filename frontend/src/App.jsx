@@ -308,12 +308,12 @@ function Dash({  ps, onSel, mob }) {
   })();
 
   const tl   = ps.reduce((a,p) => a+(p.iw-p.cw), 0);
-  const ae   = Math.round(ps.reduce((a,p) => a+p.eng, 0)/ps.length);
+  const ae   = ps.length ? Math.round(ps.reduce((a,p) => a+p.eng, 0)/ps.length) : 0;
   const cr   = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); });
   const el   = ps.filter(p => { const sc=SC[p.id]; return sc&&cM(sc.m)>=21; });
   const rTod = ps.filter(p => p.nr && fmt(p.nr)===fmt(TODAY));
   const rWk  = ps.filter(p => { if(!p.nr)return false; const d=new Date(p.nr).getTime(); return d>=TODAY.getTime()&&d<=addD(TODAY,7).getTime(); }).sort((a,b)=>new Date(a.nr)-new Date(b.nr));
-  const top  = useMemo(() => ps.map(p=>({...p,pct:((p.iw-p.cw)/p.iw*100)})).sort((a,b)=>b.pct-a.pct).slice(0,3), [ps]);
+  const top  = useMemo(() => ps.map(p=>({...p,pct:(p.iw>0?((p.iw-p.cw)/p.iw*100):0)})).sort((a,b)=>b.pct-a.pct).slice(0,3), [ps]);
   const pavg = useMemo(() => {
     const s={c:0,i:0,g:0,v:0,n:0};
     ps.forEach(p => { const sc=SC[p.id]; if(!sc)return; const pm=pM(sc.m); s.c+=pm.comp; s.i+=pm.infl; s.g+=pm.glic; s.v+=pm.card; s.n++; });
@@ -360,17 +360,17 @@ function Dash({  ps, onSel, mob }) {
 
       {/* KPIs linha 2 */}
       <div style={{ display:"grid", gridTemplateColumns:gc, gap:8 }}>
-        <Mt value={`${(tl/ps.length).toFixed(1)}kg`} label="Média por paciente"  icon={Weight}/>
+        <Mt value={`${ps.length?(tl/ps.length).toFixed(1):"0.0"}kg`} label="Média por paciente"  icon={Weight}/>
         <Mt value={el.length}          label="Score elite"         icon={Trophy}        color={S.pur} sub={el.map(p=>p.name.split(" ")[0]).join(", ")||"—"}/>
         <Mt value={rTod.length}        label="Retornos hoje"       icon={CalendarDays}  color={S.blue} sub={rTod.map(p=>p.name.split(" ")[0]).join(", ")||"Nenhum"}/>
-        <Mt value={`${Math.round(ps.filter(p=>p.eng>=80).length/ps.length*100)}%`} label="Engajamento alto" icon={Zap} color={S.grn}/>
+        <Mt value={`${ps.length?Math.round(ps.filter(p=>p.eng>=80).length/ps.length*100):0}%`} label="Engajamento alto" icon={Zap} color={S.grn}/>
       </div>
 
       {/* KPIs composição corporal */}
       <div style={{ display:"grid", gridTemplateColumns:mob?"1fr 1fr":"repeat(4,1fr)", gap:8 }}>
         <Mt value={`${avgMM}kg`}    label="Massa magra média"   icon={Activity} color={S.blue}  sub={`${avgPctMM}% do peso`}/>
         <Mt value={`${avgMG}kg`}    label="Massa gorda média"   icon={Weight}   color={S.yel}   sub={`${avgPctMG}% do peso`}/>
-        <Mt value={`${(tl/ps.length).toFixed(1)}kg`} label="Perda média"   icon={TrendingDown} color={S.grn}/>
+        <Mt value={`${ps.length?(tl/ps.length).toFixed(1):"0.0"}kg`} label="Perda média"   icon={TrendingDown} color={S.grn}/>
         <Mt value={`${ae}%`}        label="Engajamento"         icon={Flame}    color={ae>=80?S.grn:S.yel}/>
       </div>
 
@@ -619,7 +619,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
   const lastH = pHist[pHist.length-1];
   const mmLast = lastH?.massaMagra||0;
   const mgLast = lastH?.massaGordura||0;
-  const totComp = mmLast+mgLast||1;
+  const totComp = (mmLast+mgLast)||1;
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
@@ -684,7 +684,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
             <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.iw}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Peso inicial</div></div>
             <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.cw}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Peso atual</div></div>
             <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>-{(p.iw-p.cw).toFixed(1)}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Perdido</div></div>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>{(((p.iw-p.cw)/p.iw)*100).toFixed(1)}%</div><div style={{ fontSize:9, color:"#aaa" }}>Redução</div></div>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>{p.iw>0?(((p.iw-p.cw)/p.iw)*100).toFixed(1):"0.0"}%</div><div style={{ fontSize:9, color:"#aaa" }}>Redução</div></div>
           </div>
           {histFilt.length > 0 && (
             <div style={{ overflowX:"auto" }}>
@@ -1409,7 +1409,7 @@ function TeamP({ team, setTeam, ta, setTa, activityLog }) {
                   <div style={{ fontSize:12, fontWeight:500, color:G[800] }}>{a.patientName}</div>
                   <div style={{ fontSize:11, color:"#aaa" }}>{a.detail}</div>
                 </div>
-                <div style={{ fontSize:10, color:"#bbb", whiteSpace:"nowrap" }}>{format(new Date(a.date),"dd/MM HH:mm")}</div>
+                <div style={{ fontSize:10, color:"#bbb", whiteSpace:"nowrap" }}>{safeFmt(a.date,"dd/MM HH:mm")}</div>
               </div>
             );
           })}
