@@ -63,7 +63,7 @@ const TIER = {
   3:{ ter:null,         psi:null,         tr:2, nf:false },
 };
 
-const TODAY = new Date(2026, 2, 24);
+const TODAY = new Date();
 const fmt   = d => { const dt = new Date(d); return `${String(dt.getDate()).padStart(2,"0")}/${String(dt.getMonth()+1).padStart(2,"0")}`; };
 const addD  = (d, n) => { const r = new Date(d); r.setDate(r.getDate()+n); return r; };
 

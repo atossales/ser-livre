@@ -777,7 +777,7 @@ app.put('/api/users/:id/password', authRequired, async (req, res) => {
 //  SEED INICIAL (cria dados de demo)
 // ════════════════════════════════════════════
 
-app.post('/api/seed', async (req, res) => {
+app.post('/api/seed', authRequired, requireRole('ADMIN'), async (req, res) => {
   try {
     // Verifica se já tem dados
     const count = await prisma.user.count();
@@ -808,7 +808,7 @@ app.post('/api/seed', async (req, res) => {
 // GET  /api/state/:key  → retorna JSON salvo
 // PUT  /api/state/:key  → salva JSON
 // ════════════════════════════════════════════
-app.get('/api/state/:key', async (req, res) => {
+app.get('/api/state/:key', authRequired, async (req, res) => {
   try {
     const blob = await prisma.stateBlob.findUnique({ where: { key: req.params.key } });
     res.json(blob ? blob.value : null);
@@ -817,7 +817,7 @@ app.get('/api/state/:key', async (req, res) => {
   }
 });
 
-app.put('/api/state/:key', express.json({ limit: '20mb' }), async (req, res) => {
+app.put('/api/state/:key', authRequired, async (req, res) => {
   try {
     await prisma.stateBlob.upsert({
       where: { key: req.params.key },
