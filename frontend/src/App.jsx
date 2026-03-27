@@ -96,6 +96,14 @@ const TIER = {
 const TODAY = new Date();
 const fmt   = d => { const dt = new Date(d); return `${String(dt.getDate()).padStart(2,"0")}/${String(dt.getMonth()+1).padStart(2,"0")}`; };
 const addD  = (d, n) => { const r = new Date(d); r.setDate(r.getDate()+n); return r; };
+// safeFmt: wrapper seguro para format() do date-fns — nunca joga RangeError
+const safeFmt = (d, fmt, fb = "—") => {
+  try {
+    const dt = (d instanceof Date) ? d : new Date(d);
+    if (!d || isNaN(dt.getTime())) return fb;
+    return format(dt, fmt);
+  } catch { return fb; }
+};
 // Calcula semana atual baseado na data de início do ciclo (sd)
 const calcWeek = (p) => {
   if (!p.sd) return p.week || 1;
@@ -379,7 +387,7 @@ function Dash({ ps, onSel, mob, onQuickMsg }) {
     ps.forEach(p => {
       const fh = filtHist(p);
       fh.forEach((h,i) => {
-        const k = cutoff ? format(new Date(h.date),"dd/MM") : `S${i+1}`;
+        const k = cutoff ? safeFmt(h.date,"dd/MM","??") : `S${i+1}`;
         if(!weeks[k]) weeks[k]={s:k,mm:0,mg:0,n:0};
         weeks[k].mm+=(h.massaMagra||0); weeks[k].mg+=(h.massaGordura||0); weeks[k].n++;
       });
@@ -899,7 +907,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
             <div style={{ overflowX:"auto" }}>
               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:400 }}>
                 <thead><tr>{["Data","Peso","MM (kg)","%MM","MG (kg)","%MG"].map(h=><th key={h} style={{ textAlign:"left", padding:"5px 7px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600, textTransform:"uppercase" }}>{h}</th>)}</tr></thead>
-                <tbody>{[...histFilt].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{format(new Date(h.date),"dd/MM/yy")}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{h.weight.toFixed(1)}kg</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
+                <tbody>{[...histFilt].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{safeFmt(h.date,"dd/MM/yy")}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{(h.weight||0).toFixed(1)}kg</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
                 </tbody>
               </table>
             </div>
@@ -1164,7 +1172,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                     <div style={{ overflowX:"auto" }}>
                       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:320 }}>
                         <thead><tr>{["Data","Peso","MM (kg)","%MM","MG (kg)","%MG"].map(h=><th key={h} style={{ textAlign:"left", padding:"4px 6px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600, textTransform:"uppercase" }}>{h}</th>)}</tr></thead>
-                        <tbody>{[...(p.history||[])].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{format(new Date(h.date),"dd/MM/yy")}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{h.weight.toFixed(1)}kg</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
+                        <tbody>{[...(p.history||[])].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{safeFmt(h.date,"dd/MM/yy")}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{(h.weight||0).toFixed(1)}kg</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
                         </tbody>
                       </table>
                     </div>
@@ -1196,7 +1204,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                       <div style={{ fontSize:12, fontWeight:500, color:G[800] }}>{a.memberName||"Equipe"}</div>
                       <div style={{ fontSize:11, color:"#aaa" }}>{a.detail}</div>
                     </div>
-                    <div style={{ fontSize:10, color:"#bbb", whiteSpace:"nowrap" }}>{format(new Date(a.date),"dd/MM HH:mm")}</div>
+                    <div style={{ fontSize:10, color:"#bbb", whiteSpace:"nowrap" }}>{safeFmt(a.date,"dd/MM HH:mm")}</div>
                   </div>
                 );
               })}
@@ -1293,8 +1301,8 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                 const calcEnd   = addD(sd, sw*7 - 1);
                 const ovStart = cl[sw]?.weekDate ? cl[sw].weekDate.split('T')[0] : '';
                 const ovEnd   = cl[sw]?.weekDateEnd ? cl[sw].weekDateEnd.split('T')[0] : '';
-                const dispStart = ovStart || format(calcStart,"yyyy-MM-dd");
-                const dispEnd   = ovEnd   || format(calcEnd,  "yyyy-MM-dd");
+                const dispStart = ovStart || safeFmt(calcStart,"yyyy-MM-dd","");
+                const dispEnd   = ovEnd   || safeFmt(calcEnd,  "yyyy-MM-dd","");
                 return (
                   <div style={{ background:G[50], borderRadius:8, padding:"10px 12px", marginBottom:12, border:`1px solid ${G[200]}` }}>
                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8, flexWrap:"wrap", gap:4 }}>
@@ -1328,7 +1336,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                     </div>
                     {!ovStart && !ovEnd && (
                       <div style={{ fontSize:10, color:"#aaa", marginTop:6 }}>
-                        Datas calculadas automaticamente a partir do início do programa ({p.sd ? format(new Date(p.sd),"dd/MM/yyyy") : "—"}).
+                        Datas calculadas automaticamente a partir do início do programa ({p.sd ? safeFmt(p.sd,"dd/MM/yyyy") : "—"}).
                         Edite para lançar dados retroativos de pacientes que já estavam no programa.
                       </div>
                     )}
@@ -1745,7 +1753,7 @@ function TeamP({ team, setTeam, ta, setTa, activityLog }) {
                   <div style={{ fontSize:12, fontWeight:500, color:G[800] }}>{a.patientName}</div>
                   <div style={{ fontSize:11, color:"#aaa" }}>{a.detail}</div>
                 </div>
-                <div style={{ fontSize:10, color:"#bbb", whiteSpace:"nowrap" }}>{format(new Date(a.date),"dd/MM HH:mm")}</div>
+                <div style={{ fontSize:10, color:"#bbb", whiteSpace:"nowrap" }}>{safeFmt(a.date,"dd/MM HH:mm")}</div>
               </div>
             );
           })}
@@ -2035,7 +2043,7 @@ function Portal({ p, av, setAv }) {
                 {m.template?.name || "Mensagem da equipe"}
               </span>
               <span style={{ fontSize:9, color:"#bbb", flexShrink:0, marginLeft:8 }}>
-                {m.createdAt ? format(new Date(m.createdAt),"dd/MM HH:mm") : ""}
+                {m.createdAt ? safeFmt(m.createdAt,"dd/MM HH:mm") : ""}
               </span>
             </div>
             <div style={{ fontSize:11, color:"#555", lineHeight:1.5 }}>
@@ -2179,10 +2187,11 @@ function WeighInModal({ p, onClose, onSave, onLog }) {
   const [sending,  setSending]  = useState(false);
   const [waStatus, setWaStatus] = useState(null); // null | 'ok' | 'err'
 
-  const sd = p.sd ? new Date(p.sd + 'T12:00:00') : new Date();
-  const weekStart = addDays(sd, (weekNum - 1) * 7);
-  const weekEnd   = addDays(sd, weekNum * 7 - 1);
-  const fmtFull   = d => format(d, "dd/MM/yyyy");
+  // Aceita tanto "2025-11-01" quanto "2026-03-27T12:00:00.000Z" sem adicionar T12 em ISO strings
+  const sd = p.sd ? (p.sd.includes('T') ? new Date(p.sd) : new Date(p.sd + 'T12:00:00')) : new Date();
+  const weekStart = addDays(isNaN(sd.getTime()) ? new Date() : sd, (weekNum - 1) * 7);
+  const weekEnd   = addDays(isNaN(sd.getTime()) ? new Date() : sd, weekNum * 7 - 1);
+  const fmtFull   = d => safeFmt(d, "dd/MM/yyyy", "?");
   const hasPhone  = !!(p.phone);
 
   const tot   = parseFloat(mm||0) + parseFloat(mg||0);
@@ -2450,7 +2459,7 @@ function NewLeadModal({ onClose, onSave }) {
       id: Date.now(), name: nome.trim(), plan, cycle: 1, week: 1,
       birthDate: nasc, phone, email, sd: new Date().toISOString(),
       iw: w, cw: w,
-      history: [{ date: new Date().toISOString(), weight: w, m: MOCK_HIST_BASE[0].m, b: MOCK_HIST_BASE[0].b, n: MOCK_HIST_BASE[0].n }],
+      history: [{ date: new Date().toISOString(), weight: w, massaMagra: 0, massaGordura: 0, m: {}, b: {}, n: {} }],
       nr: addDays(new Date(), 7).toISOString(), eng: 100
     };
     onSave(np);
@@ -2504,6 +2513,7 @@ function NewLeadModal({ onClose, onSave }) {
 ═══════════════════════════════════════════════ */
 function Login({ onLogin }) {
   const [mode, setMode] = useState("admin");
+  const [loginEmail, setLoginEmail] = useState('');
   const [forgotMode, setForgotMode] = useState(false);
   const [fpEmail, setFpEmail] = useState('');
   const [fpSent, setFpSent] = useState(false);
@@ -2570,13 +2580,14 @@ function Login({ onLogin }) {
             </div>
             <div style={{ marginBottom:10 }}>
               <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>E-mail</label>
-              <input style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} placeholder="email@exemplo.com"/>
+              <input value={loginEmail} onChange={e=>setLoginEmail(e.target.value)}
+                style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} placeholder="email@exemplo.com"/>
             </div>
             <div style={{ marginBottom:18 }}>
               <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Senha</label>
               <input type="password" style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} placeholder="••••••••"/>
             </div>
-            <button onClick={()=>onLogin(mode)} style={{ width:"100%", padding:"11px", borderRadius:9, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+            <button onClick={()=>onLogin(mode, loginEmail)} style={{ width:"100%", padding:"11px", borderRadius:9, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
               <Lock size={14}/>Entrar
             </button>
             <div style={{ textAlign:"center", marginTop:10 }}>
@@ -2607,8 +2618,8 @@ function NewApptModal({ ps, team, onClose, onSave, initial }) {
   const [staffId,setStaff]  = useState(initial?.staffId    || "");
   const [type,   setType]   = useState(initial?.type       || "CONSULTA_MEDICA");
   const [title,  setTitle]  = useState(initial?.title      || "");
-  const [date,   setDate]   = useState(initial?.date ? format(new Date(initial.date),"yyyy-MM-dd") : format(new Date(),"yyyy-MM-dd"));
-  const [time,   setTime]   = useState(initial?.date ? format(new Date(initial.date),"HH:mm") : "09:00");
+  const [date,   setDate]   = useState(initial?.date ? safeFmt(initial.date,"yyyy-MM-dd",format(new Date(),"yyyy-MM-dd")) : format(new Date(),"yyyy-MM-dd"));
+  const [time,   setTime]   = useState(initial?.date ? safeFmt(initial.date,"HH:mm","09:00") : "09:00");
   const [notes,  setNotes]  = useState(initial?.notes      || "");
   const [saving, setSaving] = useState(false);
 
@@ -3544,7 +3555,7 @@ function CommsPage({ ps, team, mob }) {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:4 }}>
                   <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{log.patient?.user?.name || log.phone}</div>
-                  <div style={{ fontSize:10, color:"#aaa" }}>{format(new Date(log.createdAt),"dd/MM HH:mm")}</div>
+                  <div style={{ fontSize:10, color:"#aaa" }}>{safeFmt(log.createdAt,"dd/MM HH:mm")}</div>
                 </div>
                 {log.template && <div style={{ fontSize:10, color:G[500], marginTop:1 }}>{log.template.name}</div>}
                 <div style={{ fontSize:11, color:"#888", marginTop:3, lineHeight:1.4, overflow:"hidden", maxHeight:36 }}>{log.body.slice(0,100)}{log.body.length>100?"...":""}</div>
@@ -3604,7 +3615,7 @@ function PatientCommsTab({ p, mob }) {
           <div style={{ flex:1 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               {log.template && <span style={{ fontSize:10, fontWeight:600, color:G[600] }}>{log.template.name}</span>}
-              <span style={{ fontSize:10, color:"#aaa" }}>{format(new Date(log.createdAt),"dd/MM HH:mm")}</span>
+              <span style={{ fontSize:10, color:"#aaa" }}>{safeFmt(log.createdAt,"dd/MM HH:mm")}</span>
             </div>
             <div style={{ fontSize:11, color:"#777", marginTop:3, lineHeight:1.5, whiteSpace:"pre-wrap" }}>{log.body.slice(0,160)}{log.body.length>160?"...":""}</div>
             {log.sentBy && <div style={{ fontSize:10, color:"#bbb", marginTop:2 }}>por {log.sentBy.name}</div>}
@@ -3670,13 +3681,18 @@ export default function App() {
   useEffect(() => { saveToApi('activity',  activityLog); }, [activityLog, saveToApi]);
 
   const addLog = ({ action, patientId, patientName, detail }) => {
-    const entry = { id: Date.now(), date: new Date().toISOString(), memberId:1, memberName:"Dra. Mariana Wogel", action, patientId, patientName, detail };
+    const usr = currentUser || { id:1, name:"Dra. Mariana Wogel" };
+    const entry = { id: Date.now(), date: new Date().toISOString(), memberId: usr.id||1, memberName: usr.name||"Dra. Mariana Wogel", action, patientId, patientName, detail };
     setActivityLog(prev=>[entry,...prev]);
   };
   const SC = genSC(ps);
 
   const [lg,   setLg]   = useState(() => { try { return localStorage.getItem('serlivre_session')==='1'; } catch { return false; } });
   const [mode, setMode] = useState(() => { try { return localStorage.getItem('serlivre_mode')||'admin'; } catch { return 'admin'; } });
+  // Usuário logado atualmente (nome + role para exibição na sidebar e logs)
+  const [currentUser, setCurrentUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('serlivre_current_user') || 'null'); } catch { return null; }
+  });
   const [page, setPage] = useState("dash");
   const [sid,  setSid]  = useState(null);
   const [so,   setSo]   = useState(true);
@@ -3699,6 +3715,19 @@ export default function App() {
   const [dismissed, setDismissed] = useState(() => {
     try { return JSON.parse(localStorage.getItem('serlivre_dismissed') || '{}'); } catch { return {}; }
   });
+
+  // Portal onboarding — DEVE ficar aqui (fora de qualquer condicional) para não violar as Rules of Hooks
+  const [portalSeen, setPortalSeen] = useState(() => {
+    try {
+      const pid = ps[0]?.id;
+      if (!pid) return true;
+      return localStorage.getItem(`serlivre_portal_seen_${pid}`) === '1';
+    } catch { return true; }
+  });
+  const closeOnboarding = () => {
+    setPortalSeen(true);
+    try { localStorage.setItem(`serlivre_portal_seen_${ps[0]?.id}`, '1'); } catch {}
+  };
   const dismissAlert = (patientId, alertKey) => {
     const key = `${patientId}_${alertKey}`;
     setDismissed(prev => {
@@ -3750,14 +3779,35 @@ export default function App() {
   );
 
   /* ─── Não logado ─── */
-  const doLogout = () => { setLg(false); try { localStorage.removeItem('serlivre_session'); localStorage.removeItem('serlivre_mode'); } catch {} };
-  if (!lg) return <Login onLogin={m => { setLg(true); setMode(m); try { localStorage.setItem('serlivre_session','1'); localStorage.setItem('serlivre_mode',m); } catch {} }}/>;
+  const doLogout = () => {
+    setLg(false); setCurrentUser(null);
+    try { localStorage.removeItem('serlivre_session'); localStorage.removeItem('serlivre_mode'); localStorage.removeItem('serlivre_current_user'); } catch {}
+  };
+  if (!lg) return <Login onLogin={(m, email) => {
+    setLg(true); setMode(m);
+    // Identifica membro da equipe pelo email para mostrar nome correto
+    const member = team.find(t => t.email?.toLowerCase() === email?.toLowerCase?.());
+    const usr = member || { name: "Dra. Mariana Wogel", role:"admin", label:"Administradora" };
+    setCurrentUser(usr);
+    try {
+      localStorage.setItem('serlivre_session','1');
+      localStorage.setItem('serlivre_mode',m);
+      localStorage.setItem('serlivre_current_user', JSON.stringify(usr));
+    } catch {}
+  }}/>;
 
   /* ─── PORTAL DO PACIENTE ─── */
   if (mode==="paciente") {
     const pp = ps[0];
-    const [portalSeen, setPortalSeen] = useState(() => { try { return localStorage.getItem(`serlivre_portal_seen_${pp?.id}`)==='1'; } catch { return true; } });
-    const closeOnboarding = () => { setPortalSeen(true); try { localStorage.setItem(`serlivre_portal_seen_${pp?.id}`,'1'); } catch {} };
+    // portalSeen e closeOnboarding já declarados acima (fora do if) para respeitar Rules of Hooks
+    if (!pp) return (
+      <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:W[50] }}>
+        <div style={{ textAlign:"center", color:"#aaa" }}>
+          <div style={{ fontSize:32, marginBottom:8 }}>⏳</div>
+          <div style={{ fontSize:13 }}>Carregando dados...</div>
+        </div>
+      </div>
+    );
     return (
       <div style={{ fontFamily:"'Outfit','Inter',system-ui,sans-serif", background:W[50], minHeight:"100vh", color:"#2C2C2A" }}>
         {!portalSeen && pp && <PortalOnboarding name={pp.name} onClose={closeOnboarding}/>}
@@ -3880,12 +3930,12 @@ export default function App() {
           })}
         </div>
         <div style={{ padding:"12px 14px", borderTop:`1px solid ${G[700]}`, display:"flex", alignItems:"center", gap:7 }}>
-          <Av name="Mariana Wogel" size={28} src={ta[1]}/>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:11, fontWeight:500 }}>Dra. Mariana</div>
-            <div style={{ fontSize:9, opacity:0.3 }}>Admin</div>
+          <Av name={currentUser?.name || "Mariana Wogel"} size={28} src={currentUser?.id ? ta[currentUser.id] : ta[1]}/>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:11, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{currentUser?.name?.split(" ").slice(0,2).join(" ") || "Dra. Mariana"}</div>
+            <div style={{ fontSize:9, opacity:0.4 }}>{currentUser?.label || "Administradora"}</div>
           </div>
-          <LogOut size={12} style={{ cursor:"pointer", opacity:0.3 }} onClick={doLogout}/>
+          <LogOut size={12} style={{ cursor:"pointer", opacity:0.4 }} onClick={doLogout}/>
         </div>
       </div>
 
