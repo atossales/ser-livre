@@ -51,7 +51,7 @@ const TIER = {
   3:{ ter:null,         psi:null,         tr:2, nf:false },
 };
 
-const TODAY = new Date(2026, 2, 24);
+const TODAY = new Date();
 const fmt   = d => { const dt = new Date(d); return `${String(dt.getDate()).padStart(2,"0")}/${String(dt.getMonth()+1).padStart(2,"0")}`; };
 const addD  = (d, n) => { const r = new Date(d); r.setDate(r.getDate()+n); return r; };
 
@@ -110,8 +110,10 @@ const MOCK_ACTIVITY = [
 ];
 
 const genSC = (ps) => ps.reduce((acc, p) => {
-  const last = p.history[p.history.length-1];
-  acc[p.id] = { m: last.m, b: last.b, n: last.n };
+  const hist = p.history || [];
+  const last = hist[hist.length-1];
+  if (!last) return acc;
+  acc[p.id] = { m: last.m || {}, b: last.b || {}, n: last.n || {} };
   return acc;
 }, {});
 /* ════════════════════════════════════════════
@@ -286,15 +288,15 @@ function Dash({  ps, onSel, mob }) {
   const SC = genSC(ps);
 
   // Composição corporal média atual
-  const avgMM = ps.length ? +(ps.reduce((a,p)=>{ const last=p.history[p.history.length-1]; return a+(last.massaMagra||0); },0)/ps.length).toFixed(1) : 0;
-  const avgMG = ps.length ? +(ps.reduce((a,p)=>{ const last=p.history[p.history.length-1]; return a+(last.massaGordura||0); },0)/ps.length).toFixed(1) : 0;
-  const avgPctMM = ps.length ? +(ps.reduce((a,p)=>{ const last=p.history[p.history.length-1]; const tot=(last.massaMagra||0)+(last.massaGordura||0); return a+(tot>0?(last.massaMagra/tot*100):0); },0)/ps.length).toFixed(1) : 0;
+  const avgMM = ps.length ? +(ps.reduce((a,p)=>{ const h=p.history||[]; const last=h[h.length-1]; return a+(last?.massaMagra||0); },0)/ps.length).toFixed(1) : 0;
+  const avgMG = ps.length ? +(ps.reduce((a,p)=>{ const h=p.history||[]; const last=h[h.length-1]; return a+(last?.massaGordura||0); },0)/ps.length).toFixed(1) : 0;
+  const avgPctMM = ps.length ? +(ps.reduce((a,p)=>{ const h=p.history||[]; const last=h[h.length-1]; const tot=(last?.massaMagra||0)+(last?.massaGordura||0); return a+(tot>0?((last?.massaMagra||0)/tot*100):0); },0)/ps.length).toFixed(1) : 0;
   const avgPctMG = ps.length ? +(100-avgPctMM).toFixed(1) : 0;
 
   // Histórico de composição (para gráfico)
   const compHist = (() => {
     const weeks = {};
-    ps.forEach(p => { p.history.forEach((h,i) => { const k=`S${i+1}`; if(!weeks[k]) weeks[k]={s:k,mm:0,mg:0,n:0}; weeks[k].mm+=(h.massaMagra||0); weeks[k].mg+=(h.massaGordura||0); weeks[k].n++; }); });
+    ps.forEach(p => { (p.history||[]).forEach((h,i) => { const k=`S${i+1}`; if(!weeks[k]) weeks[k]={s:k,mm:0,mg:0,n:0}; weeks[k].mm+=(h.massaMagra||0); weeks[k].mg+=(h.massaGordura||0); weeks[k].n++; }); });
     return Object.values(weeks).map(w=>({s:w.s, mm:w.n?+(w.mm/w.n).toFixed(1):0, mg:w.n?+(w.mg/w.n).toFixed(1):0}));
   })();
 
@@ -314,7 +316,7 @@ function Dash({  ps, onSel, mob }) {
   const engD = useMemo(() => ps.map(p=>({n:p.name.split(" ")[0],e:p.eng})).sort((a,b)=>b.e-a.e), [ps]);
   const wbw  = useMemo(() => {
     const w=[];
-    for(let i=1;i<=16;i++){let s=0,n=0; ps.forEach(p=>{if(p.history[i-1]!==undefined){s+=p.iw-p.history[i-1];n++;}}); w.push({s:`S${i}`,v:n?+(s/n).toFixed(1):0});}
+    for(let i=1;i<=16;i++){let s=0,n=0; ps.forEach(p=>{const h=p.history||[];if(h[i-1]!==undefined){s+=p.iw-(h[i-1]?.weight||0);n++;}}); w.push({s:`S${i}`,v:n?+(s/n).toFixed(1):0});}
     return w;
   }, [ps]);
 
@@ -597,16 +599,17 @@ function RelTab({ p, mob, plan, met, be, mn }) {
     if(relAte && d > new Date(relAte)) return false;
     return true;
   }) : sh;
-  const histFilt = relDe||relAte ? p.history.filter(h => {
+  const histFilt = relDe||relAte ? (p.history||[]).filter(h => {
     const d = new Date(h.date);
     if(relDe && d < new Date(relDe)) return false;
     if(relAte && d > new Date(relAte)) return false;
     return true;
-  }) : p.history;
+  }) : (p.history||[]);
 
   const comp1 = shFilt[0];
   const comp2 = shFilt[shFilt.length-1];
-  const lastH = p.history[p.history.length-1];
+  const pHist = p.history||[];
+  const lastH = pHist[pHist.length-1];
   const mmLast = lastH?.massaMagra||0;
   const mgLast = lastH?.massaGordura||0;
   const totComp = mmLast+mgLast||1;
@@ -903,7 +906,8 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
           )}
           {/* Composição corporal */}
           {(() => {
-            const last = p.history[p.history.length-1];
+            const _ph = p.history||[];
+            const last = _ph[_ph.length-1] || {};
             const mm = last.massaMagra || 0;
             const mg = last.massaGordura || 0;
             const tot = mm + mg || 1;
@@ -937,13 +941,13 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                   <span style={{ color:S.yel }}>■ Gorda {pctMG}%</span>
                 </div>
                 {/* Histórico de pesagens */}
-                {p.history.length > 1 && (
+                {(p.history||[]).length > 1 && (
                   <div style={{ marginTop:12 }}>
                     <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:6 }}>Histórico de pesagens</div>
                     <div style={{ overflowX:"auto" }}>
                       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:320 }}>
                         <thead><tr>{["Data","Peso","MM (kg)","%MM","MG (kg)","%MG"].map(h=><th key={h} style={{ textAlign:"left", padding:"4px 6px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600, textTransform:"uppercase" }}>{h}</th>)}</tr></thead>
-                        <tbody>{[...p.history].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{format(new Date(h.date),"dd/MM/yy")}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{h.weight.toFixed(1)}kg</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
+                        <tbody>{[...(p.history||[])].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{format(new Date(h.date),"dd/MM/yy")}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{h.weight.toFixed(1)}kg</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 6px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
                         </tbody>
                       </table>
                     </div>
@@ -984,7 +988,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
           <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
             <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Curva de peso</div>
             <ResponsiveContainer width="100%" height={160}>
-              <AreaChart data={p.history.map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
+              <AreaChart data={(p.history||[]).map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
                 <defs><linearGradient id="gpp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={G[500]} stopOpacity={0.25}/><stop offset="100%" stopColor={G[500]} stopOpacity={0}/></linearGradient></defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis domain={["dataMin-2","dataMax+1"]} tick={{fontSize:9,fill:"#bbb"}}/>
                 <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Area type="monotone" dataKey="w" stroke={G[500]} fill="url(#gpp)" strokeWidth={2}/>
@@ -1544,7 +1548,7 @@ function Portal({  p, av, setAv }) {
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
         <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Curva de peso</div>
         <ResponsiveContainer width="100%" height={160}>
-          <AreaChart data={p.history.map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
+          <AreaChart data={(p.history||[]).map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
             <defs><linearGradient id="gpt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.grn} stopOpacity={0.2}/><stop offset="100%" stopColor={S.grn} stopOpacity={0}/></linearGradient></defs>
             <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis domain={["dataMin-2","dataMax+1"]} tick={{fontSize:9,fill:"#bbb"}}/>
             <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Area type="monotone" dataKey="w" stroke={S.grn} fill="url(#gpt)" strokeWidth={2}/>
@@ -1608,9 +1612,9 @@ function WeighInModal({ p, onClose, onSave, onLog }) {
       weight: w,
       massaMagra: mVal,
       massaGordura: gVal,
-      m: p.history[p.history.length-1].m,
-      b: p.history[p.history.length-1].b,
-      n: p.history[p.history.length-1].n,
+      m: (p.history||[])[((p.history||[]).length-1)]?.m || {},
+      b: (p.history||[])[((p.history||[]).length-1)]?.b || {},
+      n: (p.history||[])[((p.history||[]).length-1)]?.n || {},
     };
     onSave(entry);
     onLog && onLog({ action:"pesagem", patientId:p.id, patientName:p.name, detail:`Peso: ${w}kg | MM: ${mVal}kg | MG: ${gVal}kg` });
@@ -1971,8 +1975,8 @@ export default function App() {
       {page==="dash"  && <Dash  ps={ps} onSel={go} mob={mob}/>}
       {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)} onDelete={id=>{ setPs(prev=>prev.filter(x=>x.id!==id)); apiDeletePatient(id).catch(err=>console.warn('API delete failed:', err.message)); }}/>}
       {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}
-        onSaveScores={scores=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,history:[...x.history.slice(0,-1),{...x.history[x.history.length-1],...scores}]}:x)); addLog({action:"scores",patientId:sp.id,patientName:sp.name,detail:"Scores metabólicos atualizados"}); }}
-        onAddWeighIn={entry=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,cw:entry.weight,history:[...x.history,entry]}:x)); }}
+        onSaveScores={scores=>{ setPs(prev=>prev.map(x=>{ if(x.id!==sp.id) return x; const h=x.history||[]; return {...x,history:h.length>0?[...h.slice(0,-1),{...h[h.length-1],...scores}]:[{...scores}]}; })); addLog({action:"scores",patientId:sp.id,patientName:sp.name,detail:"Scores metabólicos atualizados"}); }}
+        onAddWeighIn={entry=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,cw:entry.weight,history:[...(x.history||[]),entry]}:x)); }}
         onAddScoreMonth={({m,b,n})=>{ const mo=format(new Date(),"MMM/yy"); setPs(prev=>prev.map(x=>x.id===sp.id?{...x,scoreHistory:[...(x.scoreHistory||[]),{id:Date.now(),date:new Date().toISOString(),month:mo,m,b,n}]}:x)); }}
         onChangePlan={newPlan=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,plan:newPlan}:x)); }}
         activityLog={activityLog}
