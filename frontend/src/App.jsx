@@ -20,7 +20,8 @@ import {
   LogOut, ChevronRight, Search, Bell, TrendingUp, TrendingDown,
   Activity, Shield, User, Lock, Menu, Check, Download,
   ArrowLeft, Camera, Star, Award, Flame, Target, Zap, BarChart3,
-  Trophy, CalendarDays, Weight, Home, Heart, Brain, RefreshCw, Plus, Settings, UserPlus, Cake, FileSignature, Save
+  Trophy, CalendarDays, Weight, Home, Heart, Brain, RefreshCw, Plus, Settings, UserPlus, Cake, FileSignature, Save,
+  MessageCircle, Send, ChevronLeft, ChevronRight as ChevronRightIcon
 } from "lucide-react";
 
 /* ════════════════════════════════════════════
@@ -1482,6 +1483,328 @@ function TeamP({ team, setTeam, ta, setTa, activityLog }) {
 }
 
 /* ════════════════════════════════════════════
+   AGENDA / CALENDÁRIO DE RETORNOS
+═══════════════════════════════════════════════ */
+function Agenda({ ps, onSel, mob }) {
+  const [viewDate, setViewDate] = useState(new Date());
+  const [selDay,   setSelDay]   = useState(null);
+
+  const year  = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+
+  const appts = useMemo(() =>
+    ps.map(p => {
+      if (!p.nr) return null;
+      const d = new Date(p.nr);
+      return isNaN(d.getTime()) ? null : { p, d };
+    }).filter(Boolean).sort((a,b) => a.d - b.d),
+  [ps]);
+
+  const getDayAppts = (day) =>
+    appts.filter(a => a.d.getFullYear()===year && a.d.getMonth()===month && a.d.getDate()===day);
+
+  const firstDay    = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const totalCells  = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+
+  const today  = new Date();
+  const isToday = d => d===today.getDate() && month===today.getMonth() && year===today.getFullYear();
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  const upcoming = appts.filter(a => a.d >= todayMidnight).slice(0, 10);
+
+  const MN = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  const MS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const DN = ["D","S","T","Q","Q","S","S"];
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+
+      {/* Calendário */}
+      <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px" }}>
+        {/* Navegação mês */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+          <div onClick={()=>{ setViewDate(new Date(year,month-1,1)); setSelDay(null); }}
+            style={{ cursor:"pointer", padding:"4px 8px", borderRadius:7, background:G[50], border:`1px solid ${G[200]}` }}>
+            <ChevronLeft size={14} color={G[700]}/>
+          </div>
+          <span style={{ fontSize:14, fontWeight:700, color:G[800] }}>{MN[month]} {year}</span>
+          <div onClick={()=>{ setViewDate(new Date(year,month+1,1)); setSelDay(null); }}
+            style={{ cursor:"pointer", padding:"4px 8px", borderRadius:7, background:G[50], border:`1px solid ${G[200]}` }}>
+            <ChevronRightIcon size={14} color={G[700]}/>
+          </div>
+        </div>
+        {/* Cabeçalho dias da semana */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", textAlign:"center", marginBottom:4 }}>
+          {DN.map((d,i) => <div key={i} style={{ fontSize:9, color:"#bbb", fontWeight:600, padding:"2px 0" }}>{d}</div>)}
+        </div>
+        {/* Grade */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2 }}>
+          {Array.from({length:totalCells},(_,i) => {
+            const day  = i - firstDay + 1;
+            const valid = day >= 1 && day <= daysInMonth;
+            const da   = valid ? getDayAppts(day) : [];
+            const isTod = valid && isToday(day);
+            const isSel = valid && selDay===day;
+            return (
+              <div key={i} onClick={()=>valid && setSelDay(selDay===day ? null : day)}
+                style={{ padding:"5px 2px", textAlign:"center", borderRadius:7, cursor:valid?"pointer":"default",
+                  background:isSel?G[600]:isTod?G[100]:"transparent", minHeight:32 }}>
+                {valid && <>
+                  <div style={{ fontSize:11, fontWeight:isTod||isSel?700:400,
+                    color:isSel?"#fff":isTod?G[700]:"#555" }}>{day}</div>
+                  {da.length > 0 && (
+                    <div style={{ display:"flex", justifyContent:"center", gap:2, marginTop:2 }}>
+                      {da.slice(0,3).map((_,j) => (
+                        <div key={j} style={{ width:5,height:5,borderRadius:"50%",
+                          background:isSel?"rgba(255,255,255,0.75)":G[500] }}/>
+                      ))}
+                    </div>
+                  )}
+                </>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Retornos do dia selecionado */}
+      {selDay && (
+        <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[300]}`, padding:"12px 14px" }}>
+          <div style={{ fontSize:12, fontWeight:600, color:G[800], marginBottom:8 }}>
+            {selDay} de {MN[month]}
+            <span style={{ fontSize:11, fontWeight:400, color:"#aaa", marginLeft:6 }}>
+              {getDayAppts(selDay).length} retorno{getDayAppts(selDay).length!==1?"s":""}
+            </span>
+          </div>
+          {getDayAppts(selDay).length === 0 ? (
+            <div style={{ color:"#ccc", fontSize:12, textAlign:"center", padding:"12px 0" }}>Nenhum retorno neste dia</div>
+          ) : getDayAppts(selDay).map((a,i,arr) => (
+            <div key={i} onClick={()=>onSel(a.p.id)}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
+                borderBottom:i<arr.length-1?`1px solid ${G[50]}`:"none", cursor:"pointer" }}>
+              <Av name={a.p.name} size={34}/>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{a.p.name}</div>
+                <div style={{ fontSize:10, color:"#aaa" }}>
+                  {PLANS.find(x=>x.id===a.p.plan)?.name} · C{a.p.cycle} S{a.p.week}/16
+                </div>
+              </div>
+              <ChevronRightIcon size={14} color={G[400]}/>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Próximos retornos */}
+      <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px" }}>
+        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>📅 Próximos retornos</div>
+        {upcoming.length === 0 ? (
+          <div style={{ textAlign:"center", padding:"20px 0", color:"#ccc", fontSize:12 }}>
+            Nenhum retorno agendado
+          </div>
+        ) : upcoming.map((a,i,arr) => {
+          const isNow = a.d.toDateString() === today.toDateString();
+          const diff  = Math.ceil((a.d - todayMidnight) / 86400000);
+          const plan  = PLANS.find(x=>x.id===a.p.plan);
+          return (
+            <div key={i} onClick={()=>onSel(a.p.id)}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
+                borderBottom:i<arr.length-1?`1px solid ${G[50]}`:"none", cursor:"pointer" }}>
+              <div style={{ width:38, textAlign:"center", flexShrink:0 }}>
+                <div style={{ fontSize:15, fontWeight:700, color:isNow?S.grn:G[600] }}>{a.d.getDate()}</div>
+                <div style={{ fontSize:9, color:"#aaa" }}>{MS[a.d.getMonth()]}</div>
+              </div>
+              <Av name={a.p.name} size={32}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12, fontWeight:600, color:G[800], overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.p.name}</div>
+                <div style={{ fontSize:10, color:"#aaa" }}>{plan?.name} · S{a.p.week}/16</div>
+              </div>
+              <Bg color={isNow?S.grn:diff<=2?S.red:diff<=5?S.yel:G[500]}
+                  bg={isNow?S.grnBg:diff<=2?S.redBg:diff<=5?S.yelBg:G[50]}>
+                {isNow?"Hoje":`${diff}d`}
+              </Bg>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
+   MENSAGENS
+═══════════════════════════════════════════════ */
+function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) {
+  const [selConv, setSelConv] = useState(patientMode ? `p_${patientPid}` : null);
+  const [draft,   setDraft]   = useState("");
+  const bottomRef = useRef(null);
+  const inputRef  = useRef(null);
+
+  // Lista de conversas: canal da equipe + uma por paciente
+  const convs = patientMode ? [] : [
+    { id:"team", name:"Canal da Equipe", sub:"Comunicação interna" },
+    ...ps.map(p => ({ id:`p_${p.id}`, name:p.name, sub:PLANS.find(x=>x.id===p.plan)?.name||"—", pid:p.id }))
+  ];
+
+  const getThread = useCallback((cid) =>
+    [...messages.filter(m => m.conv === cid)].sort((a,b) => new Date(a.date)-new Date(b.date)),
+  [messages]);
+
+  const unread = (cid) =>
+    messages.filter(m => m.conv===cid && !m.read && m.role!=="admin").length;
+
+  const send = () => {
+    const txt = draft.trim();
+    if (!txt || !selConv) return;
+    const msg = {
+      id: Date.now(),
+      date: new Date().toISOString(),
+      senderName: patientMode
+        ? (ps.find(p=>p.id===patientPid)?.name || "Paciente")
+        : "Dra. Mariana Wogel",
+      role: patientMode ? "paciente" : "admin",
+      text: txt,
+      conv: selConv,
+      read: false,
+    };
+    setMessages(prev => [...prev, msg]);
+    setDraft("");
+    setTimeout(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); inputRef.current?.focus(); }, 50);
+  };
+
+  const thread      = selConv ? getThread(selConv) : [];
+  const selConvInfo = convs.find(c => c.id===selConv);
+
+  // Mobile: ou lista ou thread
+  const showList   = !mob || selConv === null;
+  const showThread = mob ? selConv !== null : true;
+
+  const listPanel = !patientMode && showList && (
+    <div style={{ width:mob?"100%":260, flexShrink:0, background:"#fff", borderRadius:12,
+      border:`1px solid ${G[200]}`, overflow:"hidden", display:"flex", flexDirection:"column" }}>
+      <div style={{ padding:"12px 14px", borderBottom:`1px solid ${G[100]}` }}>
+        <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Mensagens</div>
+      </div>
+      <div style={{ flex:1, overflowY:"auto" }}>
+        {convs.map((c) => {
+          const th   = getThread(c.id);
+          const last = th[th.length-1];
+          const unr  = unread(c.id);
+          const active = selConv===c.id;
+          return (
+            <div key={c.id} onClick={()=>setSelConv(c.id)}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
+                cursor:"pointer", background:active?G[50]:"transparent",
+                borderBottom:`1px solid ${G[50]}`, transition:"background 0.1s" }}>
+              <Av name={c.name} size={36}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12, fontWeight:600, color:G[900] }}>{c.name}</div>
+                <div style={{ fontSize:10, color:"#bbb", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {last ? last.text : c.sub}
+                </div>
+              </div>
+              {unr > 0 && (
+                <div style={{ minWidth:16, height:16, borderRadius:8, background:G[600], color:"#fff",
+                  fontSize:9, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, padding:"0 4px" }}>
+                  {unr}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const threadPanel = showThread && (
+    <div style={{ flex:1, background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`,
+      display:"flex", flexDirection:"column", minHeight:mob?380:"auto", overflow:"hidden" }}>
+      {selConv ? (
+        <>
+          {/* Header */}
+          <div style={{ padding:"10px 14px", borderBottom:`1px solid ${G[100]}`, display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+            {mob && !patientMode && (
+              <div onClick={()=>setSelConv(null)} style={{ cursor:"pointer", marginRight:2 }}>
+                <ArrowLeft size={16} color={G[700]}/>
+              </div>
+            )}
+            {selConvInfo && <Av name={selConvInfo.name} size={30}/>}
+            <div>
+              <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>
+                {patientMode ? "Equipe Clínica" : selConvInfo?.name}
+              </div>
+              <div style={{ fontSize:9, color:"#aaa" }}>
+                {patientMode ? "Instituto Dra. Mariana Wogel" : selConvInfo?.sub}
+              </div>
+            </div>
+          </div>
+          {/* Mensagens */}
+          <div style={{ flex:1, overflowY:"auto", padding:"14px", display:"flex", flexDirection:"column", gap:8 }}>
+            {thread.length === 0 ? (
+              <div style={{ textAlign:"center", color:"#ccc", fontSize:12, marginTop:40, display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
+                <MessageCircle size={36} color={G[200]}/>
+                <span>Nenhuma mensagem ainda.<br/>Seja o primeiro a escrever!</span>
+              </div>
+            ) : thread.map((m) => {
+              const mine = patientMode ? m.role==="paciente" : m.role==="admin";
+              return (
+                <div key={m.id} style={{ display:"flex", justifyContent:mine?"flex-end":"flex-start" }}>
+                  <div style={{ maxWidth:"78%", padding:"9px 13px",
+                    borderRadius:mine?"14px 14px 3px 14px":"14px 14px 14px 3px",
+                    background:mine?G[600]:"#F1F1EF", color:mine?"#fff":"#333" }}>
+                    {!mine && (
+                      <div style={{ fontSize:9, fontWeight:700, color:mine?"rgba(255,255,255,0.6)":G[600], marginBottom:3 }}>
+                        {m.senderName}
+                      </div>
+                    )}
+                    <div style={{ fontSize:12, lineHeight:1.4 }}>{m.text}</div>
+                    <div style={{ fontSize:9, opacity:0.55, marginTop:4, textAlign:"right" }}>
+                      {safeFmt(m.date,"dd/MM HH:mm")}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={bottomRef}/>
+          </div>
+          {/* Input */}
+          <div style={{ padding:"10px 12px", borderTop:`1px solid ${G[100]}`, display:"flex", gap:8, flexShrink:0 }}>
+            <input
+              ref={inputRef}
+              value={draft}
+              onChange={e=>setDraft(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&(e.preventDefault(),send())}
+              placeholder="Escreva uma mensagem..."
+              style={{ flex:1, padding:"9px 14px", borderRadius:22, border:`1.5px solid ${G[300]}`,
+                fontSize:12, fontFamily:"inherit", outline:"none", background:"#FAFAF8" }}
+            />
+            <div onClick={send}
+              style={{ width:36,height:36,borderRadius:"50%",background:draft.trim()?G[600]:G[200],
+                display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,transition:"background 0.15s" }}>
+              <Send size={14} color="#fff"/>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div style={{ display:"flex",alignItems:"center",justifyContent:"center",flex:1,
+          color:"#ccc",fontSize:12,flexDirection:"column",gap:10 }}>
+          <MessageCircle size={44} color={G[200]}/>
+          <span style={{ textAlign:"center" }}>Selecione uma conversa<br/>para começar</span>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex", gap:12, height:mob?"auto":undefined }}>
+      {listPanel}
+      {threadPanel}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
    PORTAL DO PACIENTE (Read-only)
 ═══════════════════════════════════════════════ */
 function Portal({  p, av, setAv }) {
@@ -1875,6 +2198,7 @@ export default function App() {
   const [ps,          setPs]          = useState(MOCK_PATIENTS);
   const [team,        setTeam]        = useState(MOCK_TEAM);
   const [activityLog, setActivityLog] = useState(MOCK_ACTIVITY);
+  const [messages,    setMessages]    = useState([]);
   const [dbLoaded,    setDbLoaded]    = useState(false);
   const saveTimer = useRef({});
 
@@ -1884,10 +2208,12 @@ export default function App() {
       fetch('/api/state/patients').then(r => r.ok ? r.json() : null).catch(() => null),
       fetch('/api/state/team').then(r => r.ok ? r.json() : null).catch(() => null),
       fetch('/api/state/activity').then(r => r.ok ? r.json() : null).catch(() => null),
-    ]).then(([pData, tData, aData]) => {
+      fetch('/api/state/messages').then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([pData, tData, aData, mData]) => {
       if (Array.isArray(pData) && pData.length > 0) setPs(pData);
       if (Array.isArray(tData) && tData.length > 0) setTeam(tData);
       if (Array.isArray(aData) && aData.length > 0) setActivityLog(aData);
+      if (Array.isArray(mData) && mData.length > 0) setMessages(mData);
       setDbLoaded(true);
     }).catch(() => setDbLoaded(true));
   }, []);
@@ -1908,6 +2234,7 @@ export default function App() {
   useEffect(() => { saveToApi('patients',  ps);          }, [ps,          saveToApi]);
   useEffect(() => { saveToApi('team',      team);        }, [team,        saveToApi]);
   useEffect(() => { saveToApi('activity',  activityLog); }, [activityLog, saveToApi]);
+  useEffect(() => { saveToApi('messages',  messages);    }, [messages,    saveToApi]);
 
   const addLog = ({ action, patientId, patientName, detail }) => {
     const entry = { id: Date.now(), date: new Date().toISOString(), memberId:1, memberName:"Dra. Mariana Wogel", action, patientId, patientName, detail };
@@ -1930,12 +2257,16 @@ export default function App() {
   /* alertas críticos */
   const ac = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); }).length;
 
-  const titles = { dash:"Dashboard", pat:"Pacientes", det:sp?.name||"", alert:"Central de alertas", team:"Equipe" };
+  /* mensagens não lidas */
+  const unreadMsgs = messages.filter(m => !m.read && m.role !== "admin").length;
+
+  const titles = { dash:"Dashboard", pat:"Pacientes", det:sp?.name||"", alert:"Central de alertas", team:"Equipe", agenda:"Agenda", msg:"Mensagens" };
   const nav = [
     {k:"dash",  l:"Dashboard", i:LayoutDashboard},
     {k:"pat",   l:"Pacientes", i:Users},
+    {k:"agenda",l:"Agenda",    i:CalendarDays},
+    {k:"msg",   l:"Mensagens", i:MessageCircle},
     {k:"alert", l:"Alertas",   i:AlertTriangle},
-    {k:"team",  l:"Equipe",    i:Shield},
   ];
 
   /* ─── Carregando dados do servidor ─── */
@@ -1960,7 +2291,8 @@ export default function App() {
     const pp = ps[0];
     return (
       <div style={{ fontFamily:"'Outfit','Inter',system-ui,sans-serif", background:W[50], minHeight:"100vh", color:"#2C2C2A" }}>
-        <div style={{ maxWidth:480, margin:"0 auto", padding:"10px 12px 40px" }}>
+        <div style={{ maxWidth:480, margin:"0 auto", padding:"10px 12px 80px" }}>
+          {/* Header */}
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
               <Shield size={16} color={G[500]}/>
@@ -1970,7 +2302,53 @@ export default function App() {
               <LogOut size={14} color="#bbb"/>
             </div>
           </div>
-          <Portal p={pp} av={avs[pp.id]} setAv={url=>setAvs(pr=>({...pr,[pp.id]:url}))}/>
+          {/* Conteúdo por aba */}
+          {page==="dash"   && <Portal p={pp} av={avs[pp.id]} setAv={url=>setAvs(pr=>({...pr,[pp.id]:url}))}/>}
+          {page==="msg"    && <Mensagens ps={ps} messages={messages} setMessages={setMessages} mob patientMode patientPid={pp?.id}/>}
+          {page==="agenda" && (
+            <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"16px 14px", display:"flex", flexDirection:"column", gap:6 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:4 }}>📅 Seu próximo retorno</div>
+              {pp?.nr ? (
+                <>
+                  <div style={{ textAlign:"center", padding:"20px 0" }}>
+                    <div style={{ fontSize:34, fontWeight:700, color:G[600] }}>{new Date(pp.nr).getDate()}</div>
+                    <div style={{ fontSize:13, color:"#aaa" }}>
+                      {["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][new Date(pp.nr).getMonth()]} {new Date(pp.nr).getFullYear()}
+                    </div>
+                    {(() => {
+                      const diff = Math.ceil((new Date(pp.nr) - new Date()) / 86400000);
+                      return diff >= 0
+                        ? <Bg color={diff===0?S.grn:diff<=3?S.yel:G[500]} bg={diff===0?S.grnBg:diff<=3?S.yelBg:G[50]} style={{marginTop:8,display:"inline-block"}}>{diff===0?"Hoje!":diff===1?"Amanhã":`Em ${diff} dias`}</Bg>
+                        : <Bg color={S.red} bg={S.redBg}>Retorno vencido há {Math.abs(diff)} dias</Bg>;
+                    })()}
+                  </div>
+                  <div style={{ fontSize:11, color:"#aaa", textAlign:"center" }}>
+                    Semana {pp.week}/16 · Ciclo {pp.cycle}
+                  </div>
+                </>
+              ) : (
+                <div style={{ textAlign:"center", color:"#ccc", fontSize:12, padding:"20px 0" }}>
+                  Nenhum retorno agendado
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {/* Bottom nav do paciente */}
+        <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:`1px solid ${G[200]}`,
+          display:"flex", justifyContent:"space-around", padding:"6px 0 max(6px,env(safe-area-inset-bottom))", zIndex:50 }}>
+          {[{k:"dash",l:"Início",i:Home},{k:"msg",l:"Mensagens",i:MessageCircle},{k:"agenda",l:"Agenda",i:CalendarDays}].map(n=>{
+            const a=page===n.k;
+            const badge=n.k==="msg"&&unreadMsgs>0;
+            return (
+              <div key={n.k} onClick={()=>setPage(n.k)}
+                style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:1,cursor:"pointer",padding:"3px 20px",position:"relative",flex:1 }}>
+                <n.i size={20} color={a?G[600]:"#ccc"}/>
+                <span style={{ fontSize:9, fontWeight:a?600:400, color:a?G[600]:"#ccc" }}>{n.l}</span>
+                {badge && <div style={{ position:"absolute",top:-1,right:"25%",width:10,height:10,borderRadius:"50%",background:G[500] }}/>}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -1994,6 +2372,8 @@ export default function App() {
         onEdit={upd=>{ setPs(prev=>prev.map(x=>x.id===sp.id?{...x,...upd}:x)); }}/>}
       {page==="alert" && <Alerts ps={ps} onSel={go}/>}
       {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog}/>}
+      {page==="agenda"&& <Agenda ps={ps} onSel={go} mob={mob}/>}
+      {page==="msg"   && <Mensagens ps={ps} messages={messages} setMessages={setMessages} mob={mob}/>}
     </>
   );
 
@@ -2023,10 +2403,11 @@ export default function App() {
         {nav.map(n => {
           const a = page===n.k || (n.k==="pat"&&page==="det");
           return (
-            <div key={n.k} onClick={()=>{ setPage(n.k); setSid(null); }} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:1, cursor:"pointer", padding:"3px 10px", position:"relative" }}>
+            <div key={n.k} onClick={()=>{ setPage(n.k); setSid(null); }} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:1, cursor:"pointer", padding:"3px 6px", position:"relative", flex:1 }}>
               <n.i size={18} color={a?G[600]:"#ccc"}/>
-              <span style={{ fontSize:9, fontWeight:a?600:400, color:a?G[600]:"#ccc" }}>{n.l}</span>
+              <span style={{ fontSize:8, fontWeight:a?600:400, color:a?G[600]:"#ccc" }}>{n.l}</span>
               {n.k==="alert" && ac>0 && <div style={{ position:"absolute", top:-1, right:4, width:10, height:10, borderRadius:"50%", background:S.red }}/>}
+              {n.k==="msg" && unreadMsgs>0 && <div style={{ position:"absolute", top:-1, right:4, width:10, height:10, borderRadius:"50%", background:G[500] }}/>}
             </div>
           );
         })}
@@ -2049,12 +2430,13 @@ export default function App() {
           </div>
         </div>
         <div style={{ flex:1, paddingTop:8 }}>
-          {nav.map(n => {
+          {[...nav, {k:"team", l:"Equipe", i:Shield}].map(n => {
             const a = page===n.k || (n.k==="pat"&&page==="det");
             return (
               <div key={n.k} onClick={()=>{ setPage(n.k); setSid(null); }} style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 14px", cursor:"pointer", fontSize:12, fontWeight:a?600:400, background:a?"rgba(255,255,255,0.1)":"transparent", borderLeft:a?`3px solid ${G[300]}`:"3px solid transparent", color:a?"#fff":"rgba(255,255,255,0.55)", transition:"all 0.15s" }}>
                 <n.i size={15}/><span>{n.l}</span>
                 {n.k==="alert" && ac>0 && <span style={{ marginLeft:"auto", background:S.red, color:"#fff", borderRadius:8, padding:"1px 6px", fontSize:9, fontWeight:600 }}>{ac}</span>}
+                {n.k==="msg" && unreadMsgs>0 && <span style={{ marginLeft:"auto", background:G[400], color:"#fff", borderRadius:8, padding:"1px 6px", fontSize:9, fontWeight:600 }}>{unreadMsgs}</span>}
               </div>
             );
           })}
