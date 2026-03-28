@@ -89,4 +89,8 @@ export const resolveAlert = (id) => api.patch(`/alerts/${id}/resolve`);
 export const getAppointments = () => api.get('/appointments');
 export const createAppointment = (data) => api.post('/appointments', data);
 
+// ── WhatsApp ──
+export const sendWhatsAppMsg = (data) => api.post('/whatsapp/send', data);
+export const getMessageLog = (patientId) => api.get(`/patients/${patientId}/messages`);
+
 export default api;

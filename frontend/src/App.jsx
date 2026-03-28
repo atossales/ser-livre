@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck } from './utils/api';
+import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, getDashboard } from './utils/api';
 import { supabase } from './utils/supabase';
 import html2pdf from "html2pdf.js";
 import { subDays, isAfter, format, differenceInYears, setYear, isBefore, addDays, parseISO, differenceInDays } from "date-fns";
@@ -294,6 +294,10 @@ function SI({ label, value, onChange, opts }) {
 ═══════════════════════════════════════════════ */
 function Dash({  ps, onSel, mob }) {
   const [df, setDf] = useState("all");
+  const [dashData, setDashData] = useState(null);
+  useEffect(() => {
+    getDashboard().then(r => setDashData(r.data)).catch(() => {});
+  }, [ps]);
   const SC = genSC(ps);
 
   // Composição corporal média atual
@@ -354,26 +358,26 @@ function Dash({  ps, onSel, mob }) {
 
       {/* KPIs linha 1 */}
       <div style={{ display:"grid", gridTemplateColumns:gc, gap:8 }}>
-        <Mt value={ps.length}          label="Pacientes ativos"   icon={Users}        trend={12}/>
+        <Mt value={dashData?.activePatients ?? ps.length} label="Pacientes ativos"   icon={Users}        trend={12}/>
         <Mt value={cr.length}          label="Críticos"            icon={AlertTriangle} color={cr.length?S.red:S.grn} sub={cr.length?cr.map(p=>p.name.split(" ")[0]).join(", "):"Nenhum"}/>
-        <Mt value={`${tl.toFixed(1)}kg`} label="Peso total perdido" icon={TrendingUp}   color={S.grn} trend={8}/>
-        <Mt value={`${ae}%`}           label="Engajamento médio"  icon={Flame}         color={ae>=80?S.grn:ae>=60?S.yel:S.red}/>
+        <Mt value={`${(dashData?.totalWeightLost ?? tl).toFixed(1)}kg`} label="Peso total perdido" icon={TrendingUp}   color={S.grn} trend={8}/>
+        <Mt value={`${dashData?.avgEngagement ?? ae}%`}  label="Engajamento médio"  icon={Flame}         color={(dashData?.avgEngagement??ae)>=80?S.grn:(dashData?.avgEngagement??ae)>=60?S.yel:S.red}/>
       </div>
 
       {/* KPIs linha 2 */}
       <div style={{ display:"grid", gridTemplateColumns:gc, gap:8 }}>
-        <Mt value={`${ps.length?(tl/ps.length).toFixed(1):"0.0"}kg`} label="Média por paciente"  icon={Weight}/>
+        <Mt value={`${(dashData?.totalPatients??ps.length)>0?((dashData?.totalWeightLost??tl)/(dashData?.totalPatients??ps.length)).toFixed(1):"0.0"}kg`} label="Média por paciente"  icon={Weight}/>
         <Mt value={el.length}          label="Score elite"         icon={Trophy}        color={S.pur} sub={el.map(p=>p.name.split(" ")[0]).join(", ")||"—"}/>
         <Mt value={rTod.length}        label="Retornos hoje"       icon={CalendarDays}  color={S.blue} sub={rTod.map(p=>p.name.split(" ")[0]).join(", ")||"Nenhum"}/>
-        <Mt value={`${ps.length?Math.round(ps.filter(p=>p.eng>=80).length/ps.length*100):0}%`} label="Engajamento alto" icon={Zap} color={S.grn}/>
+        <Mt value={`${dashData?.alerts?.red ?? cr.length}`} label="Alertas vermelhos" icon={AlertTriangle} color={S.red}/>
       </div>
 
       {/* KPIs composição corporal */}
       <div style={{ display:"grid", gridTemplateColumns:mob?"1fr 1fr":"repeat(4,1fr)", gap:8 }}>
         <Mt value={`${avgMM}kg`}    label="Massa magra média"   icon={Activity} color={S.blue}  sub={`${avgPctMM}% do peso`}/>
         <Mt value={`${avgMG}kg`}    label="Massa gorda média"   icon={Weight}   color={S.yel}   sub={`${avgPctMG}% do peso`}/>
-        <Mt value={`${ps.length?(tl/ps.length).toFixed(1):"0.0"}kg`} label="Perda média"   icon={TrendingDown} color={S.grn}/>
-        <Mt value={`${ae}%`}        label="Engajamento"         icon={Flame}    color={ae>=80?S.grn:S.yel}/>
+        <Mt value={`${(dashData?.totalWeightLost ?? tl).toFixed(1)}kg`} label="Perda total"   icon={TrendingDown} color={S.grn}/>
+        <Mt value={`${dashData?.avgEngagement ?? ae}%`} label="Engajamento"         icon={Flame}    color={(dashData?.avgEngagement??ae)>=80?S.grn:S.yel}/>
       </div>
 
       {/* Gráfico composição corporal */}
@@ -1315,7 +1319,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
 /* ════════════════════════════════════════════
    ALERTAS
 ═══════════════════════════════════════════════ */
-function Alerts({  ps, onSel }) {
+function Alerts({ ps, onSel, onResolve }) {
   const SC = genSC(ps);
   const data = ps.map(p => {
     const sc=SC[p.id]; if(!sc) return null;
@@ -1340,8 +1344,11 @@ function Alerts({  ps, onSel }) {
             <div style={{ width:9, height:9, borderRadius:"50%", background:S.red }}/><span style={{ fontWeight:600, color:S.red, fontSize:13 }}>Vermelhos — Dra. Mariana</span>
           </div>
           {reds.map(p => (
-            <div key={p.id} onClick={()=>onSel(p.id)} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.red}`, padding:"10px 12px", marginBottom:5, cursor:"pointer" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}><Av name={p.name} size={24}/><span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span></div>
+            <div key={p.id} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.red}`, padding:"10px 12px", marginBottom:5 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                <div onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:8, flex:1, cursor:"pointer" }}><Av name={p.name} size={24}/><span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span></div>
+                <button onClick={e=>{ e.stopPropagation(); onResolve && onResolve(p.id); }} style={{ fontSize:10, padding:"4px 10px", borderRadius:6, background:S.grnBg, border:`1px solid ${S.grn}`, color:S.grn, cursor:"pointer", fontFamily:"inherit", fontWeight:600, whiteSpace:"nowrap" }}>✓ Resolver</button>
+              </div>
               {p.al.filter(a=>a.t==="r").map((a,i) => <div key={i} style={{ fontSize:11, padding:"3px 8px", background:S.redBg, borderRadius:5, marginBottom:2 }}>🔴 {a.l} ({a.s}) — <strong>{a.a}</strong></div>)}
             </div>
           ))}
@@ -1353,8 +1360,11 @@ function Alerts({  ps, onSel }) {
             <div style={{ width:9, height:9, borderRadius:"50%", background:S.yel }}/><span style={{ fontWeight:600, color:S.yel, fontSize:13 }}>Amarelos — equipe</span>
           </div>
           {yels.map(p => (
-            <div key={p.id} onClick={()=>onSel(p.id)} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.yel}`, padding:"10px 12px", marginBottom:5, cursor:"pointer" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}><Av name={p.name} size={24}/><span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span></div>
+            <div key={p.id} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.yel}`, padding:"10px 12px", marginBottom:5 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                <div onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:8, flex:1, cursor:"pointer" }}><Av name={p.name} size={24}/><span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span></div>
+                <button onClick={e=>{ e.stopPropagation(); onResolve && onResolve(p.id); }} style={{ fontSize:10, padding:"4px 10px", borderRadius:6, background:S.grnBg, border:`1px solid ${S.grn}`, color:S.grn, cursor:"pointer", fontFamily:"inherit", fontWeight:600, whiteSpace:"nowrap" }}>✓ Resolver</button>
+              </div>
               {p.al.map((a,i) => <div key={i} style={{ fontSize:11, padding:"3px 8px", background:S.yelBg, borderRadius:5, marginBottom:2 }}>🟡 {a.l} ({a.s}) — {a.a}</div>)}
             </div>
           ))}
@@ -1489,6 +1499,11 @@ function TeamP({ team, setTeam, ta, setTa, activityLog }) {
 function Agenda({ ps, onSel, mob }) {
   const [viewDate, setViewDate] = useState(new Date());
   const [selDay,   setSelDay]   = useState(null);
+  const [apptData, setApptData] = useState([]);
+
+  useEffect(() => {
+    getAppointments().then(r => setApptData(r.data || [])).catch(() => {});
+  }, []);
 
   const year  = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -2376,7 +2391,14 @@ export default function App() {
   const [activityLog, setActivityLog] = useState(MOCK_ACTIVITY);
   const [messages,    setMessages]    = useState([]);
   const [dbLoaded,    setDbLoaded]    = useState(false);
+  const [toasts,      setToasts]      = useState([]);
   const saveTimer = useRef({});
+
+  const toast = (msg, type = 'success') => {
+    const id = Date.now();
+    setToasts(p => [...p, { id, msg, type }]);
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4000);
+  };
 
   // Carrega dados do servidor na inicialização
   useEffect(() => {
@@ -2615,6 +2637,7 @@ export default function App() {
       await reloadPatients();
     } catch (err) {
       console.warn('API patient creation failed (SMTP may not be configured):', err.message);
+      toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error');
       // Insere localmente com dados do modal como fallback
       setPs(prev => [...prev, np]);
     }
@@ -2623,7 +2646,7 @@ export default function App() {
   // Excluir paciente
   const handleDeletePatient = async (id) => {
     setPs(prev => prev.filter(x => x.id !== id));
-    try { await apiDeletePatient(id); } catch (err) { console.warn('API delete failed:', err.message); }
+    try { await apiDeletePatient(id); } catch (err) { console.warn('API delete failed:', err.message); toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error'); }
   };
 
   // Salvar scores — persiste via API e atualiza lista local
@@ -2660,7 +2683,7 @@ export default function App() {
         consistenciaAlimentar: sn.co  || 2,
         gestaoEmocional:       sn.ge  || 2,
         movimento:             sn.mv  || 2,
-      }).then(() => reloadPatients()).catch(err => console.warn('Scores API failed:', err.message));
+      }).then(() => reloadPatients()).catch(err => { console.warn('Scores API failed:', err.message); toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error'); });
     }
   };
 
@@ -2677,7 +2700,7 @@ export default function App() {
         massaMagra:     entry.massaMagra   || undefined,
         massaGordura:   entry.massaGordura || undefined,
         weekDate:       entry.date         || new Date().toISOString(),
-      }).then(() => reloadPatients()).catch(err => console.warn('WeekCheck API failed:', err.message));
+      }).then(() => reloadPatients()).catch(err => { console.warn('WeekCheck API failed:', err.message); toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error'); });
     }
   };
 
@@ -2711,6 +2734,7 @@ export default function App() {
       });
     } catch (err) {
       console.warn('Patient edit failed:', err.message);
+      toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error');
     }
   };
 
@@ -2721,6 +2745,7 @@ export default function App() {
       await reloadPatients();
     } catch (err) {
       console.warn('API finish failed:', err.message);
+      toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error');
     }
     addLog({ action:"finalizado", patientId: sp.id, patientName: sp.name, detail:"Programa finalizado" });
   };
@@ -2732,9 +2757,21 @@ export default function App() {
       await reloadPatients();
     } catch (err) {
       console.warn('API restart failed:', err.message);
+      toast(err.response?.data?.error || 'Erro ao reiniciar programa. Tente novamente.', 'error');
       setPs(prev => prev.map(x => x.id === id ? { ...x, cycle: (x.cycle || 1) + 1, week: 1 } : x));
     }
     addLog({ action:"reinicio", patientId: sp.id, patientName: sp.name, detail:`Novo ciclo iniciado: C${(sp.cycle || 1) + 1}` });
+  };
+
+  // Resolver alerta
+  const handleResolveAlert = async (alertId) => {
+    try {
+      await apiResolveAlert(alertId);
+      toast('Alerta resolvido!');
+    } catch (err) {
+      console.warn('Resolve alert failed:', err.message);
+      toast('Erro ao resolver alerta', 'error');
+    }
   };
 
   /* ─── CONTEÚDO ADMIN ─── */
@@ -2754,7 +2791,7 @@ export default function App() {
         onRestart={handleRestart}
         onEdit={handleEdit}
         onSendMsg={msg=>setMessages(prev=>[...prev,msg])}/>}
-      {page==="alert" && <Alerts ps={ps} onSel={go}/>}
+      {page==="alert" && <Alerts ps={ps} onSel={go} onResolve={handleResolveAlert}/>}
       {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog}/>}
       {page==="agenda"&& <Agenda ps={ps} onSel={go} mob={mob}/>}
       {page==="msg"   && <Mensagens ps={ps} messages={messages} setMessages={setMessages} mob={mob}/>}
@@ -2795,6 +2832,17 @@ export default function App() {
             </div>
           );
         })}
+      </div>
+      {/* Toast container */}
+      <div style={{position:'fixed',bottom:80,right:16,zIndex:9999,display:'flex',flexDirection:'column',gap:8}}>
+        {toasts.map(t => (
+          <div key={t.id} style={{
+            padding:'12px 18px', borderRadius:10,
+            background: t.type==='error' ? '#dc2626' : t.type==='warning' ? '#d97706' : '#16a34a',
+            color:'#fff', fontSize:14, fontWeight:500,
+            boxShadow:'0 4px 20px rgba(0,0,0,0.2)'
+          }}>{t.msg}</div>
+        ))}
       </div>
     </div>
   );
@@ -2850,6 +2898,17 @@ export default function App() {
         
         {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setNl(false); handleCreatePatient(np); }}/>}
         {content}
+      </div>
+      {/* Toast container */}
+      <div style={{position:'fixed',bottom:24,right:24,zIndex:9999,display:'flex',flexDirection:'column',gap:8}}>
+        {toasts.map(t => (
+          <div key={t.id} style={{
+            padding:'12px 18px', borderRadius:10,
+            background: t.type==='error' ? '#dc2626' : t.type==='warning' ? '#d97706' : '#16a34a',
+            color:'#fff', fontSize:14, fontWeight:500,
+            boxShadow:'0 4px 20px rgba(0,0,0,0.2)'
+          }}>{t.msg}</div>
+        ))}
       </div>
     </div>
   );
