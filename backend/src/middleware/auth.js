@@ -1,22 +1,33 @@
 // ============================================================
-// MIDDLEWARE DE AUTENTICAÇÃO
+// MIDDLEWARE DE AUTENTICAÇÃO — via Supabase Auth
 //
 // "Middleware" é como um segurança na porta. Antes de qualquer
 // requisição chegar na rota, ele verifica:
-// 1. O usuário tem um token válido? (está logado?)
+// 1. O usuário tem um token Supabase válido? (está logado?)
 // 2. O usuário tem permissão para isso? (é médica? paciente?)
 //
-// JWT = JSON Web Token. É como um "crachá digital" que o
-// sistema dá quando o usuário faz login. Cada requisição
-// depois disso manda esse crachá para provar quem é.
+// O token JWT é emitido pelo Supabase Auth. Validamos usando
+// supabaseAdmin.auth.getUser(token) — sem segredo local.
 // ============================================================
 
-const jwt = require('jsonwebtoken');
+const { createClient } = require('@supabase/supabase-js');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
+// Cliente Supabase com a service role key (acesso total ao Auth Admin API)
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+);
+
 /**
- * Verifica se o usuário está autenticado (logado)
+ * Verifica se o usuário está autenticado (logado via Supabase Auth)
  * Se sim, coloca os dados do usuário em req.user
  */
 async function authRequired(req, res, next) {
@@ -29,12 +40,15 @@ async function authRequired(req, res, next) {
 
     const token = authHeader.split(' ')[1];
 
-    // Verifica se o token é válido
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Valida o token com o Supabase Auth
+    const { data, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !data.user) {
+      return res.status(401).json({ error: 'Token inválido ou expirado' });
+    }
 
-    // Busca o usuário no banco
+    // Busca o perfil do usuário no banco (id é UUID string do Supabase)
     const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
+      where: { id: data.user.id },
       include: { patient: true }
     });
 
@@ -46,7 +60,7 @@ async function authRequired(req, res, next) {
     req.user = user;
     next();
   } catch (error) {
-    return res.status(401).json({ error: 'Token inválido' });
+    return res.status(401).json({ error: 'Erro ao verificar autenticação' });
   }
 }
 
@@ -84,4 +98,4 @@ function onlyOwnData(req, res, next) {
   next();
 }
 
-module.exports = { authRequired, requireRole, onlyOwnData };
+module.exports = { supabaseAdmin, authRequired, requireRole, onlyOwnData };

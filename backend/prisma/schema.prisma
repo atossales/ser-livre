@@ -28,9 +28,8 @@ datasource db {
 // O "role" define o que cada um pode ver/fazer.
 // ──────────────────────────────────────────────
 model User {
-  id        Int      @id @default(autoincrement())
+  id        String   @id  // UUID from Supabase Auth
   email     String   @unique
-  password  String   // Hash da senha (nunca armazena texto puro)
   name      String
   role      Role     @default(PACIENTE)
   avatarUrl String?  // URL da foto de perfil
@@ -77,7 +76,7 @@ enum Role {
 // ──────────────────────────────────────────────
 model Patient {
   id            Int      @id @default(autoincrement())
-  userId        Int      @unique
+  userId        String   @unique
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Dados clínicos
@@ -179,7 +178,7 @@ model WeekCheck {
 
   // Controle
   observations String?
-  filledById   Int?
+  filledById   String?
   filledBy     User?    @relation("filledBy", fields: [filledById], references: [id])
 
   createdAt    DateTime @default(now())
@@ -237,7 +236,7 @@ model ScoreEntry {
   statusMental      String  // RECAIDA, CONSTRUCAO, ELITE
 
   // Quem preencheu
-  filledById   Int?
+  filledById   String?
   filledBy     User?    @relation("filledBy", fields: [filledById], references: [id])
 
   createdAt    DateTime @default(now())
@@ -301,9 +300,9 @@ model Appointment {
   id          Int             @id @default(autoincrement())
   patientId   Int?
   patient     Patient?        @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  staffId     Int?
+  staffId     String?
   staff       User?           @relation("appointmentStaff", fields: [staffId], references: [id], onDelete: SetNull)
-  createdById Int?
+  createdById String?
   createdBy   User?           @relation("appointmentCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
   type        AppointmentType
@@ -337,7 +336,7 @@ model MessageTemplate {
   body        String   // Texto com variáveis {{nome}}, {{peso_atual}}, etc.
   isSystem    Boolean  @default(false) // templates padrão do sistema
   active      Boolean  @default(true)
-  createdById Int?
+  createdById String?
   createdBy   User?    @relation("templateCreator", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -354,7 +353,7 @@ model MessageLog {
   patient     Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
   templateId  Int?
   template    MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  sentById    Int?
+  sentById    String?
   sentBy      User?    @relation("messageSender", fields: [sentById], references: [id], onDelete: SetNull)
 
   phone       String   // número que recebeu
@@ -369,7 +368,7 @@ model MessageLog {
 model InviteToken {
   id          Int      @id @default(autoincrement())
   tokenHash   String   @unique
-  userId      Int
+  userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   used        Boolean  @default(false)
   expiresAt   DateTime
@@ -379,7 +378,7 @@ model InviteToken {
 model ResetToken {
   id          Int      @id @default(autoincrement())
   tokenHash   String   @unique
-  userId      Int
+  userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   used        Boolean  @default(false)
   expiresAt   DateTime
