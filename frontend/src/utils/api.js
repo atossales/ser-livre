@@ -52,6 +52,9 @@ export const getAlerts = () => api.get('/alerts');
 // ── Dashboard ──
 export const getDashboard = () => api.get('/dashboard');
 
+// ── Reports ──
+export const getCohortReport = () => api.get('/reports/cohort');
+
 // ── Avatar ──
 export const updateAvatar = (userId, file) => {
   const formData = new FormData();
@@ -78,5 +81,12 @@ export const restartProgram = (id) => api.patch(`/patients/${id}/restart`);
 
 // ── Usuários ──
 export const resendInvite = (userId) => api.post(`/users/${userId}/resend-invite`);
+
+// ── Alerts ──
+export const resolveAlert = (id) => api.patch(`/alerts/${id}/resolve`);
+
+// ── Appointments ──
+export const getAppointments = () => api.get('/appointments');
+export const createAppointment = (data) => api.post('/appointments', data);
 
 export default api;

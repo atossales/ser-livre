@@ -23,7 +23,11 @@
 // POST   /api/weekchecks                  → Salva checklist semanal
 // GET    /api/weekchecks/:cycleId         → Busca checklists do ciclo
 // GET    /api/alerts                      → Lista alertas
+// PATCH  /api/alerts/:id/resolve          → Resolve alerta
 // GET    /api/dashboard                   → Dados do dashboard
+// GET    /api/reports/cohort              → Relatório coorte de pacientes (PDF)
+// GET    /api/appointments                → Lista agendamentos
+// POST   /api/appointments                → Cria agendamento
 // PUT    /api/users/:id/avatar            → Atualiza foto de perfil
 // GET    /api/staff                       → Lista membros da equipe
 // PUT    /api/users/:id/role              → Atualiza role/status
@@ -39,6 +43,7 @@ const fs = require('fs');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
+const cron = require('node-cron');
 
 const { authRequired, requireRole, onlyOwnData, supabaseAdmin } = require('./middleware/auth');
 const { calcularMetabolico, calcularBemEstar, calcularMental, gerarAlertas } = require('./utils/scores');
@@ -74,6 +79,15 @@ const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: { error: 'Muitas tentativas. Tente novamente em 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Rate limit agressivo para /api/seed — máx 3 tentativas por hora
+const seedLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  message: { error: 'Limite de tentativas de seed atingido. Tente novamente em 1 hora.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -578,47 +592,140 @@ app.get('/api/alerts', authRequired, async (req, res) => {
   }
 });
 
+app.patch('/api/alerts/:id/resolve', authRequired, async (req, res) => {
+  try {
+    const alert = await prisma.alert.update({
+      where: { id: parseInt(req.params.id) },
+      data: { resolved: true, resolvedAt: new Date() }
+    });
+    res.json(alert);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ════════════════════════════════════════════
 //  DASHBOARD
 // ════════════════════════════════════════════
 
-app.get('/api/dashboard', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM', 'NUTRICIONISTA', 'PSICOLOGA', 'TREINADOR'), async (req, res) => {
+app.get('/api/dashboard', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR'), async (req, res) => {
   try {
-    const patients = await prisma.patient.findMany({
-      include: {
-        user: { select: { name: true, avatarUrl: true } },
-        cycles: {
-          where: { status: 'ACTIVE' },
-          include: { scores: { orderBy: { month: 'desc' }, take: 1 } }
+    const [patients, alerts, appointments] = await Promise.all([
+      prisma.patient.findMany({
+        include: {
+          user: { select: { name: true, email: true } },
+          cycles: { where: { status: 'ACTIVE' }, include: { weekChecks: true } }
         }
-      }
-    });
+      }),
+      prisma.alert.findMany({ where: { resolved: false }, include: { patient: { include: { user: { select: { name: true } } } } }, orderBy: { createdAt: 'desc' }, take: 20 }),
+      prisma.appointment.findMany({
+        where: { date: { gte: new Date(), lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } },
+        include: { patient: { include: { user: { select: { name: true } } } } },
+        orderBy: { date: 'asc' }
+      }).catch(() => [])
+    ]);
 
-    const totalPatients = patients.length;
-    const totalWeightLost = patients.reduce((sum, p) => sum + (p.initialWeight - p.currentWeight), 0);
-    const redAlerts = await prisma.alert.count({ where: { resolved: false, severity: 'RED' } });
-    const yellowAlerts = await prisma.alert.count({ where: { resolved: false, severity: 'YELLOW' } });
+    const activePatients = patients.filter(p => p.cycles.some(c => c.status === 'ACTIVE'));
+    const totalWeightLost = patients.reduce((sum, p) => sum + Math.max(0, p.initialWeight - p.currentWeight), 0);
+
+    // Calcular engagement por paciente (% de itens do checklist preenchidos nas últimas 4 semanas)
+    const engagements = activePatients.map(p => {
+      const cycle = p.cycles[0];
+      if (!cycle) return 0;
+      const recentChecks = cycle.weekChecks.slice(-4);
+      if (!recentChecks.length) return 0;
+      const filled = recentChecks.filter(w => w.pesagem || w.tirzepatida).length;
+      return Math.round((filled / recentChecks.length) * 100);
+    });
+    const avgEngagement = engagements.length ? Math.round(engagements.reduce((a,b) => a+b, 0) / engagements.length) : 0;
 
     res.json({
-      totalPatients,
+      totalPatients: patients.length,
+      activePatients: activePatients.length,
       totalWeightLost: Math.round(totalWeightLost * 10) / 10,
-      avgWeightLost: totalPatients > 0 ? Math.round((totalWeightLost / totalPatients) * 10) / 10 : 0,
-      redAlerts,
-      yellowAlerts,
-      patients: patients.map(p => ({
-        id: p.id,
-        name: p.user.name,
-        avatarUrl: p.user.avatarUrl,
-        plan: p.plan,
-        initialWeight: p.initialWeight,
-        currentWeight: p.currentWeight,
-        weightLost: Math.round((p.initialWeight - p.currentWeight) * 10) / 10,
-        activeCycle: p.cycles[0] || null,
-        latestScore: p.cycles[0]?.scores[0] || null
-      }))
+      avgEngagement,
+      alerts: {
+        red: alerts.filter(a => a.severity === 'RED').length,
+        yellow: alerts.filter(a => a.severity === 'YELLOW').length,
+        items: alerts.slice(0, 5)
+      },
+      upcomingAppointments: appointments
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════
+//  RELATÓRIOS
+// ════════════════════════════════════════════
+
+app.get('/api/reports/cohort', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
+  try {
+    const patients = await prisma.patient.findMany({
+      include: {
+        user: { select: { name: true, email: true } },
+        cycles: {
+          include: {
+            scores: { orderBy: { month: 'asc' } },
+            weekChecks: { orderBy: { weekNumber: 'asc' } }
+          }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    const report = patients.map(p => ({
+      name: p.user.name,
+      plan: p.plan,
+      startDate: p.startDate,
+      initialWeight: p.initialWeight,
+      currentWeight: p.currentWeight,
+      weightLost: Math.max(0, p.initialWeight - p.currentWeight),
+      pctLost: p.initialWeight > 0 ? ((p.initialWeight - p.currentWeight) / p.initialWeight * 100).toFixed(1) : '0.0',
+      totalCycles: p.cycles.length,
+      lastScore: p.cycles[0]?.scores?.slice(-1)[0] || null
+    }));
+
+    res.json({ generatedAt: new Date(), totalPatients: patients.length, patients: report });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════
+//  AGENDAMENTOS
+// ════════════════════════════════════════════
+
+app.get('/api/appointments', authRequired, async (req, res) => {
+  try {
+    const appointments = await prisma.appointment.findMany({
+      include: { patient: { include: { user: { select: { name: true } } } } },
+      orderBy: { date: 'asc' }
+    });
+    res.json(appointments);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/appointments', authRequired, async (req, res) => {
+  try {
+    const { patientId, type, title, date, notes, sendReminder } = req.body;
+    const appointment = await prisma.appointment.create({
+      data: {
+        patientId: patientId ? parseInt(patientId) : null,
+        type,
+        title,
+        date: new Date(date),
+        notes,
+        sendReminder: !!sendReminder,
+        createdById: req.user.id
+      }
+    });
+    res.status(201).json(appointment);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -724,10 +831,14 @@ app.put('/api/state/:key', async (req, res) => {
 //  SEED INICIAL (cria usuários admin via Supabase Auth)
 // ════════════════════════════════════════════
 
-app.post('/api/seed', authLimiter, async (req, res) => {
+app.post('/api/seed', seedLimiter, async (req, res) => {
   try {
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    console.log(`[SEED] Tentativa de seed recebida de IP: ${ip} em ${new Date().toISOString()}`);
+
     const { adminSecret } = req.body;
     if (adminSecret !== process.env.SEED_SECRET) {
+      console.warn(`[SEED] Falha de autenticação do seed — IP: ${ip}`);
       return res.status(403).json({ error: 'Não autorizado' });
     }
 
@@ -771,6 +882,27 @@ app.post('/api/seed', authLimiter, async (req, res) => {
 app.use((err, req, res, next) => {
   console.error('[ERROR]', err.message);
   res.status(err.status || 500).json({ error: err.message || 'Erro interno do servidor' });
+});
+
+// ════════════════════════════════════════════
+//  CRON — Avanço automático de semana
+//  Toda segunda-feira às 8h (fuso do servidor)
+// ════════════════════════════════════════════
+cron.schedule('0 8 * * 1', async () => {
+  try {
+    const activeCycles = await prisma.cycle.findMany({ where: { status: 'ACTIVE' } });
+    for (const cycle of activeCycles) {
+      if (cycle.currentWeek < 16) {
+        await prisma.cycle.update({
+          where: { id: cycle.id },
+          data: { currentWeek: cycle.currentWeek + 1 }
+        });
+      }
+    }
+    console.log(`[CRON] Semanas avançadas: ${activeCycles.length} ciclos`);
+  } catch (err) {
+    console.error('[CRON] Erro ao avançar semanas:', err.message);
+  }
 });
 
 app.listen(PORT, () => {
