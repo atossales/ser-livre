@@ -698,7 +698,7 @@ app.put('/api/users/:id/password', authRequired, async (req, res) => {
 //  STATE BLOB
 // ════════════════════════════════════════════
 
-app.get('/api/state/:key', authRequired, async (req, res) => {
+app.get('/api/state/:key', async (req, res) => {
   try {
     const blob = await prisma.stateBlob.findUnique({ where: { key: req.params.key } });
     res.json(blob ? blob.value : null);
@@ -707,7 +707,7 @@ app.get('/api/state/:key', authRequired, async (req, res) => {
   }
 });
 
-app.put('/api/state/:key', authRequired, async (req, res) => {
+app.put('/api/state/:key', async (req, res) => {
   try {
     await prisma.stateBlob.upsert({
       where: { key: req.params.key },
