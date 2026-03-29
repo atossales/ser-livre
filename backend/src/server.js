@@ -429,10 +429,10 @@ app.delete('/api/patients', authRequired, requireRole('ADMIN'), async (req, res)
       where: { id: { in: ids.map(Number) } }
     });
 
-    await prisma.patient.deleteMany({ where: { id: { in: ids.map(Number) } } });
-
-    // Deleta do Supabase Auth em paralelo
+    // Deleta do Supabase Auth primeiro (cascata apaga public.users via trigger)
+    // Apenas depois remove do Prisma — mesmo padrão do delete individual
     await Promise.all(patients.map(p => supabaseAdmin.auth.admin.deleteUser(p.userId)));
+    await prisma.patient.deleteMany({ where: { id: { in: ids.map(Number) } } });
 
     res.json({ deleted: patients.length });
   } catch (err) {
@@ -500,7 +500,28 @@ app.get('/api/patients/:id/cycles', authRequired, async (req, res) => {
 
 app.post('/api/scores', authRequired, requireRole('MEDICA', 'NUTRICIONISTA', 'ADMIN'), async (req, res) => {
   try {
-    const data = req.body;
+    // Destructure explicitamente — evita mass-assignment de campos não autorizados
+    const {
+      cycleId, month,
+      // Metabólico
+      gorduraVisceral, massaMuscular, pcrUltrassensivel, ferritina,
+      hemoglobinaGlicada, acidoUrico, triglicerideosHdl, circAbdominal,
+      // Bem-estar
+      gastrointestinal, libido, doresArticulares, autoestimaMental,
+      energiaPerformance, sonoCefaleia,
+      // Mental
+      consistenciaAlimentar, gestaoEmocional, movimentoPresenca,
+    } = req.body;
+
+    const data = {
+      cycleId, month,
+      gorduraVisceral, massaMuscular, pcrUltrassensivel, ferritina,
+      hemoglobinaGlicada, acidoUrico, triglicerideosHdl, circAbdominal,
+      gastrointestinal, libido, doresArticulares, autoestimaMental,
+      energiaPerformance, sonoCefaleia,
+      consistenciaAlimentar, gestaoEmocional, movimentoPresenca,
+    };
+
     const met = calcularMetabolico(data);
     const bem = calcularBemEstar(data);
     const men = calcularMental(data);
@@ -567,19 +588,50 @@ app.get('/api/scores/:cycleId', authRequired, async (req, res) => {
 
 app.post('/api/weekchecks', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM', 'NUTRICIONISTA', 'PSICOLOGA', 'TREINADOR'), async (req, res) => {
   try {
-    const data = req.body;
+    // Destructure explicitamente — evita mass-assignment (req.body pode conter campos extras)
+    const {
+      cycleId, weekNumber, weekDate,
+      tirzepatida, tirzepatidaDose, terapiaInjetavel, pesagem, pesoRegistrado,
+      sessaoPsicologia, bioimpedancia,
+      treino1, treino2, treino3,
+      nutriAvaliacaoCompleta, nutriPlanoAlimentar, nutriScoresClinicos,
+      observations,
+      // campos de body composition
+      massaMagra, massaGordura,
+    } = req.body;
+
+    const safeData = {
+      cycleId, weekNumber,
+      ...(weekDate        !== undefined && { weekDate }),
+      ...(tirzepatida     !== undefined && { tirzepatida }),
+      ...(tirzepatidaDose !== undefined && { tirzepatidaDose }),
+      ...(terapiaInjetavel !== undefined && { terapiaInjetavel }),
+      ...(pesagem         !== undefined && { pesagem }),
+      ...(pesoRegistrado  !== undefined && { pesoRegistrado }),
+      ...(sessaoPsicologia !== undefined && { sessaoPsicologia }),
+      ...(bioimpedancia   !== undefined && { bioimpedancia }),
+      ...(treino1         !== undefined && { treino1 }),
+      ...(treino2         !== undefined && { treino2 }),
+      ...(treino3         !== undefined && { treino3 }),
+      ...(nutriAvaliacaoCompleta !== undefined && { nutriAvaliacaoCompleta }),
+      ...(nutriPlanoAlimentar   !== undefined && { nutriPlanoAlimentar }),
+      ...(nutriScoresClinicos   !== undefined && { nutriScoresClinicos }),
+      ...(observations    !== undefined && { observations }),
+      // body composition (não estão no schema como colunas — ignorado se schema não tiver)
+    };
+
     const check = await prisma.weekCheck.upsert({
-      where: { cycleId_weekNumber: { cycleId: data.cycleId, weekNumber: data.weekNumber } },
-      create: { ...data, filledById: req.user.id },
-      update: { ...data, filledById: req.user.id }
+      where: { cycleId_weekNumber: { cycleId, weekNumber } },
+      create: { ...safeData, filledById: req.user.id },
+      update: { ...safeData, filledById: req.user.id }
     });
 
-    if (data.pesoRegistrado) {
-      const cycle = await prisma.cycle.findUnique({ where: { id: data.cycleId } });
+    if (pesoRegistrado) {
+      const cycle = await prisma.cycle.findUnique({ where: { id: cycleId } });
       if (cycle) {
         await prisma.patient.update({
           where: { id: cycle.patientId },
-          data: { currentWeight: data.pesoRegistrado }
+          data: { currentWeight: pesoRegistrado }
         });
       }
     }

@@ -1431,7 +1431,7 @@ function Alerts({ ps, onSel, onResolve }) {
 /* ════════════════════════════════════════════
    EQUIPE
 ═══════════════════════════════════════════════ */
-function TeamP({ team, setTeam, ta, setTa, activityLog }) {
+function TeamP({ team, setTeam, ta, setTa, activityLog, onToast }) {
   const [sel,        setSel]        = useState(null); // membro selecionado
   const [showNew,    setShowNew]    = useState(false);
   const [editMember, setEditMember] = useState(null);
@@ -1546,7 +1546,7 @@ function TeamP({ team, setTeam, ta, setTa, activityLog }) {
           await apiRegister({ name: nm.name, email: nm.email, role: nm.role?.toUpperCase() || 'ENFERMAGEM', phone: nm.phone || '' });
           getStaff().then(r => setTeam(r.data)).catch(() => {});
           setShowNew(false);
-        } catch (err) { console.warn('Erro ao criar membro:', err.message); }
+        } catch (err) { console.error('Erro ao criar membro:', err.message); onToast?.(err.response?.data?.error || 'Erro ao criar membro. Verifique os dados.', 'error'); }
       }}/>}
     </div>
   );
@@ -2565,7 +2565,7 @@ export default function App() {
         if (Array.isArray(data)) setPs(data.map(normalizePatient));
       }
     } catch (e) {
-      console.warn('Falha ao recarregar pacientes:', e.message);
+      console.error('Falha ao recarregar pacientes:', e.message);
     }
   }, []);
 
@@ -2624,7 +2624,7 @@ export default function App() {
         setPs(prev => prev.map(x => x.id === id ? normalizePatient(full) : x));
       }
     } catch (e) {
-      console.warn('Falha ao carregar detalhe do paciente:', e.message);
+      console.error('Falha ao carregar detalhe do paciente:', e.message);
     }
   }, []);
 
@@ -2819,7 +2819,7 @@ export default function App() {
         consistenciaAlimentar: sn.co  || 2,
         gestaoEmocional:       sn.ge  || 2,
         movimento:             sn.mv  || 2,
-      }).then(() => reloadPatients()).catch(err => { console.warn('Scores API failed:', err.message); toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error'); });
+      }).then(() => reloadPatients()).catch(err => { console.error('Scores API failed:', err.message); toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error'); });
     }
   };
 
@@ -2836,7 +2836,7 @@ export default function App() {
         massaMagra:     entry.massaMagra   || undefined,
         massaGordura:   entry.massaGordura || undefined,
         weekDate:       entry.date         || new Date().toISOString(),
-      }).then(() => reloadPatients()).catch(err => { console.warn('WeekCheck API failed:', err.message); toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error'); });
+      }).then(() => reloadPatients()).catch(err => { console.error('WeekCheck API failed:', err.message); toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error'); });
     }
   };
 
@@ -2873,7 +2873,7 @@ export default function App() {
         // name e email são no user — o backend aceita via PUT /patients/:id → user
       });
     } catch (err) {
-      console.warn('Patient edit failed:', err.message);
+      console.error('Patient edit failed:', err.message);
       toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error');
     }
   };
@@ -2884,7 +2884,7 @@ export default function App() {
       await apiFinishProgram(id);
       await reloadPatients();
     } catch (err) {
-      console.warn('API finish failed:', err.message);
+      console.error('API finish failed:', err.message);
       toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error');
     }
     addLog({ action:"finalizado", patientId: sp.id, patientName: sp.name, detail:"Programa finalizado" });
@@ -2896,7 +2896,7 @@ export default function App() {
       await apiRestartProgram(id);
       await reloadPatients();
     } catch (err) {
-      console.warn('API restart failed:', err.message);
+      console.error('API restart failed:', err.message);
       toast(err.response?.data?.error || 'Erro ao reiniciar programa. Tente novamente.', 'error');
       setPs(prev => prev.map(x => x.id === id ? { ...x, cycle: (x.cycle || 1) + 1, week: 1 } : x));
     }
@@ -2909,7 +2909,7 @@ export default function App() {
       await apiResolveAlert(alertId);
       toast('Alerta resolvido!');
     } catch (err) {
-      console.warn('Resolve alert failed:', err.message);
+      console.error('Resolve alert failed:', err.message);
       toast('Erro ao resolver alerta', 'error');
     }
   };
@@ -2932,7 +2932,7 @@ export default function App() {
         onEdit={handleEdit}
         onSendMsg={msg=>setMessages(prev=>[...prev,msg])}/>}
       {page==="alert" && <Alerts ps={ps} onSel={go} onResolve={handleResolveAlert}/>}
-      {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog}/>}
+      {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog} onToast={toast}/>}
       {page==="agenda"&& <Agenda ps={ps} onSel={go} mob={mob}/>}
       {page==="msg"   && <Mensagens ps={ps} messages={messages} setMessages={setMessages} mob={mob}/>}
     </>
