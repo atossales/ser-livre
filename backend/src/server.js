@@ -48,6 +48,7 @@ const cron = require('node-cron');
 const { authRequired, requireRole, onlyOwnData, supabaseAdmin } = require('./middleware/auth');
 const { calcularMetabolico, calcularBemEstar, calcularMental, gerarAlertas } = require('./utils/scores');
 const { sendInviteEmail, sendResetEmail } = require('./utils/mailer');
+const { sendWhatsApp } = require('./utils/whatsapp');
 
 const prisma = new PrismaClient();
 const app = express();
@@ -730,6 +731,37 @@ app.post('/api/appointments', authRequired, async (req, res) => {
 });
 
 // ════════════════════════════════════════════
+//  WHATSAPP — Envio manual
+// ════════════════════════════════════════════
+
+app.post('/api/whatsapp/send', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM'), async (req, res) => {
+  try {
+    const { phone, message, patientId } = req.body;
+    if (!phone || !message) return res.status(400).json({ error: 'phone e message são obrigatórios' });
+
+    const result = await sendWhatsApp(phone, message);
+
+    // Log no banco se tiver patientId
+    if (patientId && (result.ok || result.success)) {
+      await prisma.messageLog.create({
+        data: {
+          patientId: parseInt(patientId),
+          sentById: req.user.id,
+          phone,
+          body: message,
+          channel: 'whatsapp',
+          status: 'sent'
+        }
+      });
+    }
+
+    res.json({ success: result.ok || result.success, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════
 //  AVATAR
 // ════════════════════════════════════════════
 
@@ -902,6 +934,44 @@ cron.schedule('0 8 * * 1', async () => {
     console.log(`[CRON] Semanas avançadas: ${activeCycles.length} ciclos`);
   } catch (err) {
     console.error('[CRON] Erro ao avançar semanas:', err.message);
+  }
+});
+
+// ════════════════════════════════════════════
+//  CRON — Lembretes de consulta via WhatsApp
+//  Todo dia às 9h: envia lembrete para consultas do dia seguinte
+// ════════════════════════════════════════════
+cron.schedule('0 9 * * *', async () => {
+  try {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const start = new Date(tomorrow); start.setHours(0,0,0,0);
+    const end   = new Date(tomorrow); end.setHours(23,59,59,999);
+
+    const appointments = await prisma.appointment.findMany({
+      where: { date: { gte: start, lte: end }, sendReminder: true, reminderSent: false },
+      include: { patient: { include: { user: { select: { name: true, phone: true } } } } }
+    });
+
+    for (const appt of appointments) {
+      const phone = appt.patient?.user?.phone;
+      const name  = appt.patient?.user?.name || 'Paciente';
+      if (!phone) continue;
+
+      const hora = new Date(appt.date).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+      const tipo = appt.type === 'CONSULTA_MEDICA' ? 'consulta médica' : appt.type === 'CONSULTA_NUTRI' ? 'consulta com a nutricionista' : 'exame';
+
+      const msg = `Olá ${name}! 👋\n\nLembrete: você tem ${tipo} amanhã às ${hora} no Instituto Dra. Mariana Wogel.\n\nQualquer dúvida, entre em contato. Até amanhã! 🌟`;
+
+      const result = await sendWhatsApp(phone, msg);
+      if (result.ok || result.success) {
+        await prisma.appointment.update({ where: { id: appt.id }, data: { reminderSent: true } });
+        console.log(`[CRON] Lembrete enviado para ${name} (${phone})`);
+      }
+    }
+    console.log(`[CRON] Lembretes processados: ${appointments.length} agendamentos`);
+  } catch (err) {
+    console.error('[CRON] Erro ao enviar lembretes:', err.message);
   }
 });
 

@@ -1,6 +1,10 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, getDashboard } from './utils/api';
 import { supabase } from './utils/supabase';
+import { Toast } from './components/Toast';
+import { AlertCard } from './components/AlertCard';
+import { WeighInModal } from './components/WeighInModal';
+import { calcularMetabolico, calcularBemEstar, calcularMental, calcularEngajamento, formatarPeso, formatarPerda } from './utils/calculations';
 import html2pdf from "html2pdf.js";
 import { subDays, isAfter, format, differenceInYears, setYear, isBefore, addDays, parseISO, differenceInDays } from "date-fns";
 
@@ -1821,6 +1825,130 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
 }
 
 /* ════════════════════════════════════════════
+   MINHA SEMANA — Tab do portal do paciente
+═══════════════════════════════════════════════ */
+function MinhaSemana({ p }) {
+  const activeCycle = p?._activeCycle;
+  const currentWeek = activeCycle?.currentWeek || p?.week || 1;
+  const totalWeeks  = 16;
+  const pctPrograma = Math.min(100, Math.round((currentWeek / totalWeeks) * 100));
+
+  // Percentual de perda de peso atingido
+  const perdaKg  = p?.iw && p?.cw ? Math.max(0, p.iw - p.cw) : 0;
+  const pctPerda = p?.iw > 0 ? Math.min(100, Math.round((perdaKg / p.iw) * 100)) : 0;
+
+  // Mensagem motivacional baseada no % de perda
+  const motivacao = (() => {
+    if (pctPerda >= 15) return { emoji: "🏆", texto: "Resultado excepcional! Você transformou seu corpo e sua saúde. Continue!" };
+    if (pctPerda >= 10) return { emoji: "🌟", texto: "Incrível! Você ultrapassou a marca de 10% de perda. Seu metabolismo está livre!" };
+    if (pctPerda >= 7)  return { emoji: "🔥", texto: "Ótimo progresso! Você está quebrando o set point metabólico. Continue firme!" };
+    if (pctPerda >= 4)  return { emoji: "💪", texto: "Boa evolução! Seu corpo já sente a diferença. Mantenha a consistência!" };
+    if (pctPerda >= 1)  return { emoji: "🌱", texto: "Início promissor! Cada passo conta. Confie no processo Ser Livre!" };
+    return { emoji: "🚀", texto: "Sua jornada começa agora. A equipe está aqui por você!" };
+  })();
+
+  // Checklist da semana atual a partir do ciclo ativo
+  const weekChecks = activeCycle?.weekChecks || [];
+  // Pega o weekCheck da semana atual (ou o mais recente)
+  const checkAtual = weekChecks.find(wc => wc.weekNumber === currentWeek) || weekChecks[weekChecks.length - 1] || null;
+
+  // Monta items do checklist para exibição
+  const checkItems = [
+    { label: "Tirzepatida aplicada",    feito: !!checkAtual?.tirzepatida },
+    { label: "Pesagem semanal",         feito: !!checkAtual?.pesoRegistrado },
+    { label: "Bioimpedância",           feito: !!checkAtual?.bioimpedancia },
+    { label: "Consulta de terapia",     feito: !!checkAtual?.terapia },
+    { label: "Consulta psicológica",    feito: !!checkAtual?.psicologia },
+    { label: "Treino de resistência",   feito: !!(checkAtual?.treinos && checkAtual.treinos[0]) },
+  ].filter(item => item.label); // remove nulls
+
+  const totalItems = checkItems.length;
+  const feitos     = checkItems.filter(i => i.feito).length;
+  const pctSemana  = totalItems > 0 ? Math.round((feitos / totalItems) * 100) : 0;
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+      {/* Progresso do programa */}
+      <div style={{ background:`linear-gradient(135deg,${G[700]},${G[900]})`, borderRadius:14, padding:"18px 16px", color:"#fff" }}>
+        <div style={{ fontSize:11, opacity:0.6, marginBottom:4 }}>Progresso no programa</div>
+        <div style={{ fontSize:20, fontWeight:700, marginBottom:2 }}>
+          Semana {currentWeek} de {totalWeeks}
+        </div>
+        <div style={{ fontSize:11, opacity:0.5, marginBottom:10 }}>{pctPrograma}% concluído</div>
+        <div style={{ height:8, background:"rgba(255,255,255,0.15)", borderRadius:4, overflow:"hidden" }}>
+          <div style={{ height:"100%", width:`${pctPrograma}%`, background:G[300], borderRadius:4, transition:"width 0.5s" }}/>
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, opacity:0.4, marginTop:3 }}>
+          <span>Semana 1</span><span>Semana 16</span>
+        </div>
+      </div>
+
+      {/* Mensagem motivacional */}
+      {perdaKg > 0 && (
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
+          <div style={{ fontSize:22, marginBottom:6 }}>{motivacao.emoji}</div>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:3 }}>
+            Você perdeu {perdaKg.toFixed(1).replace(".",",")} kg ({pctPerda}%)
+          </div>
+          <div style={{ fontSize:12, color:"#666", lineHeight:1.5 }}>{motivacao.texto}</div>
+        </div>
+      )}
+
+      {/* Checklist da semana atual */}
+      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Checklist — Semana {currentWeek}</div>
+          <div style={{ fontSize:11, fontWeight:600, color: pctSemana === 100 ? S.grn : G[500] }}>
+            {feitos}/{totalItems} itens
+          </div>
+        </div>
+
+        {/* Barra de progresso da semana */}
+        <div style={{ height:6, background:G[100], borderRadius:3, overflow:"hidden", marginBottom:12 }}>
+          <div style={{ height:"100%", width:`${pctSemana}%`, background: pctSemana === 100 ? S.grn : G[500], borderRadius:3, transition:"width 0.4s" }}/>
+        </div>
+
+        {checkItems.map((item, i) => (
+          <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 0", borderBottom: i < checkItems.length - 1 ? `1px solid ${G[50]}` : "none" }}>
+            <div style={{ width:20, height:20, borderRadius:5, background:item.feito ? S.grnBg : G[100], border:`2px solid ${item.feito ? S.grn : G[300]}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              {item.feito && <Check size={11} color={S.grn}/>}
+            </div>
+            <span style={{ fontSize:12, color: item.feito ? "#bbb" : G[800], textDecoration: item.feito ? "line-through" : "none", flex:1 }}>
+              {item.label}
+            </span>
+            {item.feito && <span style={{ fontSize:10, color:S.grn, fontWeight:600 }}>✓</span>}
+          </div>
+        ))}
+
+        {totalItems === 0 && (
+          <div style={{ textAlign:"center", color:"#ccc", fontSize:12, padding:"12px 0" }}>
+            Nenhum item registrado para esta semana ainda.
+          </div>
+        )}
+
+        <div style={{ fontSize:9, color:"#ccc", marginTop:8, textAlign:"center" }}>
+          Preenchido pela equipe clínica — visualização apenas
+        </div>
+      </div>
+
+      {/* Resumo de perda de peso */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px", textAlign:"center" }}>
+          <div style={{ fontSize:20, fontWeight:700, color:G[700] }}>{p?.cw || "—"}kg</div>
+          <div style={{ fontSize:10, color:"#aaa", marginTop:2 }}>Peso atual</div>
+        </div>
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${perdaKg > 0 ? S.grn : G[200]}`, padding:"12px 14px", textAlign:"center" }}>
+          <div style={{ fontSize:20, fontWeight:700, color: perdaKg > 0 ? S.grn : "#bbb" }}>
+            {perdaKg > 0 ? `-${perdaKg.toFixed(1).replace(".",",")}kg` : "—"}
+          </div>
+          <div style={{ fontSize:10, color:"#aaa", marginTop:2 }}>Perda total</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
    PORTAL DO PACIENTE (Read-only)
 ═══════════════════════════════════════════════ */
 function Portal({  p, av, setAv }) {
@@ -1935,129 +2063,7 @@ function Portal({  p, av, setAv }) {
   );
 }
 
-/* ════════════════════════════════════════════
-   MODAL REGISTRO DE PESAGEM
-═══════════════════════════════════════════════ */
-function WeighInModal({ p, onClose, onSave, onLog, onSendMsg }) {
-  const [data,     setData]    = useState(format(new Date(), "yyyy-MM-dd"));
-  const [peso,     setPeso]    = useState(p.cw || "");
-  const [mm,       setMm]      = useState("");
-  const [mg,       setMg]      = useState("");
-  const [sendMsg,  setSendMsg] = useState(true);   // toggle enviar mensagem
-
-  const w    = parseFloat(peso) || 0;
-  const mVal = parseFloat(mm)   || 0;
-  const gVal = parseFloat(mg)   || 0;
-  const tot  = mVal + gVal;
-  const pctMM = tot > 0 ? (mVal/tot*100).toFixed(1) : "—";
-  const pctMG = tot > 0 ? (gVal/tot*100).toFixed(1) : "—";
-
-  const perdaTotal = p.iw > 0 ? (p.iw - w) : null;
-  const perdaSem   = p.cw > 0 ? (p.cw - w) : null;
-
-  // Texto da mensagem que será enviada ao paciente
-  const msgText = [
-    `📊 *Pesagem registrada — ${safeFmt(data, "dd/MM/yyyy")}*`,
-    ``,
-    `⚖️ Peso atual: *${w}kg*`,
-    perdaSem   !== null ? `📉 Variação: ${perdaSem >= 0 ? `-${perdaSem.toFixed(1)}` : `+${Math.abs(perdaSem).toFixed(1)}`}kg esta pesagem` : null,
-    perdaTotal !== null ? `🏆 Perda total no programa: *${perdaTotal.toFixed(1)}kg*` : null,
-    (mVal > 0 || gVal > 0) ? `💪 Massa magra: ${mVal}kg (${pctMM}%) | Gordura: ${gVal}kg (${pctMG}%)` : null,
-    ``,
-    `Continue assim! 🌟 — Equipe Ser Livre`,
-  ].filter(l => l !== null).join("\n");
-
-  const handleSave = () => {
-    if (!w) return alert("Informe o peso.");
-    const entry = {
-      date: new Date(data).toISOString(),
-      weight: w,
-      massaMagra: mVal,
-      massaGordura: gVal,
-      m: (p.history||[])[(p.history||[]).length-1]?.m || {},
-      b: (p.history||[])[(p.history||[]).length-1]?.b || {},
-      n: (p.history||[])[(p.history||[]).length-1]?.n || {},
-    };
-    onSave(entry);
-    onLog && onLog({ action:"pesagem", patientId:p.id, patientName:p.name, detail:`Peso: ${w}kg | MM: ${mVal}kg | MG: ${gVal}kg` });
-    if (sendMsg && onSendMsg) {
-      onSendMsg({
-        id: Date.now(),
-        date: new Date().toISOString(),
-        senderName: "Equipe Ser Livre",
-        role: "admin",
-        text: msgText,
-        conv: `p_${p.id}`,
-        read: false,
-      });
-    }
-  };
-
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"#fff", width:"100%", maxWidth:400, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)", maxHeight:"90vh", overflowY:"auto" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
-          <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>Registrar pesagem</span>
-          <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50], fontSize:13, color:"#aaa" }}>✕</div>
-        </div>
-        <div style={{ fontSize:11, color:"#aaa", marginBottom:14 }}>{p.name}</div>
-
-        {[
-          { label:"Data da pesagem",  val:data, set:setData, type:"date"   },
-          { label:"Peso total (kg)",  val:peso, set:setPeso, type:"number", ph:"84.2" },
-          { label:"Massa magra (kg)", val:mm,   set:setMm,   type:"number", ph:"56.8" },
-          { label:"Massa gorda (kg)", val:mg,   set:setMg,   type:"number", ph:"27.4" },
-        ].map(f => (
-          <div key={f.label} style={{ marginBottom:12 }}>
-            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
-            <input type={f.type} value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph||""}
-              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
-          </div>
-        ))}
-
-        {tot > 0 && (
-          <div style={{ background:G[50], borderRadius:8, padding:"8px 12px", marginBottom:12, display:"flex", gap:16, fontSize:11 }}>
-            <span style={{ color:S.blue }}>Magra: <strong>{pctMM}%</strong></span>
-            <span style={{ color:S.yel }}>Gorda: <strong>{pctMG}%</strong></span>
-          </div>
-        )}
-
-        {/* Toggle — enviar mensagem ao paciente */}
-        <div style={{ border:`1.5px solid ${sendMsg?G[400]:G[200]}`, borderRadius:10, padding:"12px 14px", marginBottom:16, background:sendMsg?G[50]:"#fff", transition:"all 0.2s" }}>
-          <div onClick={()=>setSendMsg(!sendMsg)}
-            style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", marginBottom: sendMsg ? 10 : 0 }}>
-            <div style={{ width:36, height:20, borderRadius:10, background:sendMsg?G[600]:"#ddd", position:"relative", transition:"background 0.2s", flexShrink:0 }}>
-              <div style={{ position:"absolute", top:2, left:sendMsg?18:2, width:16, height:16, borderRadius:"50%", background:"#fff", transition:"left 0.2s", boxShadow:"0 1px 3px rgba(0,0,0,0.2)" }}/>
-            </div>
-            <div>
-              <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>Enviar evolução ao paciente</div>
-              <div style={{ fontSize:10, color:"#aaa" }}>Mensagem automática na conversa</div>
-            </div>
-          </div>
-          {sendMsg && w > 0 && (
-            <div style={{ background:"#fff", borderRadius:8, padding:"10px 12px", border:`1px solid ${G[200]}`, fontSize:11, color:"#555", lineHeight:1.6, whiteSpace:"pre-line", fontFamily:"inherit" }}>
-              {msgText}
-            </div>
-          )}
-          {sendMsg && !w && (
-            <div style={{ fontSize:10, color:"#aaa", textAlign:"center" }}>Preencha o peso para ver o preview</div>
-          )}
-        </div>
-
-        <div style={{ display:"flex", gap:8 }}>
-          <button onClick={handleSave}
-            style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-            💾 Salvar pesagem
-          </button>
-          <button onClick={onClose}
-            style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>
-            Cancelar
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+/* WeighInModal extraído para frontend/src/components/WeighInModal.jsx */
 
 /* ════════════════════════════════════════════
    MODAL NOVO MEMBRO DA EQUIPE
@@ -2568,9 +2574,10 @@ export default function App() {
             </div>
           </div>
           {/* Conteúdo por aba */}
-          {page==="dash"   && <Portal p={pp} av={avs[pp.id]} setAv={url=>setAvs(pr=>({...pr,[pp.id]:url}))}/>}
-          {page==="msg"    && <Mensagens ps={ps} messages={messages} setMessages={setMessages} mob patientMode patientPid={pp?.id}/>}
-          {page==="agenda" && (
+          {page==="dash"    && <Portal p={pp} av={avs[pp.id]} setAv={url=>setAvs(pr=>({...pr,[pp.id]:url}))}/>}
+          {page==="semana"  && <MinhaSemana p={pp}/>}
+          {page==="msg"     && <Mensagens ps={ps} messages={messages} setMessages={setMessages} mob patientMode patientPid={pp?.id}/>}
+          {page==="agenda"  && (
             <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"16px 14px", display:"flex", flexDirection:"column", gap:6 }}>
               <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:4 }}>📅 Seu próximo retorno</div>
               {pp?.nr ? (
@@ -2602,7 +2609,7 @@ export default function App() {
         {/* Bottom nav do paciente */}
         <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:`1px solid ${G[200]}`,
           display:"flex", justifyContent:"space-around", padding:"6px 0 max(6px,env(safe-area-inset-bottom))", zIndex:50 }}>
-          {[{k:"dash",l:"Início",i:Home},{k:"msg",l:"Mensagens",i:MessageCircle},{k:"agenda",l:"Agenda",i:CalendarDays}].map(n=>{
+          {[{k:"dash",l:"Início",i:Home},{k:"semana",l:"Semana",i:ClipboardCheck},{k:"msg",l:"Mensagens",i:MessageCircle},{k:"agenda",l:"Agenda",i:CalendarDays}].map(n=>{
             const a=page===n.k;
             const badge=n.k==="msg"&&unreadMsgs>0;
             return (
