@@ -16,15 +16,60 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Interceptor: redireciona para login se token expirou
+// Interceptor: tenta refresh automático de token; se falhar, redireciona ao login
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => error ? prom.reject(error) : prom.resolve(token));
+  failedQueue = [];
+};
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        // Encadeia requisições enquanto o refresh está em progresso
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        }).then(token => {
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+          return api(originalRequest);
+        }).catch(err => Promise.reject(err));
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const refreshToken = localStorage.getItem('serlivre_refresh');
+        if (refreshToken) {
+          const { data } = await axios.post('/api/auth/refresh', { refreshToken });
+          if (data.token) {
+            localStorage.setItem('serlivre_token', data.token);
+            if (data.refreshToken) localStorage.setItem('serlivre_refresh', data.refreshToken);
+            api.defaults.headers.common.Authorization = `Bearer ${data.token}`;
+            processQueue(null, data.token);
+            originalRequest.headers.Authorization = `Bearer ${data.token}`;
+            return api(originalRequest);
+          }
+        }
+      } catch (_err) {
+        processQueue(_err, null);
+      } finally {
+        isRefreshing = false;
+      }
+
+      // Refresh falhou — logout e redireciona
       localStorage.removeItem('serlivre_token');
+      localStorage.removeItem('serlivre_refresh');
       localStorage.removeItem('serlivre_user');
       window.location.href = '/';
     }
+
     return Promise.reject(error);
   }
 );

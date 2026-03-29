@@ -997,6 +997,10 @@ app.put('/api/state/:key', authRequired, async (req, res) => {
 // ════════════════════════════════════════════
 
 app.post('/api/seed', seedLimiter, async (req, res) => {
+  // Desabilitar completamente em produção
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not Found' });
+  }
   try {
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     console.log(`[SEED] Tentativa de seed recebida de IP: ${ip} em ${new Date().toISOString()}`);
@@ -1051,7 +1055,7 @@ app.use((err, req, res, next) => {
 
 // ════════════════════════════════════════════
 //  CRON — Avanço automático de semana
-//  Toda segunda-feira às 8h (fuso do servidor)
+//  Segunda às 8h fuso Brasília (America/Sao_Paulo)
 // ════════════════════════════════════════════
 cron.schedule('0 8 * * 1', async () => {
   try {
@@ -1068,7 +1072,7 @@ cron.schedule('0 8 * * 1', async () => {
 
 // ════════════════════════════════════════════
 //  CRON — Lembretes de consulta via WhatsApp
-//  Todo dia às 9h: envia lembrete para consultas do dia seguinte
+//  Todo dia às 9h fuso Brasília (America/Sao_Paulo)
 // ════════════════════════════════════════════
 cron.schedule('0 9 * * *', async () => {
   try {
