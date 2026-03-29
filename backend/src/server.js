@@ -367,7 +367,7 @@ app.post('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAG
 
 app.put('/api/patients/:id', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM'), async (req, res) => {
   try {
-    const { plan, currentWeight, height, birthDate, phone } = req.body;
+    const { plan, currentWeight, height, birthDate, phone, name } = req.body;
     const patient = await prisma.patient.update({
       where: { id: parseInt(req.params.id) },
       data: {
@@ -378,10 +378,13 @@ app.put('/api/patients/:id', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFER
       }
     });
 
-    if (phone !== undefined) {
+    if (phone !== undefined || name !== undefined) {
       await prisma.user.update({
         where: { id: patient.userId },
-        data: { phone }
+        data: {
+          ...(phone !== undefined && { phone }),
+          ...(name  !== undefined && { name  }),
+        }
       });
     }
 
@@ -768,6 +771,80 @@ app.post('/api/whatsapp/send', authRequired, requireRole('ADMIN','MEDICA','ENFER
 });
 
 // ════════════════════════════════════════════
+//  MESSAGES — Chat interno / por paciente
+// ════════════════════════════════════════════
+
+// GET /api/messages — lista todas conversas (equipe)
+// GET /api/messages?patientId=X — mensagens de um paciente
+app.get('/api/messages', authRequired, async (req, res) => {
+  try {
+    const { patientId } = req.query;
+    const where = patientId ? { patientId: parseInt(patientId) } : {};
+    const msgs = await prisma.messageLog.findMany({
+      where,
+      include: {
+        sentBy: { select: { id: true, name: true, role: true } },
+        patient: { include: { user: { select: { name: true } } } }
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 200,
+    });
+    res.json(msgs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/messages — envia mensagem (salva no MessageLog)
+app.post('/api/messages', authRequired, async (req, res) => {
+  try {
+    const { patientId, body, channel = 'interno' } = req.body;
+    if (!body?.trim()) return res.status(400).json({ error: 'body obrigatório' });
+    const msg = await prisma.messageLog.create({
+      data: {
+        patientId: patientId ? parseInt(patientId) : null,
+        sentById: req.user.id,
+        phone: '',
+        body: body.trim(),
+        channel,
+        status: 'sent',
+      },
+      include: { sentBy: { select: { id: true, name: true, role: true } } },
+    });
+    res.json(msg);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ════════════════════════════════════════════
+//  ACTIVITY LOG
+// ════════════════════════════════════════════
+
+app.get('/api/activity', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR'), async (req, res) => {
+  try {
+    const logs = await prisma.activityLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    res.json(logs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/activity', authRequired, async (req, res) => {
+  try {
+    const { action, patientId, patientName, detail } = req.body;
+    const log = await prisma.activityLog.create({
+      data: {
+        action,
+        patientId: patientId ? parseInt(patientId) : null,
+        patientName: patientName || null,
+        memberId: req.user.id,
+        memberName: req.user.name,
+        detail: detail || null,
+      },
+    });
+    res.json(log);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ════════════════════════════════════════════
 //  AVATAR
 // ════════════════════════════════════════════
 
@@ -800,6 +877,22 @@ app.get('/api/staff', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, 
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+app.put('/api/users/:id/profile', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
+  try {
+    const { name, phone, specialty, active } = req.body;
+    const updated = await prisma.user.update({
+      where: { id: req.params.id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(phone !== undefined && { phone }),
+        ...(specialty !== undefined && { specialty }),
+        ...(active !== undefined && { active }),
+      },
+    });
+    res.json(updated);
+  } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
 app.put('/api/users/:id/role', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {

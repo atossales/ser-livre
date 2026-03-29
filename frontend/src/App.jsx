@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, getDashboard } from './utils/api';
+import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, getDashboard, getMessages, sendMessage } from './utils/api';
 import { supabase } from './utils/supabase';
 import { Toast } from './components/Toast';
 import { AlertCard } from './components/AlertCard';
@@ -1144,7 +1144,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
             <SI label="Movimento"              value={es.n.mv} onChange={v=>setEs(pr=>({...pr,n:{...pr.n,mv:v}}))} opts={[{v:1,l:"Sedentário"},{v:2,l:"Parcial"},{v:3,l:"Completo"}]}/>
             {(()=>{ const t=cN(es.n); const s=sN(t); return <div style={{ marginTop:10, padding:"8px 12px", borderRadius:8, background:s.bg, display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600, color:s.c, fontSize:12 }}>{s.e} {t}/9 — {s.l}</span><span style={{ fontSize:11, color:s.c }}>{s.d}</span></div>; })()}
           </div>
-          <button onClick={()=>{ onSaveScores && onSaveScores(es); onAddScoreMonth && onAddScoreMonth({m:es.m,b:es.b,n:es.n}); alert("✅ Scores salvos e registrados na evolução mensal!"); }} style={{ width:"100%", padding:"11px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>💾 Salvar scores (registra no histórico mensal)</button>
+          <button onClick={()=>{ onSaveScores && onSaveScores(es); onAddScoreMonth && onAddScoreMonth({m:es.m,b:es.b,n:es.n}); onLog && onLog({ action:"scores", patientId:p.id, patientName:p.name, detail:"Scores metabólicos atualizados" }); }} style={{ width:"100%", padding:"11px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>💾 Salvar scores</button>
         </div>
       )}
 
@@ -1656,10 +1656,48 @@ function Agenda({ ps, onSel, mob }) {
    MENSAGENS
 ═══════════════════════════════════════════════ */
 function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) {
-  const [selConv, setSelConv] = useState(patientMode ? `p_${patientPid}` : null);
-  const [draft,   setDraft]   = useState("");
+  const [selConv,   setSelConv]   = useState(patientMode ? `p_${patientPid}` : null);
+  const [draft,     setDraft]     = useState("");
+  const [loading,   setLoading]   = useState(false);
+  const [localMsgs, setLocalMsgs] = useState([]);
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
+
+  // Converte um MessageLog do banco para o formato de exibição interno
+  const dbToLocal = (m) => {
+    const pid = m.patientId ? `p_${m.patientId}` : "team";
+    return {
+      id:         m.id,
+      date:       m.createdAt,
+      senderName: m.sentBy?.name || "",
+      role:       (m.sentBy?.role === "PACIENTE") ? "paciente" : "admin",
+      text:       m.body || "",
+      conv:       pid,
+      read:       true,
+      channel:    m.channel || "interno",
+    };
+  };
+
+  // Carrega mensagens do banco sempre que selConv mudar
+  const loadMessages = useCallback(async () => {
+    try {
+      setLoading(true);
+      // Para o canal da equipe (sem paciente), envia sem patientId
+      const pid = selConv && selConv.startsWith("p_")
+        ? parseInt(selConv.replace("p_", ""), 10)
+        : (patientMode && patientPid ? patientPid : null);
+      const res = await getMessages(pid);
+      setLocalMsgs((res.data || []).map(dbToLocal));
+    } catch (e) {
+      console.error("Erro ao carregar mensagens:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [selConv, patientMode, patientPid]);
+
+  useEffect(() => {
+    loadMessages();
+  }, [loadMessages]);
 
   // Lista de conversas: canal da equipe + uma por paciente
   const convs = patientMode ? [] : [
@@ -1668,29 +1706,26 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
   ];
 
   const getThread = useCallback((cid) =>
-    [...messages.filter(m => m.conv === cid)].sort((a,b) => new Date(a.date)-new Date(b.date)),
-  [messages]);
+    [...localMsgs.filter(m => m.conv === cid)].sort((a,b) => new Date(a.date)-new Date(b.date)),
+  [localMsgs]);
 
   const unread = (cid) =>
-    messages.filter(m => m.conv===cid && !m.read && m.role!=="admin").length;
+    localMsgs.filter(m => m.conv===cid && !m.read && m.role!=="admin").length;
 
-  const send = () => {
+  const send = async () => {
     const txt = draft.trim();
     if (!txt || !selConv) return;
-    const msg = {
-      id: Date.now(),
-      date: new Date().toISOString(),
-      senderName: patientMode
-        ? (ps.find(p=>p.id===patientPid)?.name || "Paciente")
-        : "Dra. Mariana Wogel",
-      role: patientMode ? "paciente" : "admin",
-      text: txt,
-      conv: selConv,
-      read: false,
-    };
-    setMessages(prev => [...prev, msg]);
+    const pid = selConv.startsWith("p_")
+      ? parseInt(selConv.replace("p_", ""), 10)
+      : (patientMode && patientPid ? patientPid : null);
     setDraft("");
-    setTimeout(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); inputRef.current?.focus(); }, 50);
+    try {
+      await sendMessage({ patientId: pid, body: txt, channel: 'interno' });
+      await loadMessages();
+      setTimeout(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); inputRef.current?.focus(); }, 50);
+    } catch (e) {
+      console.error("Erro ao enviar mensagem:", e);
+    }
   };
 
   const thread      = selConv ? getThread(selConv) : [];
@@ -2093,9 +2128,12 @@ function NewMemberModal({ onClose, onSave }) {
   const [specialty, setSpecialty] = useState("");
   const [email,     setEmail]     = useState("");
   const [phone,     setPhone]     = useState("");
+  const [err,       setErr]       = useState("");
 
   const handleSave = () => {
-    if (!nome.trim()) return alert("Informe o nome.");
+    if (!nome.trim()) return setErr("Informe o nome.");
+    if (!email.trim()) return setErr("Informe o e-mail.");
+    setErr("");
     const roleInfo = ROLES.find(r=>r.id===role);
     const nm = { id: Date.now(), name: nome.trim(), role, label: roleInfo?.label||role, specialty, email, phone, color: roleInfo?.color||G[600], createdAt: new Date().toISOString() };
     onSave(nm);
@@ -2127,6 +2165,7 @@ function NewMemberModal({ onClose, onSave }) {
           </div>
         ))}
         <div style={{ display:"flex", gap:8, marginTop:4 }}>
+          {err && <div style={{ color:"#e53e3e", fontSize:12, marginBottom:8 }}>{err}</div>}
           <button onClick={handleSave} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Adicionar</button>
           <button onClick={onClose}   style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
         </div>
@@ -2145,16 +2184,17 @@ function NewLeadModal({ onClose, onSave }) {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [plan, setPlan]   = useState("essential");
+  const [err,  setErr]    = useState("");
 
   const handleSave = () => {
     const w = parseFloat(peso);
-    if (!nome.trim() || !nasc || !w) return alert("Preencha nome, nascimento e peso.");
-    if (!email.trim()) return alert("Preencha o e-mail do paciente.");
+    if (!nome.trim() || !nasc || !w) return setErr("Preencha nome, nascimento e peso.");
+    if (!email.trim()) return setErr("Preencha o e-mail do paciente.");
+    setErr("");
     const np = {
       id: Date.now(), name: nome.trim(), plan, cycle: 1, week: 1,
       birthDate: nasc, phone, email, sd: new Date().toISOString(),
-      iw: w, cw: w,
-      history: [{ date: new Date().toISOString(), weight: w, m: MOCK_HIST_BASE[0].m, b: MOCK_HIST_BASE[0].b, n: MOCK_HIST_BASE[0].n }],
+      iw: w, cw: w, history: [], scoreHistory: [],
       nr: addDays(new Date(), 7).toISOString(), eng: 100
     };
     onSave(np);
@@ -2188,6 +2228,7 @@ function NewLeadModal({ onClose, onSave }) {
             {PLANS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
+        {err && <div style={{ color:"#e53e3e", fontSize:12, marginBottom:8 }}>{err}</div>}
         <div style={{ display:"flex", gap:8 }}>
           <button onClick={handleSave} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
           <button onClick={onClose} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
@@ -2412,8 +2453,8 @@ function normalizePatient(p) {
 ═══════════════════════════════════════════════ */
 export default function App() {
   const [ps,          setPs]          = useState([]);
-  const [team,        setTeam]        = useState(MOCK_TEAM);
-  const [activityLog, setActivityLog] = useState(MOCK_ACTIVITY);
+  const [team,        setTeam]        = useState([]);
+  const [activityLog, setActivityLog] = useState([]);
   const [messages,    setMessages]    = useState([]);
   const [dbLoaded,    setDbLoaded]    = useState(false);
   const [toasts,      setToasts]      = useState([]);
