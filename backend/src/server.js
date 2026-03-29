@@ -75,8 +75,18 @@ app.use(cors({
   methods: ['GET','PUT','POST','DELETE','PATCH','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization']
 }));
-app.options('*', cors());
-app.use(express.json({ limit: '15mb' }));
+// Pre-flight CORS deve usar a mesma validação de origem que o handler principal
+app.options('*', cors({
+  origin: (origin, cb) => {
+    if (!origin && process.env.NODE_ENV !== 'production') return cb(null, true);
+    if (origin && ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    cb(new Error('Origem não permitida pelo CORS'));
+  },
+  methods: ['GET','PUT','POST','DELETE','PATCH','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization']
+}));
+// Limite global conservador — rotas que precisam de payload maior usam middleware próprio
+app.use(express.json({ limit: '2mb' }));
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -153,8 +163,8 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   }
 });
 
-// Refresh token
-app.post('/api/auth/refresh', async (req, res) => {
+// Refresh token — rate limit previne abuso de tokens roubados (ex: XSS)
+app.post('/api/auth/refresh', authLimiter, async (req, res) => {
   try {
     const { refreshToken } = req.body;
     if (!refreshToken) return res.status(400).json({ error: 'refreshToken é obrigatório' });
@@ -480,8 +490,17 @@ app.patch('/api/patients/:id/restart', authRequired, requireRole('ADMIN', 'MEDIC
 
 app.get('/api/patients/:id/cycles', authRequired, async (req, res) => {
   try {
+    const patientId = parseInt(req.params.id);
+
+    // IDOR guard: paciente só pode ver os próprios ciclos
+    if (req.user.role === 'PACIENTE') {
+      if (!req.user.patient || req.user.patient.id !== patientId) {
+        return res.status(403).json({ error: 'Acesso negado a dados de outro paciente' });
+      }
+    }
+
     const cycles = await prisma.cycle.findMany({
-      where: { patientId: parseInt(req.params.id) },
+      where: { patientId },
       include: {
         weekChecks: { orderBy: { weekNumber: 'asc' } },
         scores: { orderBy: { month: 'asc' } }
@@ -992,9 +1011,29 @@ app.put('/api/users/:id/profile', authRequired, requireRole('ADMIN', 'MEDICA'), 
 app.put('/api/users/:id/role', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
   try {
     const { role, active } = req.body;
+
+    // Impede autopromocão / rebaixamento da própria conta
+    if (req.params.id === req.user.id) {
+      return res.status(403).json({ error: 'Não é permitido alterar o próprio papel' });
+    }
+
+    // Valida que o role é um dos valores válidos do enum
+    const VALID_ROLES = ['ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR','PACIENTE'];
+    if (role !== undefined && !VALID_ROLES.includes(role)) {
+      return res.status(400).json({ error: `Role inválido. Permitidos: ${VALID_ROLES.join(', ')}` });
+    }
+
+    // Somente ADMIN pode promover para ADMIN
+    if (role === 'ADMIN' && req.user.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Apenas ADMIN pode promover outro usuário a ADMIN' });
+    }
+
     await prisma.user.update({
       where: { id: req.params.id },
-      data: { role, active }
+      data: {
+        ...(role   !== undefined && { role }),
+        ...(active !== undefined && { active }),
+      }
     });
     res.json({ message: 'Permissões atualizadas' });
   } catch (err) {
@@ -1030,7 +1069,8 @@ app.put('/api/users/:id/password', authRequired, async (req, res) => {
 //  STATE BLOB
 // ════════════════════════════════════════════
 
-app.get('/api/state/:key', authRequired, async (req, res) => {
+// StateBlob: pacientes não têm acesso a blobs de estado da equipe
+app.get('/api/state/:key', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR'), async (req, res) => {
   try {
     const blob = await prisma.stateBlob.findUnique({ where: { key: req.params.key } });
     res.json(blob ? blob.value : null);
@@ -1039,7 +1079,7 @@ app.get('/api/state/:key', authRequired, async (req, res) => {
   }
 });
 
-app.put('/api/state/:key', authRequired, async (req, res) => {
+app.put('/api/state/:key', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR'), express.json({ limit: '10mb' }), async (req, res) => {
   try {
     await prisma.stateBlob.upsert({
       where: { key: req.params.key },
@@ -1083,11 +1123,17 @@ app.post('/api/seed', seedLimiter, async (req, res) => {
       { name: 'Danilo Admin', email: 'danilo@institutowogel.com', role: 'ADMIN' },
     ];
 
+    // Senha inicial lida de env var — nunca deve ser hardcoded no código
+    const seedPassword = process.env.SEED_DEFAULT_PASS;
+    if (!seedPassword) {
+      return res.status(500).json({ error: 'SEED_DEFAULT_PASS não definido. Configure a variável de ambiente antes de usar o seed.' });
+    }
+
     const created = [];
     for (const member of equipe) {
       const { data, error } = await supabaseAdmin.auth.admin.createUser({
         email: member.email,
-        password: 'SeedPass123!',
+        password: seedPassword,
         email_confirm: true,
         user_metadata: { name: member.name, role: member.role }
       });

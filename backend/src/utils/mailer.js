@@ -29,7 +29,12 @@ const FROM = process.env.SMTP_FROM || '"Programa Ser Livre" <noreply@serlivre.co
  */
 async function sendInviteEmail(to, name, token) {
   if (!process.env.SMTP_USER) {
-    console.log(`[MAILER] SMTP não configurado. Link de convite para ${name}: ${APP_URL}/convite/${token}`);
+    // Em produção: nunca logar tokens em texto claro (risco de exfiltração via logs)
+    if (process.env.NODE_ENV === 'production') {
+      console.warn(`[MAILER] SMTP não configurado em produção. Convite para ${name} (${to}) NÃO foi enviado.`);
+    } else {
+      console.log(`[MAILER DEV] Link de convite para ${name}: ${APP_URL}/convite/${token}`);
+    }
     return;
   }
   const transporter = createTransporter();
@@ -57,7 +62,11 @@ async function sendInviteEmail(to, name, token) {
  */
 async function sendResetEmail(to, name, token) {
   if (!process.env.SMTP_USER) {
-    console.log(`[MAILER] SMTP não configurado. Link de reset para ${name}: ${APP_URL}/redefinir-senha/${token}`);
+    if (process.env.NODE_ENV === 'production') {
+      console.warn(`[MAILER] SMTP não configurado em produção. Reset para ${name} (${to}) NÃO foi enviado.`);
+    } else {
+      console.log(`[MAILER DEV] Link de reset para ${name}: ${APP_URL}/redefinir-senha/${token}`);
+    }
     return;
   }
   const transporter = createTransporter();
