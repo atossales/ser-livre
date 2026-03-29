@@ -581,6 +581,26 @@ function PList({  ps, onSel, mob, onAdd, onDelete }) {
         </select>
       </div>
       <div style={{ display:"grid", gap:6 }}>
+        {f.length === 0 && (
+          <div style={{ textAlign:"center", padding:"40px 20px", color:"#aaa" }}>
+            {ps.length === 0 ? (
+              <>
+                <Users size={36} color={G[300]} style={{ margin:"0 auto 12px", display:"block" }}/>
+                <div style={{ fontSize:14, fontWeight:600, color:G[700], marginBottom:6 }}>Nenhum paciente cadastrado</div>
+                <div style={{ fontSize:12, marginBottom:16 }}>Cadastre o primeiro paciente do programa.</div>
+                <button onClick={onAdd} style={{ padding:"9px 20px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>
+                  + Cadastrar primeiro paciente
+                </button>
+              </>
+            ) : (
+              <>
+                <Search size={28} color={G[300]} style={{ margin:"0 auto 10px", display:"block" }}/>
+                <div style={{ fontSize:13, fontWeight:600, color:G[700], marginBottom:4 }}>Nenhum resultado</div>
+                <div style={{ fontSize:12 }}>Tente outro nome ou filtro de plano.</div>
+              </>
+            )}
+          </div>
+        )}
         {f.map(p => {
           const sc=SC[p.id]; const m=cM(sc?.m); const ms=sM(m);
           return (
@@ -646,7 +666,28 @@ function RelTab({ p, mob, plan, met, be, mn }) {
           <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Relatório Clínico</span>
           <div style={{ display:"flex", gap:6 }}>
             <button onClick={()=>setRelComp(!relComp)} style={{ fontSize:11, padding:"6px 12px", borderRadius:7, background:relComp?G[600]:G[50], color:relComp?"#fff":G[700], border:`1px solid ${G[300]}`, cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>📊 Comparativo</button>
-            <button onClick={()=>{ const el=document.getElementById(`rel-${p.id}`); if(el) html2pdf().set({margin:[10,10,10,10],filename:`relatorio-${p.name}.pdf`,html2canvas:{scale:2,useCORS:true,letterRendering:true},jsPDF:{format:"a4",orientation:"portrait",unit:"mm"},pagebreak:{mode:["css","legacy"],before:".pdf-page-break",avoid:".pdf-no-break"}}).from(el).save(); }} style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:7, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}><Download size={13}/>PDF</button>
+            <button
+              disabled={generatingPdf}
+              onClick={async () => {
+                const el = document.getElementById(`rel-${p.id}`);
+                if (!el) return;
+                setGeneratingPdf(true);
+                try {
+                  await html2pdf().set({
+                    margin:[10,10,10,10],
+                    filename:`relatorio-${p.name}.pdf`,
+                    html2canvas:{scale:2,useCORS:true,letterRendering:true},
+                    jsPDF:{format:"a4",orientation:"portrait",unit:"mm"},
+                    pagebreak:{mode:["css","legacy"],before:".pdf-page-break",avoid:".pdf-no-break"}
+                  }).from(el).save();
+                } finally {
+                  setGeneratingPdf(false);
+                }
+              }}
+              style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:7, background:generatingPdf?G[400]:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:generatingPdf?"not-allowed":"pointer", fontFamily:"inherit", opacity:generatingPdf?0.7:1 }}
+            >
+              <Download size={13}/>{generatingPdf ? "Gerando..." : "PDF"}
+            </button>
           </div>
         </div>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -821,6 +862,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
   const [editPhone, setEditPhone] = useState(p.phone||'');
   const [editEmail, setEditEmail] = useState(p.email||'');
   const [editBirth, setEditBirth] = useState(p.birthDate||'');
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const tabs = [
     {k:"ficha",    l:"Ficha",     i:User},
@@ -1731,12 +1773,14 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
     const pid = selConv.startsWith("p_")
       ? parseInt(selConv.replace("p_", ""), 10)
       : (patientMode && patientPid ? patientPid : null);
-    setDraft("");
+    setDraft(""); // limpa o campo otimisticamente
     try {
       await sendMessage({ patientId: pid, body: txt, channel: 'interno' });
       await loadMessages();
       setTimeout(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); inputRef.current?.focus(); }, 50);
     } catch (e) {
+      setDraft(txt); // restaura o draft se falhar
+      // toast não disponível aqui mas o erro é visível pelo draft restaurado
       console.error("Erro ao enviar mensagem:", e);
     }
   };
@@ -2629,15 +2673,19 @@ export default function App() {
   /* ─── PORTAL DO PACIENTE ─── */
   if (mode==="paciente") {
     const pp = ps[0];
-    // Paciente ainda carregando
+    // Paciente ainda carregando — spinner animado real
     if (!pp) return (
-      <div style={{ minHeight:"100vh", background:`linear-gradient(135deg,${G[800]},${G[900]})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
-        <div style={{ textAlign:"center", color:"#fff" }}>
-          <Shield size={28} color={G[300]} style={{ margin:"0 auto 12px", display:"block" }}/>
-          <div style={{ fontSize:14, fontWeight:600 }}>Carregando seu perfil...</div>
-          <div style={{ fontSize:11, opacity:0.4, marginTop:6 }}>Aguarde um instante</div>
+      <>
+        <style>{`@keyframes spin-portal{to{transform:rotate(360deg)}}@keyframes pulse-bar{0%,100%{opacity:0.4}50%{opacity:1}}`}</style>
+        <div style={{ minHeight:"100vh", background:`linear-gradient(135deg,${G[800]},${G[900]})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ textAlign:"center", color:"#fff" }}>
+            <div style={{ width:48, height:48, border:"3px solid rgba(255,255,255,0.2)", borderTopColor:"#fff", borderRadius:"50%", margin:"0 auto 16px", animation:"spin-portal 0.9s linear infinite" }}/>
+            <div style={{ fontSize:14, fontWeight:600 }}>Carregando seu perfil...</div>
+            <div style={{ fontSize:11, opacity:0.5, marginTop:6 }}>Aguarde um instante</div>
+            <div style={{ width:32, height:3, background:G[400], borderRadius:2, margin:"14px auto 0", animation:"pulse-bar 1.5s ease-in-out infinite" }}/>
+          </div>
         </div>
-      </div>
+      </>
     );
     return (
       <div style={{ fontFamily:"'Outfit','Inter',system-ui,sans-serif", background:W[50], minHeight:"100vh", color:"#2C2C2A" }}>
@@ -2925,16 +2973,9 @@ export default function App() {
           );
         })}
       </div>
-      {/* Toast container */}
-      <div style={{position:'fixed',bottom:80,right:16,zIndex:9999,display:'flex',flexDirection:'column',gap:8}}>
-        {toasts.map(t => (
-          <div key={t.id} style={{
-            padding:'12px 18px', borderRadius:10,
-            background: t.type==='error' ? '#dc2626' : t.type==='warning' ? '#d97706' : '#16a34a',
-            color:'#fff', fontSize:14, fontWeight:500,
-            boxShadow:'0 4px 20px rgba(0,0,0,0.2)'
-          }}>{t.msg}</div>
-        ))}
+      {/* Toast unificado — mobile (bottom elevado para não sobrepor nav) */}
+      <div style={{ position:'fixed', bottom:72, right:12, zIndex:9999 }}>
+        <Toast toasts={toasts} onClose={(id) => setToasts(p => p.filter(t => t.id !== id))} />
       </div>
     </div>
   );
@@ -2991,17 +3032,8 @@ export default function App() {
         {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setNl(false); handleCreatePatient(np); }}/>}
         {content}
       </div>
-      {/* Toast container */}
-      <div style={{position:'fixed',bottom:24,right:24,zIndex:9999,display:'flex',flexDirection:'column',gap:8}}>
-        {toasts.map(t => (
-          <div key={t.id} style={{
-            padding:'12px 18px', borderRadius:10,
-            background: t.type==='error' ? '#dc2626' : t.type==='warning' ? '#d97706' : '#16a34a',
-            color:'#fff', fontSize:14, fontWeight:500,
-            boxShadow:'0 4px 20px rgba(0,0,0,0.2)'
-          }}>{t.msg}</div>
-        ))}
-      </div>
+      {/* Toast unificado — desktop */}
+      <Toast toasts={toasts} onClose={(id) => setToasts(p => p.filter(t => t.id !== id))} />
     </div>
   );
 }

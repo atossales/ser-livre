@@ -63,6 +63,10 @@ export function WeighInModal({ p, onClose, onSave, onLog, onSendMsg }) {
 
   const handleSave = () => {
     if (!w) return setErr("Informe o peso total em kg.");
+    if (mVal > 0 && gVal > 0 && (mVal + gVal) > w) {
+      return setErr(`Atenção: soma das massas (${(mVal + gVal).toFixed(1)}kg) excede o peso total (${w}kg).`);
+    }
+    setErr("");
     const entry = {
       date:         new Date(data).toISOString(),
       weight:       w,
