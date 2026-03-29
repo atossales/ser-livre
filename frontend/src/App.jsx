@@ -1956,13 +1956,26 @@ function Portal({  p, av, setAv }) {
   const sc   = SC[p.id];
   const met  = cM(sc?.m); const be=cB(sc?.b); const mn=cN(sc?.n);
   const pm   = sc ? pM(sc.m) : {comp:0,infl:0,glic:0,card:0};
-  const hist = HIST(p.id);
+  // Histórico real de scores mensais (do ciclo ativo via normalizePatient)
+  const hist = (p.scoreHistory || []).map(s => ({
+    mo:  s.month || `Mês`,
+    met: cM(s.m),
+    be:  cB(s.b),
+    mn:  cN(s.n),
+  }));
   const plan = PLANS.find(x=>x.id===p.plan);
   const pct  = Math.round(p.week/16*100);
-  const tasks=[
-    {d:true, l:"Tirzepatida aplicada"},
-    {d:true, l:"Pesagem semanal"},
-    {d:false,l:"Treino 2 — Pulsare"},
+  // Checklist real da semana atual
+  const activeCycle = p._activeCycle;
+  const currentWeek = activeCycle?.currentWeek || p?.week || 1;
+  const checkAtual  = (activeCycle?.weekChecks || []).find(wc => wc.weekNumber === currentWeek)
+                    || (activeCycle?.weekChecks || []).slice(-1)[0] || null;
+  const tasks = [
+    { d: !!checkAtual?.tirzepatida,     l: "Tirzepatida aplicada" },
+    { d: !!checkAtual?.pesoRegistrado,  l: "Pesagem semanal" },
+    { d: !!checkAtual?.bioimpedancia,   l: "Bioimpedância" },
+    { d: !!checkAtual?.terapia,         l: "Consulta de terapia" },
+    { d: !!(checkAtual?.treinos?.[0]),  l: "Treino de resistência" },
   ];
 
   return (
@@ -2033,15 +2046,21 @@ function Portal({  p, av, setAv }) {
       {/* Evolução scores */}
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
         <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Evolução dos scores</div>
-        <ResponsiveContainer width="100%" height={170}>
-          <LineChart data={hist}>
-            <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="mo" tick={{fontSize:9,fill:G[700]}}/><YAxis tick={{fontSize:9,fill:"#bbb"}}/>
-            <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Legend iconType="circle" wrapperStyle={{fontSize:9}}/>
-            <Line type="monotone" dataKey="met" name="Met"    stroke={G[500]} strokeWidth={2} dot={{r:2}}/>
-            <Line type="monotone" dataKey="be"  name="Bem"    stroke={S.grn}  strokeWidth={2} dot={{r:2}}/>
-            <Line type="monotone" dataKey="mn"  name="Mental" stroke={S.pur}  strokeWidth={2} dot={{r:2}}/>
-          </LineChart>
-        </ResponsiveContainer>
+        {hist.length > 0 ? (
+          <ResponsiveContainer width="100%" height={170}>
+            <LineChart data={hist}>
+              <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="mo" tick={{fontSize:9,fill:G[700]}}/><YAxis tick={{fontSize:9,fill:"#bbb"}}/>
+              <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Legend iconType="circle" wrapperStyle={{fontSize:9}}/>
+              <Line type="monotone" dataKey="met" name="Met"    stroke={G[500]} strokeWidth={2} dot={{r:2}}/>
+              <Line type="monotone" dataKey="be"  name="Bem"    stroke={S.grn}  strokeWidth={2} dot={{r:2}}/>
+              <Line type="monotone" dataKey="mn"  name="Mental" stroke={S.pur}  strokeWidth={2} dot={{r:2}}/>
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div style={{ textAlign:"center", color:"#ccc", fontSize:12, padding:"24px 0" }}>
+            Histórico de scores disponível após a primeira consulta de retorno.
+          </div>
+        )}
       </div>
 
       {/* Radar metabólico */}
