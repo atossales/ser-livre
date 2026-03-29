@@ -34,6 +34,7 @@ model User {
   role      Role     @default(PACIENTE)
   avatarUrl String?  // URL da foto de perfil
   phone     String?
+  specialty String?  // Especialidade do profissional (nutricionista, psicóloga, etc.)
   active    Boolean  @default(true)
   emailVerified   Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -360,9 +361,9 @@ model MessageLog {
   sentById    String?
   sentBy      User?    @relation("messageSender", fields: [sentById], references: [id], onDelete: SetNull)
 
-  phone       String   // número que recebeu
+  phone       String?  // número que recebeu (null para mensagens internas do sistema)
   body        String   // texto final enviado (após substituição de variáveis)
-  channel     String   @default("whatsapp") // whatsapp | email
+  channel     String   @default("whatsapp") // whatsapp | email | interno
   status      String   @default("sent")     // sent | failed | pending
   error       String?
 

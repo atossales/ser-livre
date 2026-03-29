@@ -34,6 +34,9 @@
 // PUT    /api/users/:id/password          → Atualiza senha via Supabase
 // ============================================================
 
+// Garante fuso horário correto para CRONs e datas (Brasília = UTC-3)
+process.env.TZ = 'America/Sao_Paulo';
+
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -367,25 +370,30 @@ app.post('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAG
 app.put('/api/patients/:id', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM'), async (req, res) => {
   try {
     const { plan, currentWeight, height, birthDate, phone, name } = req.body;
-    const patient = await prisma.patient.update({
-      where: { id: parseInt(req.params.id) },
-      data: {
-        ...(plan && { plan }),
-        ...(currentWeight !== undefined && { currentWeight: parseFloat(currentWeight) }),
-        ...(height !== undefined && { height: height ? parseFloat(height) : null }),
-        ...(birthDate !== undefined && { birthDate: birthDate ? new Date(birthDate) : null })
-      }
-    });
+    const needsUserUpdate = phone !== undefined || name !== undefined;
 
-    if (phone !== undefined || name !== undefined) {
-      await prisma.user.update({
-        where: { id: patient.userId },
+    // Usar transação para garantir consistência entre patient e user
+    const patient = await prisma.$transaction(async (tx) => {
+      const updated = await tx.patient.update({
+        where: { id: parseInt(req.params.id) },
         data: {
-          ...(phone !== undefined && { phone }),
-          ...(name  !== undefined && { name  }),
+          ...(plan && { plan }),
+          ...(currentWeight !== undefined && { currentWeight: parseFloat(currentWeight) }),
+          ...(height !== undefined && { height: height ? parseFloat(height) : null }),
+          ...(birthDate !== undefined && { birthDate: birthDate ? new Date(birthDate) : null })
         }
       });
-    }
+      if (needsUserUpdate) {
+        await tx.user.update({
+          where: { id: updated.userId },
+          data: {
+            ...(phone !== undefined && { phone }),
+            ...(name  !== undefined && { name  }),
+          }
+        });
+      }
+      return updated;
+    });
 
     res.json(patient);
   } catch (err) {
@@ -836,7 +844,7 @@ app.post('/api/messages', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM
       data: {
         patientId: patientId ? parseInt(patientId) : null,
         sentById: req.user.id,
-        phone: '',
+        phone: null,  // null para mensagens internas; WhatsApp usa o endpoint /api/whatsapp/send
         body: body.trim(),
         channel,
         status: 'sent',
