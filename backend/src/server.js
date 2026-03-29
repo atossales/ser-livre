@@ -257,7 +257,13 @@ app.get('/api/patients', authRequired, async (req, res) => {
       where,
       include: {
         user: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
-        cycles: { where: { status: 'ACTIVE' }, include: { scores: true } }
+        cycles: {
+          where: { status: 'ACTIVE' },
+          include: {
+            scores: { orderBy: { month: 'asc' } },
+            weekChecks: { orderBy: { weekNumber: 'asc' } }
+          }
+        }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -837,7 +843,7 @@ app.put('/api/users/:id/password', authRequired, async (req, res) => {
 //  STATE BLOB
 // ════════════════════════════════════════════
 
-app.get('/api/state/:key', async (req, res) => {
+app.get('/api/state/:key', authRequired, async (req, res) => {
   try {
     const blob = await prisma.stateBlob.findUnique({ where: { key: req.params.key } });
     res.json(blob ? blob.value : null);
@@ -846,7 +852,7 @@ app.get('/api/state/:key', async (req, res) => {
   }
 });
 
-app.put('/api/state/:key', async (req, res) => {
+app.put('/api/state/:key', authRequired, async (req, res) => {
   try {
     await prisma.stateBlob.upsert({
       where: { key: req.params.key },

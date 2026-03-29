@@ -1979,7 +1979,7 @@ function Portal({  p, av, setAv }) {
   ];
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+    <div id={`portal-rel-${p.id}`} style={{ display:"flex", flexDirection:"column", gap:12 }}>
       {/* Header gradiente */}
       <div style={{ background:`linear-gradient(135deg,${G[700]},${G[900]})`, borderRadius:14, padding:"18px 16px", color:"#fff" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>

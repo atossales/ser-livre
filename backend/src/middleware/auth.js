@@ -88,9 +88,10 @@ function requireRole(...roles) {
  */
 function onlyOwnData(req, res, next) {
   if (req.user.role === 'PACIENTE') {
-    // Se for paciente, só pode ver dados do próprio patient.id
-    if (req.params.patientId && req.user.patient) {
-      if (parseInt(req.params.patientId) !== req.user.patient.id) {
+    // Suporta tanto :id quanto :patientId como nome do parâmetro
+    const paramId = req.params.id || req.params.patientId;
+    if (paramId && req.user.patient) {
+      if (parseInt(paramId) !== req.user.patient.id) {
         return res.status(403).json({ error: 'Acesso negado a dados de outro paciente' });
       }
     }
