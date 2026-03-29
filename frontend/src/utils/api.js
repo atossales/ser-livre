@@ -93,4 +93,16 @@ export const createAppointment = (data) => api.post('/appointments', data);
 export const sendWhatsAppMsg = (data) => api.post('/whatsapp/send', data);
 export const getMessageLog = (patientId) => api.get(`/patients/${patientId}/messages`);
 
+// ── Messages (chat interno) ──
+export const getMessages = (patientId) => api.get('/messages', { params: patientId ? { patientId } : {} });
+export const sendMessage = (data) => api.post('/messages', data);
+
+// ── Staff / Equipe ──
+export const getStaff = () => api.get('/staff');
+export const updateUserProfile = (id, data) => api.put(`/users/${id}/profile`, data);
+
+// ── Activity Log ──
+export const getActivity = () => api.get('/activity');
+export const logActivity = (data) => api.post('/activity', data);
+
 export default api;

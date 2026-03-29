@@ -56,6 +56,9 @@ model User {
   // Comunicação
   templatesCreated       MessageTemplate[] @relation("templateCreator")
   messagesSent           MessageLog[]      @relation("messageSender")
+
+  // Activity log
+  activityLogs           ActivityLog[]     @relation("activityMember")
 }
 
 // Papéis possíveis no sistema
@@ -94,6 +97,7 @@ model Patient {
   alerts        Alert[]         // Alertas gerados
   appointments  Appointment[]   // Agendamentos
   messageLogs   MessageLog[]    // Histórico de mensagens
+  activityLogs  ActivityLog[]   // Log de atividades
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -363,6 +367,21 @@ model MessageLog {
   error       String?
 
   createdAt   DateTime @default(now())
+}
+
+model ActivityLog {
+  id          Int      @id @default(autoincrement())
+  action      String
+  patientId   Int?
+  patient     Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  patientName String?
+  memberId    String?
+  member      User?    @relation("activityMember", fields: [memberId], references: [id], onDelete: SetNull)
+  memberName  String?
+  detail      String?
+  createdAt   DateTime @default(now())
+
+  @@map("activity_logs")
 }
 
 model InviteToken {

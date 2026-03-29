@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, getDashboard, getMessages, sendMessage } from './utils/api';
+import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, getActivity, logActivity, register as apiRegister } from './utils/api';
 import { supabase } from './utils/supabase';
+import { ResetPassword } from './components/ResetPassword';
 import { Toast } from './components/Toast';
 import { AlertCard } from './components/AlertCard';
 import { WeighInModal } from './components/WeighInModal';
@@ -1457,7 +1458,7 @@ function TeamP({ team, setTeam, ta, setTa, activityLog }) {
                 </div>
               ))}
               <div style={{ display:"flex", gap:8, marginTop:4 }}>
-                <button onClick={()=>{ setTeam(prev=>prev.map(x=>x.id===editMember.id?editMember:x)); setEditMember(null); }}
+                <button onClick={()=>{ updateUserProfile(editMember.id, { name: editMember.name, phone: editMember.phone, specialty: editMember.specialty }).catch(()=>{}); setTeam(prev=>prev.map(x=>x.id===editMember.id?editMember:x)); setEditMember(null); }}
                   style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
                 <button onClick={()=>setEditMember(null)}
                   style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
@@ -1492,7 +1493,13 @@ function TeamP({ team, setTeam, ta, setTa, activityLog }) {
           </div>
         );
       })}
-      {showNew && <NewMemberModal onClose={()=>setShowNew(false)} onSave={nm=>{ setTeam(prev=>[...prev,nm]); setShowNew(false); }}/>}
+      {showNew && <NewMemberModal onClose={()=>setShowNew(false)} onSave={async (nm) => {
+        try {
+          await apiRegister({ name: nm.name, email: nm.email, role: nm.role?.toUpperCase() || 'ENFERMAGEM', phone: nm.phone || '' });
+          getStaff().then(r => setTeam(r.data)).catch(() => {});
+          setShowNew(false);
+        } catch (err) { console.warn('Erro ao criar membro:', err.message); }
+      }}/>}
     </div>
   );
 }
@@ -2509,6 +2516,7 @@ export default function App() {
   const addLog = ({ action, patientId, patientName, detail }) => {
     const entry = { id: Date.now(), date: new Date().toISOString(), memberId:1, memberName:"Dra. Mariana Wogel", action, patientId, patientName, detail };
     setActivityLog(prev=>[entry,...prev]);
+    logActivity({ action, patientId, patientName, detail }).catch(() => {});
   };
 
   // Recarrega lista de pacientes da API real
@@ -2528,12 +2536,29 @@ export default function App() {
 
   const SC = genSC(ps);
 
-  const [lg,   setLg]   = useState(!!localStorage.getItem('serlivre_token'));
+  const [lg,      setLg]      = useState(!!localStorage.getItem('serlivre_token'));
+  const [isReset, setIsReset] = useState(false);
   const [mode, setMode] = useState(() => {
     try { return JSON.parse(localStorage.getItem('serlivre_user') || '{}').role === 'paciente' ? 'paciente' : 'admin'; }
     catch { return 'admin'; }
   });
   const [page, setPage] = useState("dash");
+
+  // Detectar se veio de link de reset de senha
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.includes('type=recovery') || hash.includes('access_token')) {
+      setIsReset(true);
+    }
+  }, []);
+
+  // Carrega equipe e activity log após login
+  useEffect(() => {
+    if (lg && mode !== 'paciente') {
+      getStaff().then(r => setTeam(r.data)).catch(() => {});
+      getActivity().then(r => setActivityLog(r.data)).catch(() => {});
+    }
+  }, [lg, mode]);
 
   const doLogout = () => {
     localStorage.removeItem('serlivre_token');
@@ -2596,6 +2621,9 @@ export default function App() {
       </div>
     </div>
   );
+
+  /* ─── Reset de senha ─── */
+  if (isReset) return <ResetPassword onDone={() => { setIsReset(false); window.location.hash = ''; }}/>;
 
   /* ─── Não logado ─── */
   if (!lg) return <Login onLogin={async (m) => {
