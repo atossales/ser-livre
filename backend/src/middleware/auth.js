@@ -11,8 +11,7 @@
 // ============================================================
 
 const { createClient } = require('@supabase/supabase-js');
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 // Cliente Supabase com a service role key (acesso total ao Auth Admin API)
 const supabaseAdmin = createClient(
@@ -91,7 +90,9 @@ function onlyOwnData(req, res, next) {
     // Suporta tanto :id quanto :patientId como nome do parâmetro
     const paramId = req.params.id || req.params.patientId;
     if (paramId && req.user.patient) {
-      if (parseInt(paramId) !== req.user.patient.id) {
+      const numId = Number(paramId);
+      // Se não for número finito ou não pertencer ao paciente logado, bloqueia
+      if (!Number.isFinite(numId) || numId !== req.user.patient.id) {
         return res.status(403).json({ error: 'Acesso negado a dados de outro paciente' });
       }
     }

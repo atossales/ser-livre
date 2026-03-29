@@ -164,22 +164,28 @@ const HIST = id => [1,2,3,4].map((m,i) => ({
   mn:  Math.min(9,  Math.max(3,   4 + id%2   + i  )),
 }));
 
-const genCL = (p, tier) => {
+// Gera estrutura de checklist com base em weekChecks reais do banco.
+// Semanas passadas (i < currentWeek): marcadas como concluídas.
+// Semana atual e futuras: false — estado real vem do banco (weekChecks).
+const genCL = (p, tier, weekChecks = []) => {
   const w = p?.week || 1;
   const f = TIER[tier];
   const r = {};
+  // Indexar weekChecks por weekNumber para lookup O(1)
+  const wkMap = {};
+  (weekChecks || []).forEach(wc => { wkMap[wc.weekNumber] = wc; });
   for (let i=1; i<=16; i++) {
-    const d  = i < w;
-    const pt = i === w;
+    const past = i < w;
+    const wc   = wkMap[i]; // dados reais do banco para essa semana
     r[i] = {
-      tirz: d||(pt&&Math.random()>0.3),
-      ter:  f.ter ? (d||(pt&&Math.random()>0.4)) : null,
-      peso: d||(pt&&Math.random()>0.2),
-      psi:  f.psi ? (d||(pt&&Math.random()>0.5)) : null,
-      bio:  d||(pt&&Math.random()>0.3),
-      tr:   Array.from({length:f.tr}, () => d||(pt&&Math.random()>0.4)),
-      nu:   i%4===1 ? {av:d, pl:d, sc:d} : null,
-      dose: d||pt ? (i<=4?"2.5mg":i<=8?"5mg":i<=12?"7.5mg":"10mg") : "2.5mg",
+      tirz: wc ? !!wc.tirzepatida   : past,
+      ter:  f.ter ? (wc ? !!wc.terapia    : past) : null,
+      peso: wc ? !!wc.pesagem        : past,
+      psi:  f.psi ? (wc ? !!wc.psicologia : past) : null,
+      bio:  wc ? !!wc.bioimpedancia  : past,
+      tr:   Array.from({length:f.tr}, (_, ti) => wc ? !!(wc[`tr${ti}`] ?? wc.treino) : past),
+      nu:   i%4===1 ? { av: wc ? !!wc.nutriAvaliacao : past, pl: wc ? !!wc.nutriPlano : past, sc: wc ? !!wc.nutriScore : past } : null,
+      dose: (i<=4?"2.5mg":i<=8?"5mg":i<=12?"7.5mg":"10mg"),
     };
   }
   return r;
@@ -671,7 +677,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
             </div>
           </div>
           <div style={{ fontSize:19, fontWeight:700 }}>Relatório Clínico</div>
-          <div style={{ fontSize:12, opacity:0.6, marginTop:2 }}>{p.name} · Emitido em {fmt(TODAY)}/2026</div>
+          <div style={{ fontSize:12, opacity:0.6, marginTop:2 }}>{p.name} · Emitido em {fmt(TODAY)}/{TODAY.getFullYear()}</div>
           {(relDe||relAte) && <div style={{ fontSize:10, opacity:0.4, marginTop:2 }}>Período: {relDe||"início"} → {relAte||"hoje"}</div>}
         </div>
 
@@ -804,7 +810,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
   const met  = cM(sc?.m); const be = cB(sc?.b); const mn = cN(sc?.n);
   const pm   = sc ? pM(sc.m) : {comp:0,infl:0,glic:0,card:0};
   const hist = HIST(p.id);
-  const [cl, setCl]   = useState(() => genCL(p, tier));
+  const [cl, setCl]   = useState(() => genCL(p, tier, p._activeCycle?.weekChecks || []));
   const [es, setEs]   = useState(sc ? JSON.parse(JSON.stringify(sc)) : null);
   const [sw, setSw]   = useState(p.week);
   const [showWeighIn, setShowWeighIn] = useState(false);
@@ -2142,7 +2148,7 @@ function NewMemberModal({ onClose, onSave }) {
     if (!email.trim()) return setErr("Informe o e-mail.");
     setErr("");
     const roleInfo = ROLES.find(r=>r.id===role);
-    const nm = { id: Date.now(), name: nome.trim(), role, label: roleInfo?.label||role, specialty, email, phone, color: roleInfo?.color||G[600], createdAt: new Date().toISOString() };
+    const nm = { id: crypto.randomUUID(), name: nome.trim(), role, label: roleInfo?.label||role, specialty, email, phone, color: roleInfo?.color||G[600], createdAt: new Date().toISOString() };
     onSave(nm);
   };
 
@@ -2199,7 +2205,7 @@ function NewLeadModal({ onClose, onSave }) {
     if (!email.trim()) return setErr("Preencha o e-mail do paciente.");
     setErr("");
     const np = {
-      id: Date.now(), name: nome.trim(), plan, cycle: 1, week: 1,
+      id: crypto.randomUUID(), name: nome.trim(), plan, cycle: 1, week: 1,
       birthDate: nasc, phone, email, sd: new Date().toISOString(),
       iw: w, cw: w, history: [], scoreHistory: [],
       nr: addDays(new Date(), 7).toISOString(), eng: 100
@@ -2465,10 +2471,9 @@ export default function App() {
   const [messages,    setMessages]    = useState([]);
   const [dbLoaded,    setDbLoaded]    = useState(false);
   const [toasts,      setToasts]      = useState([]);
-  const saveTimer = useRef({});
 
   const toast = (msg, type = 'success') => {
-    const id = Date.now();
+    const id = crypto.randomUUID();
     setToasts(p => [...p, { id, msg, type }]);
     setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4000);
   };
@@ -2486,35 +2491,21 @@ export default function App() {
 
     Promise.all([
       fetch('/api/patients', { headers }).then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch('/api/state/messages', { headers }).then(r => r.ok ? r.json() : null).catch(() => null),
-    ]).then(([pData, mData]) => {
+    ]).then(([pData]) => {
       if (Array.isArray(pData) && pData.length > 0) {
         setPs(pData.map(normalizePatient));
       }
-      if (Array.isArray(mData) && mData.length > 0) setMessages(mData);
       setDbLoaded(true);
     }).catch(() => setDbLoaded(true));
   }, []);
 
-  // Salva mensagens no StateBlob (dado não-relacional, manter como blob)
-  const saveToApi = useCallback((key, data) => {
-    if (!dbLoaded) return;
-    const token = localStorage.getItem('serlivre_token');
-    if (!token) return;
-    clearTimeout(saveTimer.current[key]);
-    saveTimer.current[key] = setTimeout(() => {
-      fetch(`/api/state/${key}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(data)
-      }).catch(() => {});
-    }, 1500);
-  }, [dbLoaded]);
-
-  useEffect(() => { saveToApi('messages',  messages);    }, [messages,    saveToApi]);
+  // Mensagens são persistidas diretamente via POST /api/messages (ver componente Mensagens)
+  // Não usar mais saveToApi para mensagens — rota /api/state/* não existe para esse fim
 
   const addLog = ({ action, patientId, patientName, detail }) => {
-    const entry = { id: Date.now(), date: new Date().toISOString(), memberId:1, memberName:"Dra. Mariana Wogel", action, patientId, patientName, detail };
+    // Usa dados reais do usuário logado (não hardcoded)
+    const userRaw = (() => { try { return JSON.parse(localStorage.getItem('serlivre_user') || '{}'); } catch { return {}; } })();
+    const entry = { id: crypto.randomUUID(), date: new Date().toISOString(), memberId: userRaw.id || '', memberName: userRaw.name || 'Usuário', action, patientId, patientName, detail };
     setActivityLog(prev=>[entry,...prev]);
     logActivity({ action, patientId, patientName, detail }).catch(() => {});
   };
@@ -2718,7 +2709,6 @@ export default function App() {
 
   // Criar paciente via API real e recarregar lista
   const handleCreatePatient = async (np) => {
-    addLog({ action:"cadastro", patientId: np.id || 0, patientName: np.name, detail:"Novo paciente cadastrado" });
     try {
       await apiCreatePatient({
         name:          np.name,
@@ -2730,18 +2720,21 @@ export default function App() {
         height:        np.height   || undefined,
       });
       await reloadPatients();
+      addLog({ action:"cadastro", patientId: 0, patientName: np.name, detail:"Novo paciente cadastrado" });
     } catch (err) {
-      console.warn('API patient creation failed (SMTP may not be configured):', err.message);
-      toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error');
-      // Insere localmente com dados do modal como fallback
-      setPs(prev => [...prev, np]);
+      // Não inserir localmente com ID falso — mostra erro e aguarda correção
+      toast(err?.response?.data?.error || err?.message || 'Erro ao cadastrar paciente. Tente novamente.', 'error');
     }
   };
 
-  // Excluir paciente
+  // Excluir paciente — aguarda confirmação da API antes de remover da UI
   const handleDeletePatient = async (id) => {
-    setPs(prev => prev.filter(x => x.id !== id));
-    try { await apiDeletePatient(id); } catch (err) { console.warn('API delete failed:', err.message); toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error'); }
+    try {
+      await apiDeletePatient(id);
+      setPs(prev => prev.filter(x => x.id !== id));
+    } catch (err) {
+      toast(err?.response?.data?.error || 'Erro ao excluir paciente. Tente novamente.', 'error');
+    }
   };
 
   // Salvar scores — persiste via API e atualiza lista local
@@ -2803,18 +2796,22 @@ export default function App() {
   const handleAddScoreMonth = ({ m, b, n }) => {
     const mo = format(new Date(), "MMM/yy");
     setPs(prev => prev.map(x => x.id === sp.id
-      ? { ...x, scoreHistory: [...(x.scoreHistory || []), { id: Date.now(), date: new Date().toISOString(), month: mo, m, b, n }] }
+      ? { ...x, scoreHistory: [...(x.scoreHistory || []), { id: crypto.randomUUID(), date: new Date().toISOString(), month: mo, m, b, n }] }
       : x
     ));
   };
 
   // Alterar plano via API real
   const handleChangePlan = async (newPlan) => {
-    setPs(prev => prev.map(x => x.id === sp.id ? { ...x, plan: newPlan } : x));
+    const prev = ps.find(x => x.id === sp.id)?.plan;
+    setPs(p => p.map(x => x.id === sp.id ? { ...x, plan: newPlan } : x));
     try {
       await apiUpdatePatient(sp.id, { plan: newPlan.toUpperCase() });
+      toast('Plano alterado com sucesso!', 'success');
     } catch (err) {
-      console.warn('Plan update failed:', err.message);
+      // Rollback UI em caso de erro
+      setPs(p => p.map(x => x.id === sp.id ? { ...x, plan: prev } : x));
+      toast(err?.response?.data?.error || 'Erro ao alterar plano. Tente novamente.', 'error');
     }
   };
 

@@ -36,7 +36,6 @@
 
 const express = require('express');
 const cors = require('cors');
-const { PrismaClient } = require('@prisma/client');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -50,7 +49,7 @@ const { calcularMetabolico, calcularBemEstar, calcularMental, gerarAlertas } = r
 const { sendInviteEmail, sendResetEmail } = require('./utils/mailer');
 const { sendWhatsApp } = require('./utils/whatsapp');
 
-const prisma = new PrismaClient();
+const prisma = require('./lib/prisma');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -498,29 +497,32 @@ app.post('/api/scores', authRequired, requireRole('MEDICA', 'NUTRICIONISTA', 'AD
     const bem = calcularBemEstar(data);
     const men = calcularMental(data);
 
-    const score = await prisma.scoreEntry.create({
-      data: {
-        ...data,
-        totalMetabolico: met.total,
-        totalBemEstar: bem.total,
-        totalMental: men.total,
-        statusMetabolico: met.status,
-        statusBemEstar: bem.status,
-        statusMental: men.status,
-        filledById: req.user.id
-      }
-    });
+    // Usar transação para garantir atomicidade: score + alertas criados juntos ou nenhum
+    const { score, alertas } = await prisma.$transaction(async (tx) => {
+      const entry = await tx.scoreEntry.create({
+        data: {
+          ...data,
+          totalMetabolico: met.total,
+          totalBemEstar: bem.total,
+          totalMental: men.total,
+          statusMetabolico: met.status,
+          statusBemEstar: bem.status,
+          statusMental: men.status,
+          filledById: req.user.id
+        }
+      });
 
-    const alertas = gerarAlertas(met, bem, men);
-    const cycle = await prisma.cycle.findUnique({ where: { id: data.cycleId } });
+      const alertasGerados = gerarAlertas(met, bem, men);
+      const cycle = await tx.cycle.findUnique({ where: { id: data.cycleId } });
 
-    if (cycle) {
-      for (const alerta of alertas) {
-        await prisma.alert.create({
-          data: { ...alerta, patientId: cycle.patientId }
+      if (cycle && alertasGerados.length > 0) {
+        await tx.alert.createMany({
+          data: alertasGerados.map(a => ({ ...a, patientId: cycle.patientId }))
         });
       }
-    }
+
+      return { score: entry, alertas: alertasGerados };
+    });
 
     res.status(201).json({ score, alertas });
   } catch (err) {
@@ -530,8 +532,19 @@ app.post('/api/scores', authRequired, requireRole('MEDICA', 'NUTRICIONISTA', 'AD
 
 app.get('/api/scores/:cycleId', authRequired, async (req, res) => {
   try {
+    const cycleId = parseInt(req.params.cycleId);
+    // IDOR guard: paciente só pode ver scores do próprio ciclo
+    if (req.user.role === 'PACIENTE') {
+      const cycle = await prisma.cycle.findUnique({
+        where: { id: cycleId },
+        include: { patient: { select: { userId: true } } }
+      });
+      if (!cycle || cycle.patient.userId !== req.user.id) {
+        return res.status(403).json({ error: 'Acesso negado' });
+      }
+    }
     const scores = await prisma.scoreEntry.findMany({
-      where: { cycleId: parseInt(req.params.cycleId) },
+      where: { cycleId },
       orderBy: { month: 'asc' }
     });
     res.json(scores);
@@ -571,8 +584,19 @@ app.post('/api/weekchecks', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERM
 
 app.get('/api/weekchecks/:cycleId', authRequired, async (req, res) => {
   try {
+    const cycleId = parseInt(req.params.cycleId);
+    // IDOR guard: paciente só pode ver checklists do próprio ciclo
+    if (req.user.role === 'PACIENTE') {
+      const cycle = await prisma.cycle.findUnique({
+        where: { id: cycleId },
+        include: { patient: { select: { userId: true } } }
+      });
+      if (!cycle || cycle.patient.userId !== req.user.id) {
+        return res.status(403).json({ error: 'Acesso negado' });
+      }
+    }
     const checks = await prisma.weekCheck.findMany({
-      where: { cycleId: parseInt(req.params.cycleId) },
+      where: { cycleId },
       orderBy: { weekNumber: 'asc' }
     });
     res.json(checks);
@@ -602,7 +626,7 @@ app.get('/api/alerts', authRequired, async (req, res) => {
   }
 });
 
-app.patch('/api/alerts/:id/resolve', authRequired, async (req, res) => {
+app.patch('/api/alerts/:id/resolve', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR'), async (req, res) => {
   try {
     const alert = await prisma.alert.update({
       where: { id: parseInt(req.params.id) },
@@ -709,7 +733,12 @@ app.get('/api/reports/cohort', authRequired, requireRole('ADMIN', 'MEDICA'), asy
 
 app.get('/api/appointments', authRequired, async (req, res) => {
   try {
+    // Paciente só vê os próprios agendamentos
+    const where = req.user.role === 'PACIENTE'
+      ? { patient: { userId: req.user.id } }
+      : {};
     const appointments = await prisma.appointment.findMany({
+      where,
       include: { patient: { include: { user: { select: { name: true } } } } },
       orderBy: { date: 'asc' }
     });
@@ -719,7 +748,7 @@ app.get('/api/appointments', authRequired, async (req, res) => {
   }
 });
 
-app.post('/api/appointments', authRequired, async (req, res) => {
+app.post('/api/appointments', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR'), async (req, res) => {
   try {
     const { patientId, type, title, date, notes, sendReminder } = req.body;
     const appointment = await prisma.appointment.create({
@@ -779,7 +808,11 @@ app.post('/api/whatsapp/send', authRequired, requireRole('ADMIN','MEDICA','ENFER
 app.get('/api/messages', authRequired, async (req, res) => {
   try {
     const { patientId } = req.query;
-    const where = patientId ? { patientId: parseInt(patientId) } : {};
+    // Paciente só vê mensagens do próprio contexto
+    let where = patientId ? { patientId: parseInt(patientId) } : {};
+    if (req.user.role === 'PACIENTE') {
+      where = { patient: { userId: req.user.id } };
+    }
     const msgs = await prisma.messageLog.findMany({
       where,
       include: {
@@ -794,7 +827,8 @@ app.get('/api/messages', authRequired, async (req, res) => {
 });
 
 // POST /api/messages — envia mensagem (salva no MessageLog)
-app.post('/api/messages', authRequired, async (req, res) => {
+// Pacientes não podem enviar mensagens internas (apenas equipe)
+app.post('/api/messages', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR'), async (req, res) => {
   try {
     const { patientId, body, channel = 'interno' } = req.body;
     if (!body?.trim()) return res.status(400).json({ error: 'body obrigatório' });
@@ -1021,16 +1055,12 @@ app.use((err, req, res, next) => {
 // ════════════════════════════════════════════
 cron.schedule('0 8 * * 1', async () => {
   try {
-    const activeCycles = await prisma.cycle.findMany({ where: { status: 'ACTIVE' } });
-    for (const cycle of activeCycles) {
-      if (cycle.currentWeek < 16) {
-        await prisma.cycle.update({
-          where: { id: cycle.id },
-          data: { currentWeek: cycle.currentWeek + 1 }
-        });
-      }
-    }
-    console.log(`[CRON] Semanas avançadas: ${activeCycles.length} ciclos`);
+    // Uma única query em vez de N updates sequenciais (N+1 fix)
+    const updated = await prisma.cycle.updateMany({
+      where: { status: 'ACTIVE', currentWeek: { lt: 16 } },
+      data: { currentWeek: { increment: 1 } }
+    });
+    console.log(`[CRON] Semanas avançadas: ${updated.count} ciclos`);
   } catch (err) {
     console.error('[CRON] Erro ao avançar semanas:', err.message);
   }
@@ -1074,8 +1104,37 @@ cron.schedule('0 9 * * *', async () => {
   }
 });
 
-app.listen(PORT, () => {
+// ════════════════════════════════════════════
+//  HEALTH CHECK — para EasyPanel / Docker
+// ════════════════════════════════════════════
+app.get('/health', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', db: 'connected', uptime: Math.floor(process.uptime()) });
+  } catch (err) {
+    res.status(503).json({ status: 'error', db: 'disconnected', error: err.message });
+  }
+});
+
+const server = app.listen(PORT, () => {
   console.log(`\n🟢 Ser Livre API rodando na porta ${PORT}`);
   console.log(`   Banco: ${process.env.DATABASE_URL ? 'Supabase PostgreSQL conectado' : '⚠️ DATABASE_URL não configurada'}`);
   console.log(`   Supabase Auth: ${process.env.SUPABASE_URL ? process.env.SUPABASE_URL : '⚠️ não configurado'}\n`);
 });
+
+// ════════════════════════════════════════════
+//  GRACEFUL SHUTDOWN — fecha conexões antes de sair
+// ════════════════════════════════════════════
+const shutdown = async (signal) => {
+  console.log(`\n[${signal}] Encerrando servidor graciosamente...`);
+  server.close(async () => {
+    await prisma.$disconnect();
+    console.log('[SHUTDOWN] Conexões fechadas. Até logo!');
+    process.exit(0);
+  });
+  // Força saída após 10s se travar
+  setTimeout(() => { console.error('[SHUTDOWN] Timeout — forçando saída.'); process.exit(1); }, 10000);
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));

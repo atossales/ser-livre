@@ -38,6 +38,7 @@ export function WeighInModal({ p, onClose, onSave, onLog, onSendMsg }) {
   const [mm,      setMm]     = useState("");
   const [mg,      setMg]     = useState("");
   const [sendMsg, setSendMsg] = useState(true);
+  const [err,     setErr]    = useState("");
 
   const w    = parseFloat(peso) || 0;
   const mVal = parseFloat(mm)   || 0;
@@ -61,7 +62,7 @@ export function WeighInModal({ p, onClose, onSave, onLog, onSendMsg }) {
   ].filter(l => l !== null).join("\n");
 
   const handleSave = () => {
-    if (!w) return alert("Informe o peso.");
+    if (!w) return setErr("Informe o peso total em kg.");
     const entry = {
       date:         new Date(data).toISOString(),
       weight:       w,
@@ -80,7 +81,7 @@ export function WeighInModal({ p, onClose, onSave, onLog, onSendMsg }) {
     });
     if (sendMsg && onSendMsg) {
       onSendMsg({
-        id:         Date.now(),
+        id:         crypto.randomUUID(),
         date:       new Date().toISOString(),
         senderName: "Equipe Ser Livre",
         role:       "admin",
@@ -99,6 +100,8 @@ export function WeighInModal({ p, onClose, onSave, onLog, onSendMsg }) {
           <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50], fontSize:13, color:"#aaa" }}>✕</div>
         </div>
         <div style={{ fontSize:11, color:"#aaa", marginBottom:14 }}>{p.name}</div>
+
+        {err && <div style={{ color:"#C0392B", fontSize:12, marginBottom:10, padding:"8px 10px", background:"#fef2f2", borderRadius:6 }}>{err}</div>}
 
         {[
           { label:"Data da pesagem",  val:data, set:setData, type:"date"   },
