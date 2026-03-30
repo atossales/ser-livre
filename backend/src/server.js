@@ -1247,15 +1247,34 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// ── Startup migration: garante que todos os usuários existentes têm active=true
-// (necessário quando 'active' foi adicionado como coluna nova — o DEFAULT não
-// retroage em linhas já existentes com NULL em algumas versões do Postgres)
+// ── Startup sync: sincroniza usuários do Supabase Auth para o banco local
+// Necessário porque o banco local (EasyPanel postgres) não tem trigger
+// automático — usuários precisam existir em ambos os lugares para o login funcionar.
 (async () => {
   try {
-    const fixed = await prisma.$executeRaw`UPDATE "User" SET active = true WHERE active = false OR active IS NULL`;
-    if (fixed > 0) console.log(`[STARTUP] Corrigido active=true em ${fixed} usuário(s)`);
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+    if (error) { console.warn('[STARTUP] Não foi possível listar usuários do Supabase Auth:', error.message); return; }
+
+    let synced = 0;
+    for (const authUser of (data?.users || [])) {
+      if (!authUser.email) continue;
+      await prisma.user.upsert({
+        where:  { id: authUser.id },
+        create: {
+          id:            authUser.id,
+          email:         authUser.email,
+          name:          authUser.user_metadata?.name || authUser.email.split('@')[0],
+          role:          authUser.user_metadata?.role || 'PACIENTE',
+          emailVerified: authUser.email_confirmed_at != null,
+          active:        true
+        },
+        update: { active: true, emailVerified: authUser.email_confirmed_at != null }
+      });
+      synced++;
+    }
+    console.log(`[STARTUP] ${synced} usuário(s) sincronizado(s) do Supabase Auth → banco local`);
   } catch (e) {
-    console.warn('[STARTUP] Não foi possível corrigir active:', e.message);
+    console.warn('[STARTUP] Erro ao sincronizar usuários:', e.message);
   }
 })();
 
