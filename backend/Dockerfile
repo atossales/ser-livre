@@ -15,4 +15,4 @@ COPY src ./src
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "npx prisma db push && node src/server.js"]
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss 2>&1; node src/server.js"]
