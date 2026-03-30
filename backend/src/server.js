@@ -1247,15 +1247,6 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// TEMP DEBUG — remover após diagnóstico (sem auth para acessar mesmo em 502)
-app.get('/debug/users', async (req, res) => {
-  try {
-    const users = await prisma.$queryRaw`SELECT id, email, name, role, active, "emailVerified" FROM "User" LIMIT 20`;
-    res.json({ count: users.length, users });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // ════════════════════════════════════════════
 //  STARTUP — sincroniza usuários e inicia servidor
