@@ -44,8 +44,9 @@ model User {
   patient   Patient?
 
   // Relação: quem da equipe preencheu os dados
-  weekChecks  WeekCheck[]  @relation("filledBy")
-  scoresFilled ScoreEntry[] @relation("filledBy")
+  weekChecks           WeekCheck[]     @relation("filledBy")
+  scoresFilled         ScoreEntry[]    @relation("filledBy")
+  circumferencesFilled Circumference[] @relation("circumFilledBy")
 
   inviteTokens    InviteToken[]
   resetTokens     ResetToken[]
@@ -131,13 +132,48 @@ model Cycle {
   endDate     DateTime?
 
   // Relacionamentos
-  weekChecks  WeekCheck[]   // Checklists semanais
-  scores      ScoreEntry[]  // Scores registrados
+  weekChecks      WeekCheck[]       // Checklists semanais
+  scores          ScoreEntry[]      // Scores registrados
+  circumferences  Circumference[]   // Medidas de circunferência
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@unique([patientId, number])
+}
+
+// ──────────────────────────────────────────────
+// CIRCUNFERÊNCIAS — Medidas corporais evolutivas
+// Registradas após consulta com a nutricionista.
+// Suporta dados retroativos via campo date.
+// ──────────────────────────────────────────────
+model Circumference {
+  id          Int      @id @default(autoincrement())
+  cycleId     Int
+  cycle       Cycle    @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  // Data da medição (normalizada para meia-noite UTC para evitar duplicatas no mesmo dia)
+  date        DateTime
+
+  // As 6 medidas em centímetros
+  torax       Float?   // Tórax (cm)
+  abdomen     Float?   // Abdômen (cm)
+  cintura     Float?   // Cintura (cm)
+  quadril     Float?   // Quadril (cm)
+  panturrilha Float?   // Panturrilha (cm)
+  braco       Float?   // Braço (cm)
+
+  // Quem registrou
+  filledById  String?
+  filledBy    User?    @relation("circumFilledBy", fields: [filledById], references: [id], onDelete: SetNull)
+
+  observations String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Um registro por dia por ciclo (upsert por data)
+  @@unique([cycleId, date])
 }
 
 enum CycleStatus {

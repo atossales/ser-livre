@@ -150,6 +150,10 @@ export const generateMessage = (data) => api.post('/messages/generate', data);
 export const getMessages = (patientId) => api.get('/messages', { params: patientId ? { patientId } : {} });
 export const sendMessage = (data) => api.post('/messages', data);
 
+// ── Circunferências ──
+export const saveCircumference = (data) => api.post('/circumferences', data);
+export const getCircumferences = (cycleId) => api.get(`/circumferences/${cycleId}`);
+
 // ── Staff / Equipe ──
 export const getStaff = () => api.get('/staff');
 export const updateUserProfile = (id, data) => api.put(`/users/${id}/profile`, data);

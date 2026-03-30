@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, updateStaffRole, deleteStaff, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getWhatsAppStatus, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage } from './utils/api';
+import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, updateStaffRole, deleteStaff, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getWhatsAppStatus, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage, saveCircumference as apiSaveCircumference, getCircumferences as apiGetCircumferences } from './utils/api';
 import { supabase } from './utils/supabase';
 import { ResetPassword } from './components/ResetPassword';
 import { Toast } from './components/Toast';
@@ -748,6 +748,53 @@ function RelTab({ p, mob, plan, met, be, mn }) {
           </div>
         </div>
 
+        {/* Circunferências */}
+        {(p.circumferenceHistory||[]).length > 0 && (() => {
+          const circFilt = relDe||relAte ? (p.circumferenceHistory||[]).filter(c => {
+            const d = new Date(c.date);
+            if(relDe && d < new Date(relDe)) return false;
+            if(relAte && d > new Date(relAte)) return false;
+            return true;
+          }) : (p.circumferenceHistory||[]);
+          const lastC = circFilt[circFilt.length-1];
+          const prevC = circFilt[circFilt.length-2];
+          return circFilt.length > 0 ? (
+            <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
+              <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>📏 Circunferências corporais</div>
+              {/* Cards última medição */}
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6, marginBottom:10 }}>
+                {CIRC_FIELDS.map(f => {
+                  const val  = lastC?.[f.key];
+                  const pval = prevC?.[f.key];
+                  const diff = (val!=null && pval!=null) ? (val - pval).toFixed(1) : null;
+                  return (
+                    <div key={f.key} style={{ textAlign:"center", padding:"8px 6px", background:G[50], borderRadius:8 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:G[700] }}>{val!=null?`${val}cm`:"—"}</div>
+                      <div style={{ fontSize:9, color:"#aaa", fontWeight:600 }}>{f.label}</div>
+                      {diff!==null && <div style={{ fontSize:9, color:parseFloat(diff)<0?S.grn:parseFloat(diff)>0?S.red:"#aaa", fontWeight:600 }}>{parseFloat(diff)>0?`+${diff}`:diff}cm</div>}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Tabela histórica de circunferências */}
+              {circFilt.length > 1 && (
+                <div style={{ overflowX:"auto" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:10, minWidth:380 }}>
+                    <thead><tr>{["Data","Tórax","Abdômen","Cintura","Quadril","Panturrilha","Braço"].map(h=><th key={h} style={{ textAlign:"left", padding:"4px 6px", borderBottom:`1px solid ${G[200]}`, fontSize:8, color:G[600], fontWeight:600, textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>)}</tr></thead>
+                    <tbody>{[...circFilt].reverse().map((c,i)=>(
+                      <tr key={c.id||i} style={{ background:i===0?G[50]:"transparent" }}>
+                        <td style={{ padding:"4px 6px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:9, whiteSpace:"nowrap" }}>{safeFmt(c.date,"dd/MM/yy")}</td>
+                        {CIRC_FIELDS.map(f=><td key={f.key} style={{ padding:"4px 6px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{c[f.key]!=null?`${c[f.key]}cm`:"—"}</td>)}
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              )}
+              <div style={{ fontSize:9, color:"#bbb", marginTop:6 }}>Última medição: {safeFmt(lastC?.date,"dd/MM/yyyy")}</div>
+            </div>
+          ) : null;
+        })()}
+
         {/* Scores atuais */}
         <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
           <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>📊 Scores clínicos atuais</div>
@@ -821,7 +868,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
 /* ════════════════════════════════════════════
    DETALHE DO PACIENTE (5 abas)
 ═══════════════════════════════════════════════ */
-function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onLog, onAddScoreMonth, onChangePlan, activityLog, onDelete, onFinish, onRestart, onEdit, onSendMsg, messages, setMessages, currentUser }) {
+function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onAddCircumference, onLog, onAddScoreMonth, onChangePlan, activityLog, onDelete, onFinish, onRestart, onEdit, onSendMsg, messages, setMessages, currentUser }) {
   const SC = genSC([p]);
   const [tab, setTab]   = useState("ficha");
   const plan = PLANS.find(x=>x.id===p.plan);
@@ -849,6 +896,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
   const [scoreRef, setScoreRef] = useState(() => buildScoreRef(todayStr, todayStr));
   const [sw, setSw]   = useState(p.week);
   const [showWeighIn, setShowWeighIn] = useState(false);
+  const [showCircumferenceModal, setShowCircumferenceModal] = useState(false);
   const [showChangePlan, setShowChangePlan] = useState(false);
   const [newPlanId, setNewPlanId] = useState(p.plan);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -858,13 +906,14 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
   const [editBirth, setEditBirth] = useState(p.birthDate||'');
 
   const tabs = [
-    {k:"ficha",    l:"Ficha",      i:User},
-    {k:"jornada",  l:"Jornada",    i:ClipboardCheck},
-    {k:"scores",   l:"Scores",     i:Activity},
-    {k:"evolucao", l:"Evolução",   i:TrendingUp},
-    {k:"graficos", l:"Gráficos",   i:BarChart3},
-    {k:"msgs",     l:"Mensagens",  i:MessageCircle},
-    {k:"rel",      l:"Relatório",  i:FileText},
+    {k:"ficha",          l:"Ficha",      i:User},
+    {k:"jornada",        l:"Jornada",    i:ClipboardCheck},
+    {k:"scores",         l:"Scores",     i:Activity},
+    {k:"evolucao",       l:"Evolução",   i:TrendingUp},
+    {k:"graficos",       l:"Gráficos",   i:BarChart3},
+    {k:"circunferencias",l:"Medidas",    i:Lucide.Ruler},
+    {k:"msgs",           l:"Mensagens",  i:MessageCircle},
+    {k:"rel",            l:"Relatório",  i:FileText},
   ];
 
   return (
@@ -978,7 +1027,10 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
               <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
                   <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Composição corporal</span>
-                  <button onClick={()=>setShowWeighIn(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:7, background:G[600], color:"#fff", fontSize:11, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}><Plus size={11}/>Registrar pesagem</button>
+                  <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+                    <button onClick={()=>setShowWeighIn(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:7, background:G[600], color:"#fff", fontSize:11, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}><Plus size={11}/>Registrar pesagem</button>
+                    <button onClick={()=>setShowCircumferenceModal(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:7, background:"#fff", color:G[700], fontSize:11, fontWeight:600, border:`1px solid ${G[300]}`, cursor:"pointer", fontFamily:"inherit" }}>📏 Medidas</button>
+                  </div>
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10 }}>
                   <div style={{ textAlign:"center", padding:"10px 8px", background:S.blueBg, borderRadius:8 }}>
@@ -1057,6 +1109,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
             </ResponsiveContainer>
           </div>
           {showWeighIn && <WeighInModal p={p} onClose={()=>setShowWeighIn(false)} onSave={(entry)=>{ onAddWeighIn && onAddWeighIn(entry); setShowWeighIn(false); }} onLog={onLog} onSendMsg={onSendMsg}/>}
+          {showCircumferenceModal && <CircumferenceModal p={p} onClose={()=>setShowCircumferenceModal(false)} onSave={()=>{ onAddCircumference && onAddCircumference(); }} onLog={onLog}/>}
         </div>
       )}
 
@@ -1444,6 +1497,121 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
       )}
 
       {/* ABA MENSAGENS */}
+      {/* ABA CIRCUNFERÊNCIAS */}
+      {tab==="circunferencias" && (() => {
+        const circ = p.circumferenceHistory || [];
+        const COLORS = { torax:S.blue, abdomen:S.red, cintura:S.grn, quadril:S.yel, panturrilha:S.pur, braco:"#E67E22" };
+        const chartData = circ.map((c, i) => ({
+          label: safeFmt(c.date, 'dd/MM/yy'),
+          torax:       c.torax,
+          abdomen:     c.abdomen,
+          cintura:     c.cintura,
+          quadril:     c.quadril,
+          panturrilha: c.panturrilha,
+          braco:       c.braco,
+        }));
+        const last = circ[circ.length - 1];
+        const prev = circ[circ.length - 2];
+        return (
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {/* Botão rápido */}
+            <div style={{ display:"flex", justifyContent:"flex-end" }}>
+              <button onClick={()=>setShowCircumferenceModal(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>
+                📏 Nova medição
+              </button>
+            </div>
+
+            {circ.length === 0 && (
+              <div style={{ textAlign:"center", padding:40, color:"#aaa", background:"#fff", borderRadius:10, border:`1px solid ${G[200]}` }}>
+                <div style={{ fontSize:32, marginBottom:8 }}>📏</div>
+                <div style={{ fontSize:13, fontWeight:600, color:G[700], marginBottom:4 }}>Sem medições registradas</div>
+                <div style={{ fontSize:11 }}>Registre após consulta com a nutricionista</div>
+              </div>
+            )}
+
+            {/* Cards com última medição + variação */}
+            {last && (
+              <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+                <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>
+                  Última medição — {safeFmt(last.date, "dd/MM/yyyy")}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
+                  {CIRC_FIELDS.map(f => {
+                    const val = last[f.key];
+                    const pval = prev?.[f.key];
+                    const diff = (val != null && pval != null) ? (val - pval).toFixed(1) : null;
+                    return (
+                      <div key={f.key} style={{ textAlign:"center", padding:"10px 6px", background:G[50], borderRadius:8 }}>
+                        <div style={{ fontSize:15, fontWeight:700, color:COLORS[f.key] || G[700] }}>
+                          {val != null ? `${val}cm` : "—"}
+                        </div>
+                        <div style={{ fontSize:10, color:G[600], fontWeight:600 }}>{f.label}</div>
+                        {diff !== null && (
+                          <div style={{ fontSize:9, marginTop:2, color: parseFloat(diff) < 0 ? S.grn : parseFloat(diff) > 0 ? S.red : "#aaa", fontWeight:600 }}>
+                            {parseFloat(diff) > 0 ? `+${diff}` : diff}cm
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Gráfico de evolução */}
+            {chartData.length > 1 && (
+              <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+                <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Evolução das medidas (cm)</div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={chartData} margin={{ top:5, right:10, bottom:5, left:0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/>
+                    <XAxis dataKey="label" tick={{ fontSize:9, fill:G[600] }}/>
+                    <YAxis tick={{ fontSize:9, fill:"#bbb" }} domain={["dataMin-2","dataMax+2"]}/>
+                    <Tooltip contentStyle={{ borderRadius:8, fontSize:11 }}/>
+                    <Legend wrapperStyle={{ fontSize:10 }}/>
+                    {CIRC_FIELDS.map(f => (
+                      <Line key={f.key} type="monotone" dataKey={f.key} name={f.label}
+                        stroke={COLORS[f.key] || G[500]} strokeWidth={2} dot={{ r:3 }}
+                        connectNulls/>
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Tabela histórica */}
+            {circ.length > 0 && (
+              <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+                <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Histórico completo</div>
+                <div style={{ overflowX:"auto" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:420 }}>
+                    <thead>
+                      <tr>
+                        {["Data","Tórax","Abdômen","Cintura","Quadril","Panturrilha","Braço"].map(h=>(
+                          <th key={h} style={{ textAlign:"left", padding:"4px 7px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600, textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...circ].reverse().map((c,i)=>(
+                        <tr key={c.id||i} style={{ background:i===0?G[50]:"transparent" }}>
+                          <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10, whiteSpace:"nowrap" }}>{safeFmt(c.date,"dd/MM/yy")}</td>
+                          {CIRC_FIELDS.map(f=>(
+                            <td key={f.key} style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400, color:COLORS[f.key]||G[700] }}>
+                              {c[f.key]!=null?`${c[f.key]}cm`:"—"}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {tab==="msgs" && (
         <MiniChat
           p={p}
@@ -2975,6 +3143,112 @@ function Portal({  p, av, setAv }) {
 /* WeighInModal extraído para frontend/src/components/WeighInModal.jsx */
 
 /* ════════════════════════════════════════════
+   MODAL REGISTRAR CIRCUNFERÊNCIA
+   Separado da pesagem — preenchido após consulta
+   com a nutricionista. Suporta data retroativa.
+═══════════════════════════════════════════════ */
+const CIRC_FIELDS = [
+  { key:"torax",       label:"Tórax",       ph:"100.0" },
+  { key:"abdomen",     label:"Abdômen",     ph:"90.0"  },
+  { key:"cintura",     label:"Cintura",     ph:"85.0"  },
+  { key:"quadril",     label:"Quadril",     ph:"100.0" },
+  { key:"panturrilha", label:"Panturrilha", ph:"38.0"  },
+  { key:"braco",       label:"Braço",       ph:"32.0"  },
+];
+
+function CircumferenceModal({ p, onClose, onSave, onLog }) {
+  const [date, setDate]   = useState(format(new Date(),'yyyy-MM-dd'));
+  const [vals, setVals]   = useState({ torax:"", abdomen:"", cintura:"", quadril:"", panturrilha:"", braco:"" });
+  const [obs,  setObs]    = useState("");
+  const [err,  setErr]    = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Pré-popula com a última medição do paciente (se existir)
+  useEffect(() => {
+    const last = (p.circumferenceHistory || []).slice(-1)[0];
+    if (last) setVals({ torax: last.torax||"", abdomen: last.abdomen||"", cintura: last.cintura||"", quadril: last.quadril||"", panturrilha: last.panturrilha||"", braco: last.braco||"" });
+  }, []);
+
+  const hasValue = Object.values(vals).some(v => v && parseFloat(v) > 0);
+
+  const handleSave = async () => {
+    if (!hasValue) return setErr("Preencha pelo menos uma medida.");
+    setSaving(true); setErr("");
+    try {
+      const cycleId = p._activeCycle?.id;
+      if (!cycleId) throw new Error("Paciente sem ciclo ativo");
+      const entry = await apiSaveCircumference({ cycleId, date, ...vals, observations: obs || undefined });
+      onSave && onSave(entry);
+      onLog && onLog({ action:"circunferencia", patientId: p.id, patientName: p.name, detail: `Circunferências registradas em ${format(new Date(date+'T12:00:00'),'dd/MM/yy')}` });
+      onClose();
+    } catch (e) {
+      setErr(e?.response?.data?.error || e?.message || 'Erro ao salvar. Tente novamente.');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:400, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)", maxHeight:"90vh", overflowY:"auto" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+          <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>📏 Registrar circunferências</span>
+          <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50], fontSize:13, color:"#aaa" }}>✕</div>
+        </div>
+        <div style={{ fontSize:11, color:"#aaa", marginBottom:14 }}>{p.name} · Preencher após consulta com a nutricionista</div>
+
+        {err && <div style={{ color:"#C0392B", fontSize:12, marginBottom:10, padding:"8px 10px", background:"#fef2f2", borderRadius:6 }}>{err}</div>}
+
+        {/* Data — suporta retroativo */}
+        <div style={{ marginBottom:14 }}>
+          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Data da medição</label>
+          <input type="date" value={date} onChange={e=>setDate(e.target.value)}
+            style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+          <div style={{ fontSize:10, color:"#aaa", marginTop:3 }}>Pode informar uma data retroativa para alinhar com dados anteriores</div>
+        </div>
+
+        {/* 6 medidas em grid 2x3 */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+          {CIRC_FIELDS.map(f => (
+            <div key={f.key}>
+              <label style={{ fontSize:10, fontWeight:500, color:G[700], marginBottom:2, display:"block" }}>{f.label} (cm)</label>
+              <input type="number" step="0.1" value={vals[f.key]} placeholder={f.ph}
+                onChange={e=>setVals(pr=>({...pr,[f.key]:e.target.value}))}
+                style={{ width:"100%", padding:"8px 10px", borderRadius:6, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+            </div>
+          ))}
+        </div>
+
+        {/* Última medição para referência */}
+        {(p.circumferenceHistory||[]).length > 0 && (() => {
+          const last = p.circumferenceHistory.slice(-1)[0];
+          return (
+            <div style={{ background:G[50], borderRadius:8, padding:"8px 12px", marginBottom:12, fontSize:10, color:G[700] }}>
+              <div style={{ fontWeight:600, marginBottom:4 }}>Última medição: {safeFmt(last.date,'dd/MM/yy')}</div>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:"4px 12px" }}>
+                {CIRC_FIELDS.map(f => last[f.key] ? <span key={f.key}>{f.label}: <strong>{last[f.key]}cm</strong></span> : null)}
+              </div>
+            </div>
+          );
+        })()}
+
+        <div style={{ marginBottom:12 }}>
+          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Observações (opcional)</label>
+          <textarea value={obs} onChange={e=>setObs(e.target.value)} rows={2} placeholder="Ex: medição pós-consulta nutrição semana 8"
+            style={{ width:"100%", padding:"8px 10px", borderRadius:6, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", resize:"none", boxSizing:"border-box" }}/>
+        </div>
+
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={handleSave} disabled={saving}
+            style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity:saving?0.7:1 }}>
+            {saving ? "Salvando..." : "💾 Salvar"}
+          </button>
+          <button onClick={onClose} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
    MODAL NOVO MEMBRO DA EQUIPE
 ═══════════════════════════════════════════════ */
 function NewMemberModal({ onClose, onSave }) {
@@ -3041,6 +3315,15 @@ function NewLeadModal({ onClose, onSave }) {
   const [email, setEmail] = useState("");
   const [plan, setPlan]   = useState("essential");
   const [err,  setErr]    = useState("");
+  // Circunferências iniciais (opcionais — para pacientes em execução)
+  const [showCirc, setShowCirc]           = useState(false);
+  const [circDate, setCircDate]           = useState(format(new Date(),'yyyy-MM-dd'));
+  const [torax, setTorax]                 = useState("");
+  const [abdomen, setAbdomen]             = useState("");
+  const [cintura, setCintura]             = useState("");
+  const [quadril, setQuadril]             = useState("");
+  const [panturrilha, setPanturrilha]     = useState("");
+  const [braco, setBraco]                 = useState("");
 
   const handleSave = () => {
     const w = parseFloat(peso);
@@ -3050,20 +3333,33 @@ function NewLeadModal({ onClose, onSave }) {
     const np = {
       id: crypto.randomUUID(), name: nome.trim(), plan, cycle: 1, week: 1,
       birthDate: nasc, phone, email, sd: new Date().toISOString(),
-      iw: w, cw: w, history: [], scoreHistory: [],
-      nr: addDays(new Date(), 7).toISOString(), eng: 100
+      iw: w, cw: w, history: [], scoreHistory: [], circumferenceHistory: [],
+      nr: addDays(new Date(), 7).toISOString(), eng: 100,
+      // Circunferências iniciais (enviadas ao backend junto com o paciente)
+      ...(showCirc && { circumferenceDate: circDate, torax, abdomen, cintura, quadril, panturrilha, braco })
     };
     onSave(np);
     onClose();
   };
 
+  const circFields = [
+    { label:"Tórax",      val:torax,       set:setTorax,       ph:"100.0" },
+    { label:"Abdômen",    val:abdomen,     set:setAbdomen,     ph:"90.0"  },
+    { label:"Cintura",    val:cintura,     set:setCintura,     ph:"85.0"  },
+    { label:"Quadril",    val:quadril,     set:setQuadril,     ph:"100.0" },
+    { label:"Panturrilha",val:panturrilha, set:setPanturrilha, ph:"38.0"  },
+    { label:"Braço",      val:braco,       set:setBraco,       ph:"32.0"  },
+  ];
+
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"#fff", width:"100%", maxWidth:420, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16, overflowY:"auto" }}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:440, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)", maxHeight:"92vh", overflowY:"auto", margin:"auto" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
           <span style={{ fontSize:16, fontWeight:700, color:G[800] }}>Novo paciente</span>
           <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50] }}>✕</div>
         </div>
+
+        {/* Dados principais */}
         {[
           { label:"Nome completo", val:nome, set:setNome, type:"text", ph:"Ana Carolina Silva" },
           { label:"E-mail *", val:email, set:setEmail, type:"email", ph:"paciente@email.com" },
@@ -3078,6 +3374,7 @@ function NewLeadModal({ onClose, onSave }) {
               style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
           </div>
         ))}
+
         <div style={{ marginBottom:16 }}>
           <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Plano</label>
           <select value={plan} onChange={e=>setPlan(e.target.value)}
@@ -3085,6 +3382,37 @@ function NewLeadModal({ onClose, onSave }) {
             {PLANS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
+
+        {/* Seção de circunferências — expansível */}
+        <div style={{ border:`1px solid ${showCirc ? G[400] : G[200]}`, borderRadius:10, marginBottom:16, overflow:"hidden" }}>
+          <div onClick={()=>setShowCirc(!showCirc)} style={{ padding:"10px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", background:showCirc?G[50]:"#fff" }}>
+            <div>
+              <span style={{ fontSize:12, fontWeight:600, color:G[800] }}>📏 Circunferências iniciais</span>
+              <span style={{ fontSize:10, color:"#aaa", marginLeft:6 }}>(opcional — para dados retroativos)</span>
+            </div>
+            <span style={{ fontSize:12, color:G[600] }}>{showCirc ? "▲" : "▼"}</span>
+          </div>
+          {showCirc && (
+            <div style={{ padding:"12px 14px", borderTop:`1px solid ${G[200]}` }}>
+              <div style={{ marginBottom:10 }}>
+                <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Data da medição</label>
+                <input type="date" value={circDate} onChange={e=>setCircDate(e.target.value)}
+                  style={{ width:"100%", padding:"8px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+                <div style={{ fontSize:10, color:"#aaa", marginTop:3 }}>Pode ser uma data retroativa se já tem acompanhamento</div>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                {circFields.map(f => (
+                  <div key={f.label}>
+                    <label style={{ fontSize:10, fontWeight:500, color:G[700], marginBottom:2, display:"block" }}>{f.label} (cm)</label>
+                    <input type="number" value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph} step="0.1"
+                      style={{ width:"100%", padding:"7px 9px", borderRadius:6, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         {err && <div style={{ color:"#e53e3e", fontSize:12, marginBottom:8 }}>{err}</div>}
         <div style={{ display:"flex", gap:8 }}>
           <button onClick={handleSave} style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
@@ -3297,6 +3625,21 @@ function normalizePatient(p) {
     // histórico de pesagens e scores
     history,
     scoreHistory,
+
+    // histórico de circunferências (do ciclo ativo, ordenado por data)
+    circumferenceHistory: activeCycle
+      ? (activeCycle.circumferences || []).map(c => ({
+          id:           c.id,
+          date:         c.date,
+          torax:        c.torax       != null ? Number(c.torax)       : null,
+          abdomen:      c.abdomen     != null ? Number(c.abdomen)     : null,
+          cintura:      c.cintura     != null ? Number(c.cintura)     : null,
+          quadril:      c.quadril     != null ? Number(c.quadril)     : null,
+          panturrilha:  c.panturrilha != null ? Number(c.panturrilha) : null,
+          braco:        c.braco       != null ? Number(c.braco)       : null,
+          observations: c.observations || null,
+        }))
+      : [],
 
     // ciclo completo para referência
     _activeCycle: activeCycle,
@@ -3593,11 +3936,19 @@ export default function App() {
         birthDate:     np.birthDate || undefined,
         initialWeight: np.iw,
         height:        np.height   || undefined,
+        // Circunferências iniciais (opcionais — retroativas)
+        ...(np.circumferenceDate && { circumferenceDate: np.circumferenceDate }),
+        ...(np.torax        && { torax:       np.torax       }),
+        ...(np.abdomen      && { abdomen:     np.abdomen     }),
+        ...(np.cintura      && { cintura:     np.cintura     }),
+        ...(np.quadril      && { quadril:     np.quadril     }),
+        ...(np.panturrilha  && { panturrilha: np.panturrilha }),
+        ...(np.braco        && { braco:       np.braco       }),
       });
       await reloadPatients();
+      toast(`Paciente ${np.name} cadastrado com sucesso!`, 'success');
       addLog({ action:"cadastro", patientId: 0, patientName: np.name, detail:"Novo paciente cadastrado" });
     } catch (err) {
-      // Não inserir localmente com ID falso — mostra erro e aguarda correção
       toast(err?.response?.data?.error || err?.message || 'Erro ao cadastrar paciente. Tente novamente.', 'error');
     }
   };
@@ -3683,6 +4034,11 @@ export default function App() {
     }
   };
 
+  // Recarregar pacientes após nova circunferência (o modal salva via API por conta própria)
+  const handleAddCircumference = () => {
+    reloadPatients({ silent: true });
+  };
+
   // Adicionar score mensal ao histórico local (mantido por compatibilidade)
   const handleAddScoreMonth = ({ m, b, n }, mo) => {
     const month = mo || format(new Date(), "MMM/yy");
@@ -3765,6 +4121,7 @@ export default function App() {
       {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}
         onSaveScores={handleSaveScores}
         onAddWeighIn={handleAddWeighIn}
+        onAddCircumference={handleAddCircumference}
         onAddScoreMonth={handleAddScoreMonth}
         onChangePlan={handleChangePlan}
         activityLog={activityLog}

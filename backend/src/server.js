@@ -20,6 +20,8 @@
 // GET    /api/patients/:id/cycles         → Ciclos do paciente
 // POST   /api/scores                      → Registra scores
 // GET    /api/scores/:cycleId             → Busca scores do ciclo
+// POST   /api/circumferences             → Registra circunferências (upsert por cycleId+date)
+// GET    /api/circumferences/:cycleId    → Busca circunferências do ciclo
 // POST   /api/weekchecks                  → Salva checklist semanal
 // GET    /api/weekchecks/:cycleId         → Busca checklists do ciclo
 // GET    /api/alerts                      → Lista alertas
@@ -320,8 +322,9 @@ app.get('/api/patients', authRequired, async (req, res) => {
         cycles: {
           where:   { status: 'ACTIVE' },
           include: {
-            scores:     { orderBy: { month: 'asc' } },
-            weekChecks: { orderBy: { weekNumber: 'asc' } }
+            scores:         { orderBy: { month: 'asc' } },
+            weekChecks:     { orderBy: { weekNumber: 'asc' } },
+            circumferences: { orderBy: { date: 'asc' } }
           }
         }
       },
@@ -351,8 +354,9 @@ app.get('/api/patients/:id', authRequired, onlyOwnData, async (req, res) => {
         user: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
         cycles: {
           include: {
-            weekChecks: { orderBy: { weekNumber: 'asc' } },
-            scores: { orderBy: { month: 'asc' } }
+            weekChecks:     { orderBy: { weekNumber: 'asc' } },
+            scores:         { orderBy: { month: 'asc' } },
+            circumferences: { orderBy: { date: 'asc' } }
           },
           orderBy: { number: 'desc' }
         },
@@ -369,7 +373,9 @@ app.get('/api/patients/:id', authRequired, onlyOwnData, async (req, res) => {
 // Criar paciente — cria conta no Supabase Auth + perfil + Patient + Cycle 1
 app.post('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAGEM'), async (req, res) => {
   try {
-    const { name, email, phone, plan, initialWeight, height, birthDate } = req.body;
+    const { name, email, phone, plan, initialWeight, height, birthDate,
+            // Circunferências iniciais (opcionais — para pacientes em execução com dados retroativos)
+            circumferenceDate, torax, abdomen, cintura, quadril, panturrilha, braco } = req.body;
     if (!name || !email) return res.status(400).json({ error: 'name e email são obrigatórios' });
     if (initialWeight !== undefined && (isNaN(parseFloat(initialWeight)) || parseFloat(initialWeight) <= 0)) {
       return res.status(400).json({ error: 'initialWeight deve ser um número positivo' });
@@ -414,6 +420,25 @@ app.post('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAG
       const cycle = await tx.cycle.create({
         data: { patientId: patient.id, number: 1 }
       });
+
+      // Salva circunferências iniciais se fornecidas
+      const hasCircumference = torax || abdomen || cintura || quadril || panturrilha || braco;
+      if (hasCircumference) {
+        const circumDate = circumferenceDate ? new Date(circumferenceDate) : new Date();
+        circumDate.setUTCHours(0, 0, 0, 0);
+        await tx.circumference.create({
+          data: {
+            cycleId:     cycle.id,
+            date:        circumDate,
+            torax:       torax       ? parseFloat(torax)       : null,
+            abdomen:     abdomen     ? parseFloat(abdomen)     : null,
+            cintura:     cintura     ? parseFloat(cintura)     : null,
+            quadril:     quadril     ? parseFloat(quadril)     : null,
+            panturrilha: panturrilha ? parseFloat(panturrilha) : null,
+            braco:       braco       ? parseFloat(braco)       : null,
+          }
+        });
+      }
 
       return { patient, cycle };
     });
@@ -662,6 +687,87 @@ app.get('/api/scores/:cycleId', authRequired, async (req, res) => {
       orderBy: { month: 'asc' }
     });
     res.json(scores);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════
+//  CIRCUNFERÊNCIAS — Medidas corporais evolutivas
+// ════════════════════════════════════════════
+
+app.post('/api/circumferences', authRequired, requireRole('ADMIN', 'MEDICA', 'NUTRICIONISTA', 'ENFERMAGEM'), async (req, res) => {
+  try {
+    const { cycleId, date, torax, abdomen, cintura, quadril, panturrilha, braco, observations } = req.body;
+
+    if (!cycleId) return res.status(400).json({ error: 'cycleId é obrigatório' });
+    if (!date)    return res.status(400).json({ error: 'date é obrigatória' });
+
+    // Normaliza data para meia-noite UTC (evita duplicatas no mesmo dia por diferença de timezone)
+    const normalized = new Date(date);
+    normalized.setUTCHours(0, 0, 0, 0);
+
+    // Verifica acesso ao ciclo
+    const cycle = await prisma.cycle.findUnique({
+      where: { id: parseInt(cycleId) },
+      select: { id: true }
+    });
+    if (!cycle) return res.status(404).json({ error: 'Ciclo não encontrado' });
+
+    const entry = await prisma.circumference.upsert({
+      where:  { cycleId_date: { cycleId: parseInt(cycleId), date: normalized } },
+      create: {
+        cycleId:      parseInt(cycleId),
+        date:         normalized,
+        torax:        torax       != null ? parseFloat(torax)       : null,
+        abdomen:      abdomen     != null ? parseFloat(abdomen)     : null,
+        cintura:      cintura     != null ? parseFloat(cintura)     : null,
+        quadril:      quadril     != null ? parseFloat(quadril)     : null,
+        panturrilha:  panturrilha != null ? parseFloat(panturrilha) : null,
+        braco:        braco       != null ? parseFloat(braco)       : null,
+        observations: observations || null,
+        filledById:   req.user.id
+      },
+      update: {
+        torax:        torax       != null ? parseFloat(torax)       : null,
+        abdomen:      abdomen     != null ? parseFloat(abdomen)     : null,
+        cintura:      cintura     != null ? parseFloat(cintura)     : null,
+        quadril:      quadril     != null ? parseFloat(quadril)     : null,
+        panturrilha:  panturrilha != null ? parseFloat(panturrilha) : null,
+        braco:        braco       != null ? parseFloat(braco)       : null,
+        observations: observations || null,
+        filledById:   req.user.id
+      }
+    });
+
+    console.log(`[CIRCUMFERENCE] Salvo para ciclo ${cycleId} em ${normalized.toISOString().split('T')[0]}`);
+    res.json(entry);
+  } catch (err) {
+    console.error('[CIRCUMFERENCE] Erro:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/circumferences/:cycleId', authRequired, async (req, res) => {
+  try {
+    const cycleId = parseInt(req.params.cycleId);
+
+    // IDOR guard para pacientes
+    if (req.user.role === 'PACIENTE') {
+      const cycle = await prisma.cycle.findUnique({
+        where: { id: cycleId },
+        include: { patient: { select: { userId: true } } }
+      });
+      if (!cycle || cycle.patient.userId !== req.user.id) {
+        return res.status(403).json({ error: 'Acesso negado' });
+      }
+    }
+
+    const entries = await prisma.circumference.findMany({
+      where:   { cycleId },
+      orderBy: { date: 'asc' }
+    });
+    res.json(entries);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
