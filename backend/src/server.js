@@ -1247,9 +1247,21 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// ── Startup migration: garante que todos os usuários existentes têm active=true
+// (necessário quando 'active' foi adicionado como coluna nova — o DEFAULT não
+// retroage em linhas já existentes com NULL em algumas versões do Postgres)
+(async () => {
+  try {
+    const fixed = await prisma.$executeRaw`UPDATE "User" SET active = true WHERE active = false OR active IS NULL`;
+    if (fixed > 0) console.log(`[STARTUP] Corrigido active=true em ${fixed} usuário(s)`);
+  } catch (e) {
+    console.warn('[STARTUP] Não foi possível corrigir active:', e.message);
+  }
+})();
+
 const server = app.listen(PORT, () => {
   console.log(`\n🟢 Ser Livre API rodando na porta ${PORT}`);
-  console.log(`   Banco: ${process.env.DATABASE_URL ? 'Supabase PostgreSQL conectado' : '⚠️ DATABASE_URL não configurada'}`);
+  console.log(`   Banco: ${process.env.DATABASE_URL ? 'PostgreSQL conectado' : '⚠️ DATABASE_URL não configurada'}`);
   console.log(`   Supabase Auth: ${process.env.SUPABASE_URL ? process.env.SUPABASE_URL : '⚠️ não configurado'}\n`);
 });
 
