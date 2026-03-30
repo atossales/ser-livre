@@ -1247,42 +1247,58 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// ── Startup sync: sincroniza usuários do Supabase Auth para o banco local
-// Necessário porque o banco local (EasyPanel postgres) não tem trigger
-// automático — usuários precisam existir em ambos os lugares para o login funcionar.
+// ════════════════════════════════════════════
+//  STARTUP — sincroniza usuários e inicia servidor
+//  Usa async/await para garantir que o sync complete
+//  antes do servidor começar a aceitar requisições.
+// ════════════════════════════════════════════
+let server;
 (async () => {
+  // 1. Sincronizar usuários do Supabase Auth → banco local
+  // O banco local (EasyPanel) não tem trigger automático.
+  // Sem este sync, nenhum usuário pode fazer login após um novo deploy.
   try {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-    if (error) { console.warn('[STARTUP] Não foi possível listar usuários do Supabase Auth:', error.message); return; }
-
-    let synced = 0;
-    for (const authUser of (data?.users || [])) {
-      if (!authUser.email) continue;
-      await prisma.user.upsert({
-        where:  { id: authUser.id },
-        create: {
-          id:            authUser.id,
-          email:         authUser.email,
-          name:          authUser.user_metadata?.name || authUser.email.split('@')[0],
-          role:          authUser.user_metadata?.role || 'PACIENTE',
-          emailVerified: authUser.email_confirmed_at != null,
-          active:        true
-        },
-        update: { active: true, emailVerified: authUser.email_confirmed_at != null }
-      });
-      synced++;
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers();
+    if (error) {
+      console.warn('[STARTUP] listUsers error:', error.message);
+    } else {
+      const authUsers = data?.users || [];
+      console.log(`[STARTUP] Sincronizando ${authUsers.length} usuário(s) do Supabase Auth...`);
+      for (const authUser of authUsers) {
+        if (!authUser.email || !authUser.id) continue;
+        try {
+          const role = authUser.user_metadata?.role;
+          const validRoles = ['ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR','PACIENTE'];
+          const safeRole = validRoles.includes(role) ? role : 'PACIENTE';
+          await prisma.user.upsert({
+            where:  { id: authUser.id },
+            create: {
+              id:            authUser.id,
+              email:         authUser.email,
+              name:          authUser.user_metadata?.name || authUser.email.split('@')[0],
+              role:          safeRole,
+              emailVerified: !!authUser.email_confirmed_at,
+              active:        true
+            },
+            update: { active: true, emailVerified: !!authUser.email_confirmed_at }
+          });
+        } catch (upsertErr) {
+          console.warn(`[STARTUP] Falha ao sincronizar ${authUser.email}:`, upsertErr.message);
+        }
+      }
+      console.log(`[STARTUP] Sync concluído.`);
     }
-    console.log(`[STARTUP] ${synced} usuário(s) sincronizado(s) do Supabase Auth → banco local`);
-  } catch (e) {
-    console.warn('[STARTUP] Erro ao sincronizar usuários:', e.message);
+  } catch (syncErr) {
+    console.warn('[STARTUP] Erro geral no sync:', syncErr.message);
   }
-})();
 
-const server = app.listen(PORT, () => {
-  console.log(`\n🟢 Ser Livre API rodando na porta ${PORT}`);
-  console.log(`   Banco: ${process.env.DATABASE_URL ? 'PostgreSQL conectado' : '⚠️ DATABASE_URL não configurada'}`);
-  console.log(`   Supabase Auth: ${process.env.SUPABASE_URL ? process.env.SUPABASE_URL : '⚠️ não configurado'}\n`);
-});
+  // 2. Iniciar servidor
+  server = app.listen(PORT, () => {
+    console.log(`\n🟢 Ser Livre API rodando na porta ${PORT}`);
+    console.log(`   Banco: ${process.env.DATABASE_URL ? 'PostgreSQL conectado' : '⚠️ DATABASE_URL não configurada'}`);
+    console.log(`   Supabase Auth: ${process.env.SUPABASE_URL ? process.env.SUPABASE_URL : '⚠️ não configurado'}\n`);
+  });
+})();
 
 // ════════════════════════════════════════════
 //  GRACEFUL SHUTDOWN — fecha conexões antes de sair
