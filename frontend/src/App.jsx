@@ -827,7 +827,18 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
   const DEFAULT_SCORE = { m:{gv:2,mm:2,pcr:2,fer:2,hb:2,au:2,th:2,ca:2}, b:{gi:2,lib:2,dor:2,au:2,en:2,so:2}, n:{co:2,ge:2,mv:2} };
   const [es, setEs]          = useState(JSON.parse(JSON.stringify(DEFAULT_SCORE)));
   const [scoreFormOpen, setScoreFormOpen] = useState(false);
-  const [scoreRef,      setScoreRef]      = useState(format(new Date(), 'MMM/yy'));
+  // Semanas do ciclo para o seletor de score
+  const cycleStart  = p._activeCycle?.startDate ? new Date(p._activeCycle.startDate) : new Date(p.sd || new Date());
+  const currentWeekNum = p.week || 1;
+  const scoreWeeks = Array.from({ length: 16 }, (_, i) => {
+    const weekNum = i + 1;
+    const weekDate = addDays(cycleStart, (weekNum - 1) * 7);
+    const label = `Semana ${weekNum} — ${format(weekDate, 'dd/MM/yy')}`;
+    const isFuture = weekNum > currentWeekNum;
+    return { weekNum, weekDate, label: isFuture ? `${label} (futuro)` : label, value: `S${String(weekNum).padStart(2,'0')} — ${format(weekDate, 'dd/MM/yy')}` };
+  });
+  const defaultWeekValue = scoreWeeks[currentWeekNum - 1]?.value || scoreWeeks[0]?.value || '';
+  const [scoreRef, setScoreRef] = useState(defaultWeekValue);
   const [sw, setSw]   = useState(p.week);
   const [showWeighIn, setShowWeighIn] = useState(false);
   const [showChangePlan, setShowChangePlan] = useState(false);
@@ -1135,7 +1146,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
           {/* Header com botão novo score */}
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Histórico de scores</div>
-            <button onClick={()=>{ setEs(JSON.parse(JSON.stringify(DEFAULT_SCORE))); setScoreRef(format(new Date(),'MMM/yy')); setScoreFormOpen(true); }} style={{ padding:"7px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>+ Novo score</button>
+            <button onClick={()=>{ setEs(JSON.parse(JSON.stringify(DEFAULT_SCORE))); setScoreRef(defaultWeekValue); setScoreFormOpen(true); }} style={{ padding:"7px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>+ Novo score</button>
           </div>
 
           {/* Lista de scores históricos */}
@@ -1152,7 +1163,21 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
               return (
                 <div key={s.id||i} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                    <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>{s.month}</div>
+                    <div>
+                      {/* S01 — 30/03/26 → destaca "Semana 1" e a data */}
+                      {s.month?.startsWith('S') ? (
+                        <>
+                          <span style={{ fontSize:13, fontWeight:700, color:G[800] }}>
+                            Semana {parseInt(s.month.slice(1))}
+                          </span>
+                          <span style={{ fontSize:11, color:"#aaa", marginLeft:6 }}>
+                            {s.month.split(' — ')[1] || ''}
+                          </span>
+                        </>
+                      ) : (
+                        <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>{s.month}</span>
+                      )}
+                    </div>
                     <div style={{ fontSize:10, color:"#aaa" }}>{s.date ? format(new Date(s.date),"dd/MM/yy") : ""}</div>
                   </div>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
@@ -1178,10 +1203,15 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                   <div style={{ fontSize:14, fontWeight:700, color:G[800] }}>Novo score clínico</div>
                   <button onClick={()=>setScoreFormOpen(false)} style={{ background:"none", border:"none", fontSize:18, cursor:"pointer", color:"#aaa", lineHeight:1 }}>✕</button>
                 </div>
-                {/* Mês de referência */}
+                {/* Semana de referência */}
                 <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"10px 14px" }}>
-                  <div style={{ fontSize:12, fontWeight:600, color:G[700], marginBottom:6 }}>Mês de referência</div>
-                  <input value={scoreRef} onChange={e=>setScoreRef(e.target.value)} placeholder="Mar/26" style={{ width:"100%", padding:"8px 10px", borderRadius:8, border:`1px solid ${G[300]}`, fontSize:13, fontFamily:"inherit", boxSizing:"border-box" }}/>
+                  <div style={{ fontSize:12, fontWeight:600, color:G[700], marginBottom:2 }}>Semana de referência</div>
+                  <div style={{ fontSize:11, color:"#aaa", marginBottom:8 }}>Ciclo {p._activeCycle?.number||1} — semana do programa em que o score foi coletado</div>
+                  <select value={scoreRef} onChange={e=>setScoreRef(e.target.value)} style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1px solid ${G[300]}`, fontSize:13, fontFamily:"inherit", background:"#fff", color:G[800], cursor:"pointer" }}>
+                    {scoreWeeks.map(w => (
+                      <option key={w.weekNum} value={w.value}>{w.label}</option>
+                    ))}
+                  </select>
                 </div>
                 {/* Metabólico */}
                 <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
