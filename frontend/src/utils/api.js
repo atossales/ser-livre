@@ -153,6 +153,8 @@ export const sendMessage = (data) => api.post('/messages', data);
 // ── Staff / Equipe ──
 export const getStaff = () => api.get('/staff');
 export const updateUserProfile = (id, data) => api.put(`/users/${id}/profile`, data);
+export const updateStaffRole = (id, role) => api.put(`/users/${id}/role`, { role });
+export const deleteStaff = (id) => api.delete(`/users/${id}`);
 
 // ── Activity Log ──
 export const getActivity = () => api.get('/activity');

@@ -1293,6 +1293,44 @@ app.put('/api/users/:id/role', authRequired, requireRole('ADMIN', 'MEDICA'), asy
 });
 
 // ════════════════════════════════════════════
+//  EXCLUIR MEMBRO DA EQUIPE
+// ════════════════════════════════════════════
+
+app.delete('/api/users/:id', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
+  try {
+    const targetId = req.params.id;
+
+    // Impede auto-exclusão
+    if (targetId === req.user.id) {
+      return res.status(403).json({ error: 'Não é possível excluir sua própria conta' });
+    }
+
+    // Apenas ADMIN pode excluir outro ADMIN
+    const target = await prisma.user.findUnique({ where: { id: targetId }, select: { role: true } });
+    if (!target) return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (target.role === 'ADMIN' && req.user.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Apenas ADMIN pode excluir outro ADMIN' });
+    }
+
+    // Remove do Supabase Auth (se disponível)
+    if (supabaseAdmin) {
+      await supabaseAdmin.auth.admin.deleteUser(targetId).catch(e =>
+        console.warn(`[DELETE USER] Supabase auth delete falhou para ${targetId}:`, e.message)
+      );
+    }
+
+    // Remove do banco local (cascade apaga Patient e dados relacionados se for paciente)
+    await prisma.user.delete({ where: { id: targetId } });
+
+    console.log(`[DELETE USER] Usuário ${targetId} excluído por ${req.user.id} (${req.user.role})`);
+    res.json({ message: 'Usuário excluído com sucesso' });
+  } catch (err) {
+    console.error('[DELETE USER] Erro:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════
 //  SENHA — via Supabase Auth Admin
 // ════════════════════════════════════════════
 

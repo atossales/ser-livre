@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getWhatsAppStatus, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage } from './utils/api';
+import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, updateStaffRole, deleteStaff, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getWhatsAppStatus, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage } from './utils/api';
 import { supabase } from './utils/supabase';
 import { ResetPassword } from './components/ResetPassword';
 import { Toast } from './components/Toast';
@@ -834,8 +834,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
     const weekNum = i + 1;
     const weekDate = addDays(cycleStart, (weekNum - 1) * 7);
     const label = `Semana ${weekNum} — ${format(weekDate, 'dd/MM/yy')}`;
-    const isFuture = weekNum > currentWeekNum;
-    return { weekNum, weekDate, label: isFuture ? `${label} (futuro)` : label, value: `S${String(weekNum).padStart(2,'0')} — ${format(weekDate, 'dd/MM/yy')}` };
+    return { weekNum, weekDate, label, value: `S${String(weekNum).padStart(2,'0')} — ${format(weekDate, 'dd/MM/yy')}` };
   });
   const defaultWeekValue = scoreWeeks[currentWeekNum - 1]?.value || scoreWeeks[0]?.value || '';
   const [scoreRef, setScoreRef] = useState(defaultWeekValue);
@@ -1490,10 +1489,46 @@ function Alerts({ ps, onSel, onResolve }) {
 /* ════════════════════════════════════════════
    EQUIPE
 ═══════════════════════════════════════════════ */
-function TeamP({ team, setTeam, ta, setTa, activityLog, onToast }) {
+function TeamP({ team, setTeam, ta, setTa, activityLog, onToast, currentUser }) {
   const [sel,        setSel]        = useState(null); // membro selecionado
   const [showNew,    setShowNew]    = useState(false);
   const [editMember, setEditMember] = useState(null);
+  const [confirmDelMember, setConfirmDelMember] = useState(null); // { id, name }
+  const [deleting, setDeleting] = useState(false);
+
+  const canManage = currentUser?.role === 'ADMIN' || currentUser?.role === 'MEDICA';
+
+  const handleDeleteMember = async () => {
+    if (!confirmDelMember) return;
+    setDeleting(true);
+    try {
+      await deleteStaff(confirmDelMember.id);
+      setTeam(prev => prev.filter(m => m.id !== confirmDelMember.id));
+      setConfirmDelMember(null);
+      if (sel === confirmDelMember.id) setSel(null);
+      onToast?.('Membro excluído com sucesso.', 'success');
+    } catch (err) {
+      onToast?.(err?.response?.data?.error || 'Erro ao excluir membro.', 'error');
+    } finally { setDeleting(false); }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editMember) return;
+    try {
+      // Salva perfil (nome, telefone, especialidade)
+      await updateUserProfile(editMember.id, { name: editMember.name, phone: editMember.phone, specialty: editMember.specialty }).catch(()=>{});
+      // Salva role se mudou
+      const original = team.find(x => x.id === editMember.id);
+      if (original?.role !== editMember.role) {
+        await updateStaffRole(editMember.id, editMember.role);
+      }
+      setTeam(prev => prev.map(x => x.id === editMember.id ? { ...x, ...editMember } : x));
+      setEditMember(null);
+      onToast?.('Membro atualizado com sucesso.', 'success');
+    } catch (err) {
+      onToast?.(err?.response?.data?.error || 'Erro ao salvar alterações.', 'error');
+    }
+  };
 
   if (sel) {
     const m   = team.find(x=>x.id===sel);
@@ -1565,7 +1600,7 @@ function TeamP({ team, setTeam, ta, setTa, activityLog, onToast }) {
                 </div>
               ))}
               <div style={{ display:"flex", gap:8, marginTop:4 }}>
-                <button onClick={()=>{ updateUserProfile(editMember.id, { name: editMember.name, phone: editMember.phone, specialty: editMember.specialty }).catch(()=>{}); setTeam(prev=>prev.map(x=>x.id===editMember.id?editMember:x)); setEditMember(null); }}
+                <button onClick={handleSaveEdit}
                   style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
                 <button onClick={()=>setEditMember(null)}
                   style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
@@ -1580,26 +1615,60 @@ function TeamP({ team, setTeam, ta, setTa, activityLog, onToast }) {
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:14 }}>
-        <button onClick={()=>setShowNew(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}><Plus size={13}/>Novo membro</button>
+        {canManage && <button onClick={()=>setShowNew(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}><Plus size={13}/>Novo membro</button>}
       </div>
       {team.map(m => {
         const roleInfo = ROLES.find(r=>r.id===m.role) || { label: m.label||m.role, color: m.color };
         const mLog = activityLog.filter(a=>a.memberId===m.id);
+        const isMe = m.id === currentUser?.id;
         return (
           <div key={m.id} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:12 }}>
             <Av name={m.name} size={46} src={ta[m.id]} onEdit={url=>setTa(pr=>({...pr,[m.id]:url}))}/>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{m.name}</div>
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{m.name}</div>
+                {isMe && <span style={{ fontSize:9, background:G[100], color:G[700], borderRadius:4, padding:"1px 5px", fontWeight:600 }}>Você</span>}
+              </div>
               <div style={{ fontSize:11, color:"#aaa", marginTop:2 }}>{m.specialty} • {m.email}</div>
               <div style={{ fontSize:10, color:"#bbb", marginTop:2 }}>{mLog.length} atividades registradas</div>
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:5, alignItems:"flex-end" }}>
               <Bg color={roleInfo.color} bg={roleInfo.color+"22"}>{roleInfo.label}</Bg>
-              <div onClick={()=>setSel(m.id)} style={{ fontSize:10, color:G[600], cursor:"pointer", textDecoration:"underline" }}>Ver histórico</div>
+              <div style={{ display:"flex", gap:6, alignItems:"center", marginTop:2 }}>
+                <div onClick={()=>setSel(m.id)} style={{ fontSize:10, color:G[600], cursor:"pointer", textDecoration:"underline" }}>Histórico</div>
+                {canManage && !isMe && (
+                  <>
+                    <span style={{ color:"#ccc", fontSize:10 }}>|</span>
+                    <div onClick={()=>setEditMember({...m})} style={{ fontSize:10, color:G[500], cursor:"pointer" }} title="Editar">✏️</div>
+                    <div onClick={()=>setConfirmDelMember({ id: m.id, name: m.name })} style={{ fontSize:10, color:S.red, cursor:"pointer" }} title="Excluir">🗑️</div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         );
       })}
+
+      {/* Modal confirmação exclusão de membro */}
+      {confirmDelMember && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:10000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:'#fff', borderRadius:14, padding:28, maxWidth:340, width:'100%', boxShadow:'0 8px 40px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontSize:15, fontWeight:700, marginBottom:8, color:'#1a1a1a' }}>Excluir membro?</div>
+            <div style={{ fontSize:13, color:'#666', marginBottom:24, lineHeight:1.5 }}>
+              <strong>{confirmDelMember.name}</strong> será removido(a) do sistema e perderá o acesso. Esta ação não pode ser desfeita.
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={handleDeleteMember} disabled={deleting}
+                style={{ flex:1, padding:11, background:S.red, color:'#fff', border:'none', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit', opacity:deleting?0.7:1 }}>
+                {deleting ? 'Excluindo...' : 'Excluir'}
+              </button>
+              <button onClick={()=>setConfirmDelMember(null)} disabled={deleting}
+                style={{ flex:1, padding:11, background:G[100], color:G[800], border:'none', borderRadius:8, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showNew && <NewMemberModal onClose={()=>setShowNew(false)} onSave={async (nm) => {
         try {
           await apiRegister({ name: nm.name, email: nm.email, role: nm.role?.toUpperCase() || 'ENFERMAGEM', phone: nm.phone || '' });
@@ -3193,6 +3262,10 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('serlivre_user') || '{}').role === 'paciente' ? 'paciente' : 'admin'; }
     catch { return 'admin'; }
   });
+  // Usuário logado atual (lido do localStorage)
+  const [currentUser, setCurrentUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('serlivre_user') || '{}'); } catch { return {}; }
+  });
   const [page, setPage] = useState("dash");
 
   // Detectar se veio de link de reset de senha
@@ -3218,6 +3291,7 @@ export default function App() {
     setLg(false);
     setPs([]);
     setPage("dash");
+    setCurrentUser({});
   };
   const [sid,  setSid]  = useState(null);
   const [so,   setSo]   = useState(true);
@@ -3280,6 +3354,7 @@ export default function App() {
   if (!lg) return <Login onLogin={async (m) => {
     setLg(true);
     setMode(m);
+    try { setCurrentUser(JSON.parse(localStorage.getItem('serlivre_user') || '{}')); } catch (_) {}
     setPage("dash");
     setDbLoaded(false);
     try { await reloadPatients(); } catch (_) {}
@@ -3564,7 +3639,7 @@ export default function App() {
         onEdit={handleEdit}
         onSendMsg={msg=>setMessages(prev=>[...prev,msg])}/>}
       {page==="alert" && <Alerts ps={ps} onSel={go} onResolve={handleResolveAlert}/>}
-      {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog} onToast={toast}/>}
+      {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog} onToast={toast} currentUser={currentUser}/>}
       {page==="agenda"&& <Agenda ps={ps} onSel={go} mob={mob}/>}
       {page==="msg"   && <Mensagens ps={ps} messages={messages} setMessages={setMessages} mob={mob}/>}
     </>
@@ -3659,10 +3734,10 @@ export default function App() {
           })}
         </div>
         <div style={{ padding:"12px 14px", borderTop:`1px solid ${G[700]}`, display:"flex", alignItems:"center", gap:7 }}>
-          <Av name="Mariana Wogel" size={28} src={ta[1]}/>
+          <Av name={currentUser.name || 'Usuário'} size={28} src={ta[currentUser.id]}/>
           <div style={{ flex:1 }}>
-            <div style={{ fontSize:11, fontWeight:500 }}>Dra. Mariana</div>
-            <div style={{ fontSize:9, opacity:0.3 }}>Admin</div>
+            <div style={{ fontSize:11, fontWeight:500 }}>{(currentUser.name || 'Usuário').split(' ').slice(0,2).join(' ')}</div>
+            <div style={{ fontSize:9, opacity:0.3 }}>{currentUser.role === 'ADMIN' ? 'Admin' : currentUser.role === 'MEDICA' ? 'Médica' : currentUser.role || 'Equipe'}</div>
           </div>
           <LogOut size={12} style={{ cursor:"pointer", opacity:0.3 }} onClick={doLogout}/>
         </div>
