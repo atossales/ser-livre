@@ -694,10 +694,12 @@ app.post('/api/weekchecks', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERM
         });
 
         // Envia WhatsApp com resultado da pesagem se sendWhatsApp=true no body
+        console.log(`[WEEKCHECK-WA] sendWhatsApp=${req.body.sendWhatsApp}, phone=${cycle.patient?.user?.phone || 'null'}`);
         if (req.body.sendWhatsApp && cycle.patient?.user?.phone) {
           const patient = cycle.patient;
           const name    = patient.user.name || 'paciente';
           const phone   = patient.user.phone;
+          console.log(`[WEEKCHECK-WA] Tentando enviar para ${phone}...`);
 
           // Busca pesagem anterior para calcular variação
           const prevCheck = await prisma.weekCheck.findFirst({
@@ -718,7 +720,9 @@ app.post('/api/weekchecks', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERM
           ].filter(Boolean).join('\n');
 
           const { sendWhatsApp: sendWA } = require('./utils/whatsapp');
-          sendWA(phone, linhas).catch(e => console.warn('[WEEKCHECK] WhatsApp send falhou:', e.message));
+          sendWA(phone, linhas)
+            .then(r  => console.log(`[WEEKCHECK-WA] Resultado:`, JSON.stringify(r)))
+            .catch(e => console.warn('[WEEKCHECK-WA] Exceção:', e.message));
 
           // Registra no log de mensagens
           await prisma.messageLog.create({

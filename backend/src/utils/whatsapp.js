@@ -85,7 +85,7 @@ Regras obrigatórias:
   try {
     const prompt = prompts[type] || `Crie uma mensagem informativa. Dados: ${JSON.stringify(data)}`;
     const response = await httpRequest(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
