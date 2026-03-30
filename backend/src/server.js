@@ -1410,7 +1410,6 @@ let server;
 
     if (idType === 'integer') {
       console.log('[STARTUP] Schema antigo detectado (id INT). Recriando banco...');
-      // $executeRawUnsafe não suporta múltiplos statements — executar um a um
       const drops = [
         `DROP TABLE IF EXISTS "activity_logs" CASCADE`,
         `DROP TABLE IF EXISTS "InviteToken" CASCADE`,
@@ -1435,16 +1434,9 @@ let server;
       for (const sql of drops) {
         try { await prisma.$executeRawUnsafe(sql); } catch (e) { console.warn('[STARTUP] Drop:', e.message); }
       }
-      console.log('[STARTUP] Tabelas antigas removidas. Rodando prisma db push...');
-      await runPrismaPush();
-      console.log('[STARTUP] Schema recriado com sucesso.');
-    } else if (idType === 'unknown') {
-      // Tabelas não existem (banco vazio ou foi resetado) — criar do zero
-      console.log('[STARTUP] Tabelas não encontradas. Criando schema com prisma db push...');
-      await runPrismaPush();
-      console.log('[STARTUP] Schema criado com sucesso.');
-    } else {
-      // Schema correto — apenas garantir colunas novas existem
+      console.log('[STARTUP] Tabelas antigas removidas.');
+    } else if (idType !== 'unknown') {
+      // User table exists with correct UUID — fix optional new columns
       const colFixes = [
         `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS specialty TEXT`,
         `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`,
@@ -1455,6 +1447,12 @@ let server;
         try { await prisma.$executeRawUnsafe(sql); } catch (_) { /* OK */ }
       }
     }
+
+    // SEMPRE roda prisma db push — é idempotente e garante que todas as tabelas existem
+    // (cria tabelas faltantes, não toca nas que já existem com dados)
+    console.log('[STARTUP] Sincronizando schema com prisma db push...');
+    await runPrismaPush();
+    console.log('[STARTUP] Schema OK.');
   } catch (schemaErr) {
     console.warn('[STARTUP] Erro ao verificar schema:', schemaErr.message);
   }
