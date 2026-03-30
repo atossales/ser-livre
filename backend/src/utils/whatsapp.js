@@ -332,22 +332,38 @@ async function sendMedia(phone, mediaData) {
 }
 
 // ── Verifica status da instância ───────────────────────────
+// Usa URL interna (Docker) com fallback para URL externa — mesmo padrão de sendWhatsApp
 
 async function checkStatus() {
-  const BASE = process.env.EVOLUTION_API_URL;
-  const KEY  = process.env.EVOLUTION_API_KEY;
-  const INST = process.env.EVOLUTION_INSTANCE;
+  // Prioriza URL interna para evitar EAI_AGAIN dentro do container Docker
+  const BASE     = process.env.EVOLUTION_API_INTERNAL_URL || process.env.EVOLUTION_API_URL;
+  const FALLBACK = process.env.EVOLUTION_API_URL;
+  const KEY      = process.env.EVOLUTION_API_KEY;
+  const INST     = process.env.EVOLUTION_INSTANCE;
   if (!BASE || !KEY || !INST) return { connected: false, reason: 'not_configured' };
 
-  try {
+  const tryFetch = async (baseUrl) => {
     const res = await httpRequest(
-      `${BASE}/instance/fetchInstances?instanceName=${INST}`,
+      `${baseUrl}/instance/fetchInstances?instanceName=${INST}`,
       { headers: { 'apikey': KEY } }
     );
+    console.log(`[WHATSAPP STATUS] ${baseUrl} → HTTP ${res.status}`, JSON.stringify(res.data).slice(0, 200));
     const inst = Array.isArray(res.data) ? res.data[0] : res.data;
     const state = inst?.instance?.state || inst?.state;
     return { connected: state === 'open', state, instance: INST };
+  };
+
+  try {
+    return await tryFetch(BASE);
   } catch (err) {
+    console.warn(`[WHATSAPP STATUS] URL primária falhou (${BASE}):`, err.message);
+    if (FALLBACK && FALLBACK !== BASE) {
+      try {
+        return await tryFetch(FALLBACK);
+      } catch (err2) {
+        console.error('[WHATSAPP STATUS] Fallback também falhou:', err2.message);
+      }
+    }
     return { connected: false, reason: err.message };
   }
 }
