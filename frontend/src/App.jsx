@@ -2473,10 +2473,10 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
       : (patientMode && patientPid ? patientPid : null);
     setDraft("");
     try {
-      if (waMode && selPatient?.user?.phone) {
+      if (waMode && selPatient?.phone) {
         // Enviar via WhatsApp
         setSendingWA(true);
-        await sendWhatsAppMsg({ phone: selPatient.user.phone, message: txt, patientId: pid });
+        await sendWhatsAppMsg({ phone: selPatient.phone, message: txt, patientId: pid });
         setSendingWA(false);
         // Salva no log interno também
         await sendMessage({ patientId: pid, body: txt, channel: 'whatsapp' });
@@ -2699,7 +2699,7 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
               </div>
             </div>
             {/* Botão WhatsApp no header — só para conversas de paciente com telefone */}
-            {!patientMode && selPatient?.user?.phone && (
+            {!patientMode && selPatient?.phone && (
               <div onClick={()=>setWaMode(m=>!m)}
                 style={{ padding:"5px 10px", borderRadius:7, border:`1.5px solid ${waMode?"#25D366":G[200]}`,
                   background:waMode?"#f0fdf4":"#fff", cursor:"pointer", fontSize:11, fontWeight:600,
