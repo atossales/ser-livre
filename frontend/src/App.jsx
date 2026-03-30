@@ -93,8 +93,9 @@ const MOCK_ACTIVITY = [
 ];
 
 const genSC = (ps) => ps.reduce((acc, p) => {
-  const hist = p.history || [];
-  const last = hist[hist.length-1];
+  // Lê do scoreHistory (scores clínicos salvos via API)
+  const scoreHist = p.scoreHistory || [];
+  const last = scoreHist[scoreHist.length - 1];
   if (!last) return acc;
   acc[p.id] = { m: last.m || {}, b: last.b || {}, n: last.n || {} };
   return acc;
@@ -824,7 +825,9 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
   const [cl, setCl]   = useState(() => genCL(p, tier, p._activeCycle?.weekChecks || []));
   // Estado para edição de scores — inicializa com o último score ou valores padrão (2 = moderado)
   const DEFAULT_SCORE = { m:{gv:2,mm:2,pcr:2,fer:2,hb:2,au:2,th:2,ca:2}, b:{gi:2,lib:2,dor:2,au:2,en:2,so:2}, n:{co:2,ge:2,mv:2} };
-  const [es, setEs]   = useState(sc ? JSON.parse(JSON.stringify(sc)) : JSON.parse(JSON.stringify(DEFAULT_SCORE)));
+  const [es, setEs]          = useState(JSON.parse(JSON.stringify(DEFAULT_SCORE)));
+  const [scoreFormOpen, setScoreFormOpen] = useState(false);
+  const [scoreRef,      setScoreRef]      = useState(format(new Date(), 'MMM/yy'));
   const [sw, setSw]   = useState(p.week);
   const [showWeighIn, setShowWeighIn] = useState(false);
   const [showChangePlan, setShowChangePlan] = useState(false);
@@ -1129,42 +1132,97 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
       {/* ABA SCORES */}
       {tab==="scores" && (
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-            <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>🧬 Saúde metabólica (8-24)</div>
-            <div style={{ fontSize:11, color:G[600], marginBottom:8 }}>Pilar 1 — Composição corporal</div>
-            <SI label="Gordura visceral" value={es.m.gv} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,gv:v}}))} opts={[{v:1,l:">10"},{v:2,l:"6-10"},{v:3,l:"1-5"}]}/>
-            <SI label="Massa muscular"   value={es.m.mm} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,mm:v}}))} opts={[{v:1,l:"Baixa"},{v:2,l:"Ideal"},{v:3,l:"Alta"}]}/>
-            <div style={{ fontSize:11, color:G[600], marginTop:8, marginBottom:4 }}>Pilar 2 — Inflamação</div>
-            <SI label="PCR ultra"  value={es.m.pcr} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,pcr:v}}))} opts={[{v:1,l:">10"},{v:2,l:"5-10"},{v:3,l:"<5"}]}/>
-            <SI label="Ferritina"  value={es.m.fer} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,fer:v}}))} opts={[{v:1,l:"Elevada"},{v:2,l:"Moderada"},{v:3,l:"Normal"}]}/>
-            <div style={{ fontSize:11, color:G[600], marginTop:8, marginBottom:4 }}>Pilar 3 — Controle glicêmico</div>
-            <SI label="Hb glicada" value={es.m.hb} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,hb:v}}))} opts={[{v:1,l:">6,4%"},{v:2,l:"5,5-6,4%"},{v:3,l:"<5,4%"}]}/>
-            <SI label="Ác. úrico"  value={es.m.au} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,au:v}}))} opts={[{v:1,l:"Elevado"},{v:2,l:"Limítrofe"},{v:3,l:"Ideal"}]}/>
-            <div style={{ fontSize:11, color:G[600], marginTop:8, marginBottom:4 }}>Pilar 4 — Cardiovascular</div>
-            <SI label="Trig/HDL"    value={es.m.th} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,th:v}}))} opts={[{v:1,l:">4"},{v:2,l:"2-4"},{v:3,l:"<2"}]}/>
-            <SI label="Circ. abd."  value={es.m.ca} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,ca:v}}))} opts={[{v:1,l:"Elevada"},{v:2,l:"Moderada"},{v:3,l:"Normal"}]}/>
-            {(()=>{ const t=cM(es.m); const s=sM(t); return <div style={{ marginTop:10, padding:"8px 12px", borderRadius:8, background:s.bg, display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600, color:s.c, fontSize:12 }}>{s.e} {t}/24 — {s.l}</span><span style={{ fontSize:11, color:s.c }}>{s.d}</span></div>; })()}
+          {/* Header com botão novo score */}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Histórico de scores</div>
+            <button onClick={()=>{ setEs(JSON.parse(JSON.stringify(DEFAULT_SCORE))); setScoreRef(format(new Date(),'MMM/yy')); setScoreFormOpen(true); }} style={{ padding:"7px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>+ Novo score</button>
           </div>
 
-          <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-            <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>🧠 Bem-estar (6-18)</div>
-            <SI label="Gastrointestinal" value={es.b.gi}  onChange={v=>setEs(pr=>({...pr,b:{...pr.b,gi:v}}))}  opts={[{v:1,l:"Náusea"},{v:2,l:"Leve"},{v:3,l:"Normal"}]}/>
-            <SI label="Libido"           value={es.b.lib} onChange={v=>setEs(pr=>({...pr,b:{...pr.b,lib:v}}))} opts={[{v:1,l:"Queda"},{v:2,l:"Redução"},{v:3,l:"Normal"}]}/>
-            <SI label="Dores"            value={es.b.dor} onChange={v=>setEs(pr=>({...pr,b:{...pr.b,dor:v}}))} opts={[{v:1,l:"Limitam"},{v:2,l:"Leve"},{v:3,l:"Sem"}]}/>
-            <SI label="Autoestima"       value={es.b.au}  onChange={v=>setEs(pr=>({...pr,b:{...pr.b,au:v}}))}  opts={[{v:1,l:"Frustração"},{v:2,l:"Oscila"},{v:3,l:"Confiante"}]}/>
-            <SI label="Energia"          value={es.b.en}  onChange={v=>setEs(pr=>({...pr,b:{...pr.b,en:v}}))}  opts={[{v:1,l:"Baixa"},{v:2,l:"Oscila"},{v:3,l:"Alta"}]}/>
-            <SI label="Sono"             value={es.b.so}  onChange={v=>setEs(pr=>({...pr,b:{...pr.b,so:v}}))}  opts={[{v:1,l:"Insônia"},{v:2,l:"Irregular"},{v:3,l:"Reparador"}]}/>
-            {(()=>{ const t=cB(es.b); const s=sB(t); return <div style={{ marginTop:10, padding:"8px 12px", borderRadius:8, background:s.bg, display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600, color:s.c, fontSize:12 }}>{s.e} {t}/18 — {s.l}</span><span style={{ fontSize:11, color:s.c }}>{s.d}</span></div>; })()}
-          </div>
+          {/* Lista de scores históricos */}
+          {(p.scoreHistory||[]).length===0 ? (
+            <div style={{ textAlign:"center", padding:40, color:"#ccc", background:"#fff", borderRadius:10, border:`1px solid ${G[200]}` }}>
+              <Activity size={32} color="#ddd" style={{ margin:"0 auto 8px", display:"block" }}/>
+              <div style={{ fontSize:13 }}>Nenhum score registrado</div>
+              <div style={{ fontSize:11, marginTop:4 }}>Clique em "+ Novo score" para registrar</div>
+            </div>
+          ) : (
+            [...(p.scoreHistory||[])].reverse().map((s, i) => {
+              const tm=cM(s.m), tb=cB(s.b), tn=cN(s.n);
+              const stm=sM(tm), stb=sB(tb), stn=sN(tn);
+              return (
+                <div key={s.id||i} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>{s.month}</div>
+                    <div style={{ fontSize:10, color:"#aaa" }}>{s.date ? format(new Date(s.date),"dd/MM/yy") : ""}</div>
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                    {[{l:"Metabólico",v:tm,max:24,st:stm},{l:"Bem-estar",v:tb,max:18,st:stb},{l:"Mental",v:tn,max:9,st:stn}].map((x,j)=>(
+                      <div key={j} style={{ background:x.st.bg, borderRadius:8, padding:"8px", textAlign:"center" }}>
+                        <div style={{ fontSize:9, color:x.st.c, fontWeight:600 }}>{x.l}</div>
+                        <div style={{ fontSize:20, fontWeight:700, color:x.st.c }}>{x.v}</div>
+                        <div style={{ fontSize:9, color:"#aaa" }}>/ {x.max}</div>
+                        <div style={{ fontSize:9, fontWeight:600, color:x.st.c }}>{x.st.e} {x.st.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })
+          )}
 
-          <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-            <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>🧩 Blindagem mental (3-9)</div>
-            <SI label="Consistência alimentar" value={es.n.co} onChange={v=>setEs(pr=>({...pr,n:{...pr.n,co:v}}))} opts={[{v:1,l:"Baixa"},{v:2,l:"70-90%"},{v:3,l:">90%"}]}/>
-            <SI label="Gestão emocional"       value={es.n.ge} onChange={v=>setEs(pr=>({...pr,n:{...pr.n,ge:v}}))} opts={[{v:1,l:"Sem"},{v:2,l:"Identifica"},{v:3,l:"Controla"}]}/>
-            <SI label="Movimento"              value={es.n.mv} onChange={v=>setEs(pr=>({...pr,n:{...pr.n,mv:v}}))} opts={[{v:1,l:"Sedentário"},{v:2,l:"Parcial"},{v:3,l:"Completo"}]}/>
-            {(()=>{ const t=cN(es.n); const s=sN(t); return <div style={{ marginTop:10, padding:"8px 12px", borderRadius:8, background:s.bg, display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600, color:s.c, fontSize:12 }}>{s.e} {t}/9 — {s.l}</span><span style={{ fontSize:11, color:s.c }}>{s.d}</span></div>; })()}
-          </div>
-          <button onClick={()=>{ onSaveScores && onSaveScores(es); onAddScoreMonth && onAddScoreMonth({m:es.m,b:es.b,n:es.n}); onLog && onLog({ action:"scores", patientId:p.id, patientName:p.name, detail:"Scores metabólicos atualizados" }); }} style={{ width:"100%", padding:"11px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>💾 Salvar scores</button>
+          {/* Modal novo score */}
+          {scoreFormOpen && (
+            <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:200, display:"flex", alignItems:"flex-start", justifyContent:"center", overflowY:"auto", padding:"20px 0" }} onClick={e=>e.target===e.currentTarget&&setScoreFormOpen(false)}>
+              <div style={{ background:"#f5f5f3", borderRadius:14, width:"min(520px,95vw)", padding:"16px", display:"flex", flexDirection:"column", gap:10, margin:"auto" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:G[800] }}>Novo score clínico</div>
+                  <button onClick={()=>setScoreFormOpen(false)} style={{ background:"none", border:"none", fontSize:18, cursor:"pointer", color:"#aaa", lineHeight:1 }}>✕</button>
+                </div>
+                {/* Mês de referência */}
+                <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"10px 14px" }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:G[700], marginBottom:6 }}>Mês de referência</div>
+                  <input value={scoreRef} onChange={e=>setScoreRef(e.target.value)} placeholder="Mar/26" style={{ width:"100%", padding:"8px 10px", borderRadius:8, border:`1px solid ${G[300]}`, fontSize:13, fontFamily:"inherit", boxSizing:"border-box" }}/>
+                </div>
+                {/* Metabólico */}
+                <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>🧬 Saúde metabólica (8-24)</div>
+                  <div style={{ fontSize:11, color:G[600], marginBottom:8 }}>Pilar 1 — Composição corporal</div>
+                  <SI label="Gordura visceral" value={es.m.gv} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,gv:v}}))} opts={[{v:1,l:">10"},{v:2,l:"6-10"},{v:3,l:"1-5"}]}/>
+                  <SI label="Massa muscular"   value={es.m.mm} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,mm:v}}))} opts={[{v:1,l:"Baixa"},{v:2,l:"Ideal"},{v:3,l:"Alta"}]}/>
+                  <div style={{ fontSize:11, color:G[600], marginTop:8, marginBottom:4 }}>Pilar 2 — Inflamação</div>
+                  <SI label="PCR ultra" value={es.m.pcr} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,pcr:v}}))} opts={[{v:1,l:">10"},{v:2,l:"5-10"},{v:3,l:"<5"}]}/>
+                  <SI label="Ferritina" value={es.m.fer} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,fer:v}}))} opts={[{v:1,l:"Elevada"},{v:2,l:"Moderada"},{v:3,l:"Normal"}]}/>
+                  <div style={{ fontSize:11, color:G[600], marginTop:8, marginBottom:4 }}>Pilar 3 — Controle glicêmico</div>
+                  <SI label="Hb glicada" value={es.m.hb} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,hb:v}}))} opts={[{v:1,l:">6,4%"},{v:2,l:"5,5-6,4%"},{v:3,l:"<5,4%"}]}/>
+                  <SI label="Ác. úrico"  value={es.m.au} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,au:v}}))} opts={[{v:1,l:"Elevado"},{v:2,l:"Limítrofe"},{v:3,l:"Ideal"}]}/>
+                  <div style={{ fontSize:11, color:G[600], marginTop:8, marginBottom:4 }}>Pilar 4 — Cardiovascular</div>
+                  <SI label="Trig/HDL"   value={es.m.th} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,th:v}}))} opts={[{v:1,l:">4"},{v:2,l:"2-4"},{v:3,l:"<2"}]}/>
+                  <SI label="Circ. abd." value={es.m.ca} onChange={v=>setEs(pr=>({...pr,m:{...pr.m,ca:v}}))} opts={[{v:1,l:"Elevada"},{v:2,l:"Moderada"},{v:3,l:"Normal"}]}/>
+                  {(()=>{ const t=cM(es.m); const s=sM(t); return <div style={{ marginTop:10, padding:"8px 12px", borderRadius:8, background:s.bg, display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600, color:s.c, fontSize:12 }}>{s.e} {t}/24 — {s.l}</span><span style={{ fontSize:11, color:s.c }}>{s.d}</span></div>; })()}
+                </div>
+                {/* Bem-estar */}
+                <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>🧠 Bem-estar (6-18)</div>
+                  <SI label="Gastrointestinal" value={es.b.gi}  onChange={v=>setEs(pr=>({...pr,b:{...pr.b,gi:v}}))}  opts={[{v:1,l:"Náusea"},{v:2,l:"Leve"},{v:3,l:"Normal"}]}/>
+                  <SI label="Libido"           value={es.b.lib} onChange={v=>setEs(pr=>({...pr,b:{...pr.b,lib:v}}))} opts={[{v:1,l:"Queda"},{v:2,l:"Redução"},{v:3,l:"Normal"}]}/>
+                  <SI label="Dores"            value={es.b.dor} onChange={v=>setEs(pr=>({...pr,b:{...pr.b,dor:v}}))} opts={[{v:1,l:"Limitam"},{v:2,l:"Leve"},{v:3,l:"Sem"}]}/>
+                  <SI label="Autoestima"       value={es.b.au}  onChange={v=>setEs(pr=>({...pr,b:{...pr.b,au:v}}))}  opts={[{v:1,l:"Frustração"},{v:2,l:"Oscila"},{v:3,l:"Confiante"}]}/>
+                  <SI label="Energia"          value={es.b.en}  onChange={v=>setEs(pr=>({...pr,b:{...pr.b,en:v}}))}  opts={[{v:1,l:"Baixa"},{v:2,l:"Oscila"},{v:3,l:"Alta"}]}/>
+                  <SI label="Sono"             value={es.b.so}  onChange={v=>setEs(pr=>({...pr,b:{...pr.b,so:v}}))}  opts={[{v:1,l:"Insônia"},{v:2,l:"Irregular"},{v:3,l:"Reparador"}]}/>
+                  {(()=>{ const t=cB(es.b); const s=sB(t); return <div style={{ marginTop:10, padding:"8px 12px", borderRadius:8, background:s.bg, display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600, color:s.c, fontSize:12 }}>{s.e} {t}/18 — {s.l}</span><span style={{ fontSize:11, color:s.c }}>{s.d}</span></div>; })()}
+                </div>
+                {/* Mental */}
+                <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>🧩 Blindagem mental (3-9)</div>
+                  <SI label="Consistência alimentar" value={es.n.co} onChange={v=>setEs(pr=>({...pr,n:{...pr.n,co:v}}))} opts={[{v:1,l:"Baixa"},{v:2,l:"70-90%"},{v:3,l:">90%"}]}/>
+                  <SI label="Gestão emocional"       value={es.n.ge} onChange={v=>setEs(pr=>({...pr,n:{...pr.n,ge:v}}))} opts={[{v:1,l:"Sem"},{v:2,l:"Identifica"},{v:3,l:"Controla"}]}/>
+                  <SI label="Movimento"              value={es.n.mv} onChange={v=>setEs(pr=>({...pr,n:{...pr.n,mv:v}}))} opts={[{v:1,l:"Sedentário"},{v:2,l:"Parcial"},{v:3,l:"Completo"}]}/>
+                  {(()=>{ const t=cN(es.n); const s=sN(t); return <div style={{ marginTop:10, padding:"8px 12px", borderRadius:8, background:s.bg, display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600, color:s.c, fontSize:12 }}>{s.e} {t}/9 — {s.l}</span><span style={{ fontSize:11, color:s.c }}>{s.d}</span></div>; })()}
+                </div>
+                <button onClick={()=>{ onSaveScores&&onSaveScores(es,scoreRef); onLog&&onLog({action:"scores",patientId:p.id,patientName:p.name,detail:"Scores metabólicos atualizados"}); setScoreFormOpen(false); }} style={{ width:"100%", padding:"11px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>💾 Salvar score</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -3325,12 +3383,16 @@ export default function App() {
   };
 
   // Salvar scores — persiste via API e atualiza lista local
-  const handleSaveScores = async (scores) => {
-    // Atualiza UI local imediatamente
+  const handleSaveScores = async (scores, monthRef) => {
+    const mo = monthRef || format(new Date(), "MMM/yy");
+    // Atualiza scoreHistory local imediatamente
     setPs(prev => prev.map(x => {
       if (x.id !== sp.id) return x;
-      const h = x.history || [];
-      return { ...x, history: h.length > 0 ? [...h.slice(0,-1), { ...h[h.length-1], ...scores }] : [{ ...scores }] };
+      const sh = x.scoreHistory || [];
+      const exists = sh.findIndex(s => s.month === mo);
+      const entry = { id: crypto.randomUUID(), date: new Date().toISOString(), month: mo, m: scores.m, b: scores.b, n: scores.n };
+      const newSh = exists >= 0 ? sh.map((s,i) => i===exists ? entry : s) : [...sh, entry];
+      return { ...x, scoreHistory: newSh };
     }));
     addLog({ action:"scores", patientId: sp.id, patientName: sp.name, detail:"Scores metabólicos atualizados" });
 
@@ -3340,7 +3402,7 @@ export default function App() {
       const sm = scores.m; const sb = scores.b; const sn = scores.n;
       apiSaveScores({
         cycleId,
-        month: format(new Date(), "MMM/yy"),
+        month: mo,
         gorduraVisceral:       sm.gv  || 2,
         massaMuscular:         sm.mm  || 2,
         pcrUltrassensivel:     sm.pcr || 2,
@@ -3380,11 +3442,11 @@ export default function App() {
     }
   };
 
-  // Adicionar score mensal ao histórico local
-  const handleAddScoreMonth = ({ m, b, n }) => {
-    const mo = format(new Date(), "MMM/yy");
+  // Adicionar score mensal ao histórico local (mantido por compatibilidade)
+  const handleAddScoreMonth = ({ m, b, n }, mo) => {
+    const month = mo || format(new Date(), "MMM/yy");
     setPs(prev => prev.map(x => x.id === sp.id
-      ? { ...x, scoreHistory: [...(x.scoreHistory || []), { id: crypto.randomUUID(), date: new Date().toISOString(), month: mo, m, b, n }] }
+      ? { ...x, scoreHistory: [...(x.scoreHistory || []), { id: crypto.randomUUID(), date: new Date().toISOString(), month, m, b, n }] }
       : x
     ));
   };
