@@ -1441,8 +1441,13 @@ let server;
       }
       console.log('[STARTUP] Tabelas antigas removidas.');
     } else if (idType !== 'unknown') {
-      // User table exists with correct UUID — fix optional new columns
+      // User table exists with correct UUID — limpa colunas antigas e adiciona novas
       const colFixes = [
+        // Remove colunas do schema antigo que causam erro no prisma db push
+        // mesmo com --accept-data-loss (Prisma bloqueia drop de PK e colunas com dados)
+        `ALTER TABLE "User" DROP COLUMN IF EXISTS "password"`,
+        `ALTER TABLE "User" DROP COLUMN IF EXISTS "passwordHash"`,
+        // Garante colunas novas que podem estar faltando
         `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS specialty TEXT`,
         `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`,
         `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "emailVerified" BOOLEAN NOT NULL DEFAULT false`,
