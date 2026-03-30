@@ -1292,24 +1292,31 @@ let server;
 
     if (idType === 'integer') {
       console.log('[STARTUP] Schema antigo detectado (id INT). Recriando banco...');
-      // Dropar tabelas antigas em ordem reversa de dependência
-      const dropSQL = `
-        DROP TABLE IF EXISTS "activity_logs" CASCADE;
-        DROP TABLE IF EXISTS "InviteToken" CASCADE;
-        DROP TABLE IF EXISTS "ResetToken" CASCADE;
-        DROP TABLE IF EXISTS "MessageLog" CASCADE;
-        DROP TABLE IF EXISTS "MessageTemplate" CASCADE;
-        DROP TABLE IF EXISTS "Appointment" CASCADE;
-        DROP TABLE IF EXISTS "ScoreEntry" CASCADE;
-        DROP TABLE IF EXISTS "WeekCheck" CASCADE;
-        DROP TABLE IF EXISTS "Cycle" CASCADE;
-        DROP TABLE IF EXISTS "Alert" CASCADE;
-        DROP TABLE IF EXISTS "Patient" CASCADE;
-        DROP TABLE IF EXISTS "StateBlob" CASCADE;
-        DROP TABLE IF EXISTS "User" CASCADE;
-        DROP TYPE IF EXISTS "Role","Plan","CycleStatus","AlertType","AlertSeverity","AppointmentType" CASCADE;
-      `;
-      await prisma.$executeRawUnsafe(dropSQL);
+      // $executeRawUnsafe não suporta múltiplos statements — executar um a um
+      const drops = [
+        `DROP TABLE IF EXISTS "activity_logs" CASCADE`,
+        `DROP TABLE IF EXISTS "InviteToken" CASCADE`,
+        `DROP TABLE IF EXISTS "ResetToken" CASCADE`,
+        `DROP TABLE IF EXISTS "MessageLog" CASCADE`,
+        `DROP TABLE IF EXISTS "MessageTemplate" CASCADE`,
+        `DROP TABLE IF EXISTS "Appointment" CASCADE`,
+        `DROP TABLE IF EXISTS "ScoreEntry" CASCADE`,
+        `DROP TABLE IF EXISTS "WeekCheck" CASCADE`,
+        `DROP TABLE IF EXISTS "Cycle" CASCADE`,
+        `DROP TABLE IF EXISTS "Alert" CASCADE`,
+        `DROP TABLE IF EXISTS "Patient" CASCADE`,
+        `DROP TABLE IF EXISTS "StateBlob" CASCADE`,
+        `DROP TABLE IF EXISTS "User" CASCADE`,
+        `DROP TYPE IF EXISTS "Role" CASCADE`,
+        `DROP TYPE IF EXISTS "Plan" CASCADE`,
+        `DROP TYPE IF EXISTS "CycleStatus" CASCADE`,
+        `DROP TYPE IF EXISTS "AlertType" CASCADE`,
+        `DROP TYPE IF EXISTS "AlertSeverity" CASCADE`,
+        `DROP TYPE IF EXISTS "AppointmentType" CASCADE`,
+      ];
+      for (const sql of drops) {
+        try { await prisma.$executeRawUnsafe(sql); } catch (e) { console.warn('[STARTUP] Drop:', e.message); }
+      }
       console.log('[STARTUP] Tabelas antigas removidas. Rodando prisma db push...');
       await runPrismaPush();
       console.log('[STARTUP] Schema recriado com sucesso.');
