@@ -15,4 +15,7 @@ COPY src ./src
 
 EXPOSE 3001
 
-CMD ["node", "src/server.js"]
+# Roda prisma db push (cria tabelas faltantes) ANTES de iniciar o servidor.
+# Usa o binário local para garantir que funciona no container sem depender do PATH do sistema.
+# O "|| true" garante que o servidor inicia mesmo se o push falhar por alguma razão.
+CMD ["sh", "-c", "node_modules/.bin/prisma db push --accept-data-loss --skip-generate 2>&1 || true; node src/server.js"]

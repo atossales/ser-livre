@@ -1380,21 +1380,26 @@ app.get('/health', async (req, res) => {
 //  Usa async/await para garantir que o sync complete
 //  antes do servidor começar a aceitar requisições.
 // ════════════════════════════════════════════
-const { spawn } = require('child_process');
-
-// Roda prisma db push em background (não bloqueia o servidor)
+// Roda prisma db push — cria todas as tabelas faltantes (idempotente)
+// Usa caminho absoluto ao binário local para máxima compatibilidade com Docker
 function runPrismaPush() {
-  return new Promise((resolve) => {
-    const p = spawn('npx', ['prisma', 'db', 'push', '--accept-data-loss', '--skip-generate'], {
-      stdio: 'pipe', env: { ...process.env }
-    });
-    p.stdout.on('data', (d) => process.stdout.write('[PRISMA] ' + d.toString()));
-    p.stderr.on('data', (d) => process.stderr.write('[PRISMA] ' + d.toString()));
-    p.on('close', (code) => { console.log(`[PRISMA] db push concluído (exit ${code})`); resolve(code); });
-    p.on('error', (err) => { console.warn('[PRISMA] Erro:', err.message); resolve(1); });
-    // Timeout de 3 minutos
-    setTimeout(() => { p.kill(); console.warn('[PRISMA] db push cancelado por timeout'); resolve(1); }, 180000);
-  });
+  const { execSync } = require('child_process');
+  // Tenta primeiro o binário local (funciona no Docker mesmo sem npx no PATH)
+  const localBin  = require('path').join(__dirname, '..', 'node_modules', '.bin', 'prisma');
+  const rootBin   = require('path').join(__dirname, '..', '..', 'node_modules', '.bin', 'prisma');
+  const fs2       = require('fs');
+  const prismaBin = fs2.existsSync(localBin) ? localBin : (fs2.existsSync(rootBin) ? rootBin : 'npx prisma');
+  const cmd       = `"${prismaBin}" db push --accept-data-loss --skip-generate`;
+
+  try {
+    const out = execSync(cmd, { env: { ...process.env }, timeout: 120000, encoding: 'utf8' });
+    console.log('[PRISMA] db push OK:', out.slice(0, 300).replace(/\n/g,' '));
+    return Promise.resolve(0);
+  } catch (err) {
+    const detail = (err.stderr || err.stdout || err.message || '').toString().slice(0, 500);
+    console.warn('[PRISMA] db push falhou:', detail);
+    return Promise.resolve(1);
+  }
 }
 
 let server;
@@ -1504,7 +1509,38 @@ let server;
     console.warn('[STARTUP] Erro geral no sync:', syncErr.message);
   }
 
-  // 2. Iniciar servidor
+  // 2. Criar paciente de teste se não existir nenhum paciente
+  try {
+    const patientCount = await prisma.patient.count();
+    if (patientCount === 0) {
+      console.log('[STARTUP] Nenhum paciente encontrado. Criando paciente de teste...');
+      // Busca o usuário da paciente de teste
+      const testeUser = await prisma.user.findFirst({ where: { email: 'paciente.teste@serlivre.com' } });
+      if (testeUser) {
+        const patient = await prisma.patient.create({
+          data: {
+            userId:        testeUser.id,
+            initialWeight: 85.0,
+            currentWeight: 85.0,
+            height:        165.0,
+            plan:          'GOLD_PLUS',
+            startDate:     new Date(),
+          }
+        });
+        // Cria o primeiro ciclo
+        await prisma.cycle.create({
+          data: { patientId: patient.id, number: 1, currentWeek: 1, status: 'ACTIVE', startDate: new Date() }
+        });
+        console.log(`[STARTUP] Paciente de teste criado (id: ${patient.id}).`);
+      } else {
+        console.log('[STARTUP] Usuário paciente.teste@serlivre.com não encontrado no banco — será criado no próximo sync.');
+      }
+    }
+  } catch (seedErr) {
+    console.warn('[STARTUP] Erro ao criar paciente de teste:', seedErr.message);
+  }
+
+  // 3. Iniciar servidor
   server = app.listen(PORT, () => {
     console.log(`\n🟢 Ser Livre API rodando na porta ${PORT}`);
     console.log(`   Banco: ${process.env.DATABASE_URL ? 'PostgreSQL conectado' : '⚠️ DATABASE_URL não configurada'}`);
