@@ -350,6 +350,11 @@ app.post('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAG
     if (authError) return res.status(400).json({ error: authError.message });
 
     const result = await prisma.$transaction(async (tx) => {
+      // Remove registro duplicado com mesmo email mas id diferente (pode existir do schema antigo)
+      await tx.$executeRawUnsafe(
+        `DELETE FROM "User" WHERE email = $1 AND id != $2`,
+        email, authData.user.id
+      );
       // O trigger já cria o user em public.users, mas garantimos os dados extras
       await tx.user.upsert({
         where: { id: authData.user.id },
@@ -735,6 +740,28 @@ app.patch('/api/alerts/:id/resolve', authRequired, requireRole('ADMIN','MEDICA',
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── Health check — testa cada tabela individualmente (sem auth, para debug)
+app.get('/api/healthz', async (req, res) => {
+  const results = {};
+  const tests = [
+    ['patient',         () => prisma.patient.findMany({ take: 1 })],
+    ['cycle',           () => prisma.cycle.findMany({ take: 1 })],
+    ['weekCheck',       () => prisma.weekCheck.findMany({ take: 1 })],
+    ['scoreEntry',      () => prisma.scoreEntry.findMany({ take: 1 })],
+    ['alert',           () => prisma.alert.findMany({ take: 1 })],
+    ['appointment',     () => prisma.appointment.findMany({ take: 1 })],
+    ['messageTemplate', () => prisma.messageTemplate.findMany({ take: 1 })],
+    ['messageLog',      () => prisma.messageLog.findMany({ take: 1 })],
+    ['activityLog',     () => prisma.activityLog.findMany({ take: 1 })],
+    ['user',            () => prisma.user.findMany({ take: 1, select: { id: true, email: true, role: true } })],
+  ];
+  for (const [name, fn] of tests) {
+    try { await fn(); results[name] = 'ok'; }
+    catch (e) { results[name] = e.message; }
+  }
+  res.json({ status: 'alive', db: results, ts: new Date().toISOString() });
 });
 
 // ════════════════════════════════════════════

@@ -1,0 +1,66 @@
+name: Auto Deploy → EasyPanel
+
+# Dispara automaticamente a cada push no branch main
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # ── Deploy do Backend ─────────────────────────────────────────
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    # Só roda se houver mudanças no backend ou no Dockerfile
+    if: |
+      contains(github.event.head_commit.modified, 'backend/') ||
+      contains(github.event.head_commit.added, 'backend/') ||
+      contains(github.event.head_commit.modified, 'backend') ||
+      true
+    steps:
+      - name: Trigger EasyPanel deploy (backend)
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://xy1pmp.easypanel.host/api/trpc/services.app.deployService" \
+            -H "Authorization: Bearer ${{ secrets.EASYPANEL_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"json":{"projectName":"clawdbot","serviceName":"backend"}}')
+
+          http_code=$(echo "$response" | tail -1)
+          body=$(echo "$response" | head -1)
+
+          echo "Status: $http_code"
+          echo "Response: $body"
+
+          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            echo "✅ Backend deploy acionado com sucesso!"
+          else
+            echo "❌ Falha ao acionar deploy do backend (HTTP $http_code)"
+            exit 1
+          fi
+
+  # ── Deploy do Frontend ────────────────────────────────────────
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+    steps:
+      - name: Trigger EasyPanel deploy (frontend)
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://xy1pmp.easypanel.host/api/trpc/services.app.deployService" \
+            -H "Authorization: Bearer ${{ secrets.EASYPANEL_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"json":{"projectName":"clawdbot","serviceName":"frontend"}}')
+
+          http_code=$(echo "$response" | tail -1)
+          body=$(echo "$response" | head -1)
+
+          echo "Status: $http_code"
+          echo "Response: $body"
+
+          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            echo "✅ Frontend deploy acionado com sucesso!"
+          else
+            echo "❌ Falha ao acionar deploy do frontend (HTTP $http_code)"
+            exit 1
+          fi
