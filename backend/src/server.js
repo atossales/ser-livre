@@ -580,18 +580,21 @@ app.post('/api/scores', authRequired, requireRole('MEDICA', 'NUTRICIONISTA', 'AD
     const men = calcularMental(data);
 
     // Usar transação para garantir atomicidade: score + alertas criados juntos ou nenhum
+    const scoreData = {
+      ...data,
+      totalMetabolico: met.total,
+      totalBemEstar: bem.total,
+      totalMental: men.total,
+      statusMetabolico: met.status,
+      statusBemEstar: bem.status,
+      statusMental: men.status,
+      filledById: req.user.id
+    };
     const { score, alertas } = await prisma.$transaction(async (tx) => {
-      const entry = await tx.scoreEntry.create({
-        data: {
-          ...data,
-          totalMetabolico: met.total,
-          totalBemEstar: bem.total,
-          totalMental: men.total,
-          statusMetabolico: met.status,
-          statusBemEstar: bem.status,
-          statusMental: men.status,
-          filledById: req.user.id
-        }
+      const entry = await tx.scoreEntry.upsert({
+        where: { cycleId_month: { cycleId: data.cycleId, month: data.month } },
+        create: scoreData,
+        update: scoreData,
       });
 
       const alertasGerados = gerarAlertas(met, bem, men);
