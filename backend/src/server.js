@@ -1351,6 +1351,14 @@ let server;
           const role = authUser.user_metadata?.role;
           const validRoles = ['ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR','PACIENTE'];
           const safeRole = validRoles.includes(role) ? role : 'PACIENTE';
+
+          // Se existir um registro com o mesmo email mas ID diferente (schema antigo com INT),
+          // deletar o registro antigo para que o upsert possa criar com o UUID correto.
+          await prisma.$executeRawUnsafe(
+            `DELETE FROM "User" WHERE email = $1 AND id != $2`,
+            authUser.email, authUser.id
+          );
+
           await prisma.user.upsert({
             where:  { id: authUser.id },
             create: {
