@@ -1254,16 +1254,30 @@ app.get('/health', async (req, res) => {
 // ════════════════════════════════════════════
 let server;
 (async () => {
+  // 0. Garantir colunas necessárias existem no banco (idempotente)
+  // Previne erros caso prisma db push tenha travado/falhado no deploy anterior.
+  const schemaMigrations = [
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS specialty TEXT`,
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS phone TEXT`,
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "avatarUrl" TEXT`,
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`,
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "emailVerified" BOOLEAN NOT NULL DEFAULT false`,
+    `UPDATE "User" SET active = true WHERE active IS NULL OR active = false`,
+  ];
+  for (const sql of schemaMigrations) {
+    try { await prisma.$executeRawUnsafe(sql); } catch (_) { /* coluna já existe ou irrelevante */ }
+  }
+  console.log('[STARTUP] Colunas verificadas.');
+
   // 1. Sincronizar usuários do Supabase Auth → banco local
-  // O banco local (EasyPanel) não tem trigger automático.
-  // Sem este sync, nenhum usuário pode fazer login após um novo deploy.
   try {
     const { data, error } = await supabaseAdmin.auth.admin.listUsers();
     if (error) {
       console.warn('[STARTUP] listUsers error:', error.message);
     } else {
       const authUsers = data?.users || [];
-      console.log(`[STARTUP] Sincronizando ${authUsers.length} usuário(s) do Supabase Auth...`);
+      console.log(`[STARTUP] Sincronizando ${authUsers.length} usuário(s)...`);
+      let ok = 0, fail = 0;
       for (const authUser of authUsers) {
         if (!authUser.email || !authUser.id) continue;
         try {
@@ -1282,11 +1296,13 @@ let server;
             },
             update: { active: true, emailVerified: !!authUser.email_confirmed_at }
           });
+          ok++;
         } catch (upsertErr) {
-          console.warn(`[STARTUP] Falha ao sincronizar ${authUser.email}:`, upsertErr.message);
+          fail++;
+          console.warn(`[STARTUP] Sync falhou para ${authUser.email}:`, upsertErr.message);
         }
       }
-      console.log(`[STARTUP] Sync concluído.`);
+      console.log(`[STARTUP] Sync: ${ok} OK, ${fail} falhas.`);
     }
   } catch (syncErr) {
     console.warn('[STARTUP] Erro geral no sync:', syncErr.message);
