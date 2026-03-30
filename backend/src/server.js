@@ -70,30 +70,39 @@ app.use(morgan('combined'));
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-  : ['http://localhost:5173', 'http://localhost:3000'];
+  : [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'https://clawdbot-frontend.xy1pmp.easypanel.host',
+    ];
+
+// Verifica se a origin é permitida (lista estática + qualquer subdomínio do EasyPanel)
+function isOriginAllowed(origin) {
+  if (!origin) return true; // curl, Postman, nginx proxy interno
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  // Permite qualquer subdomínio *.easypanel.host (front e back no mesmo host)
+  if (/^https?:\/\/[^/]+\.easypanel\.host$/.test(origin)) return true;
+  return false;
+}
 
 app.use(cors({
   origin: (origin, cb) => {
-    // Permite requisições sem origin (ex: curl, Postman em dev) apenas em desenvolvimento
-    if (!origin && process.env.NODE_ENV !== 'production') return cb(null, true);
-    if (origin && ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    if (isOriginAllowed(origin)) return cb(null, true);
     cb(new Error('Origem não permitida pelo CORS'));
   },
   methods: ['GET','PUT','POST','DELETE','PATCH','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization']
 }));
-// Pre-flight CORS deve usar a mesma validação de origem que o handler principal
 app.options('*', cors({
   origin: (origin, cb) => {
-    if (!origin && process.env.NODE_ENV !== 'production') return cb(null, true);
-    if (origin && ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    if (isOriginAllowed(origin)) return cb(null, true);
     cb(new Error('Origem não permitida pelo CORS'));
   },
   methods: ['GET','PUT','POST','DELETE','PATCH','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization']
 }));
-// Limite global conservador — rotas que precisam de payload maior usam middleware próprio
-app.use(express.json({ limit: '2mb' }));
+// Limite global — suporta payloads de mídia em base64 (WhatsApp ~350kb) e state blobs
+app.use(express.json({ limit: '15mb' }));
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
