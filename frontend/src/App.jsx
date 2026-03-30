@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, getActivity, logActivity, register as apiRegister } from './utils/api';
+import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage } from './utils/api';
 import { supabase } from './utils/supabase';
 import { ResetPassword } from './components/ResetPassword';
 import { Toast } from './components/Toast';
@@ -1555,28 +1555,194 @@ function TeamP({ team, setTeam, ta, setTa, activityLog, onToast }) {
 /* ════════════════════════════════════════════
    AGENDA / CALENDÁRIO DE RETORNOS
 ═══════════════════════════════════════════════ */
-function Agenda({ ps, onSel, mob }) {
-  const [viewDate, setViewDate] = useState(new Date());
-  const [selDay,   setSelDay]   = useState(null);
-  const [apptData, setApptData] = useState([]);
+const APPT_TYPES = [
+  { id:'CONSULTA_MEDICA', label:'Consulta Médica',     icon:'🩺', reminder:true },
+  { id:'CONSULTA_NUTRI',  label:'Consulta Nutrição',   icon:'🥗', reminder:true },
+  { id:'EXAME',           label:'Exame Laboratorial',  icon:'🔬', reminder:true },
+  { id:'OUTRO',           label:'Outro',               icon:'📌', reminder:false },
+];
 
-  useEffect(() => {
-    getAppointments().then(r => setApptData(r.data || [])).catch(() => {});
+function NovoEventoModal({ ps, onClose, onSave }) {
+  const [type,       setType]       = useState('CONSULTA_MEDICA');
+  const [patientId,  setPatientId]  = useState('');
+  const [title,      setTitle]      = useState('');
+  const [date,       setDate]       = useState('');
+  const [time,       setTime]       = useState('');
+  const [notes,      setNotes]      = useState('');
+  const [reminder,   setReminder]   = useState(true);
+  const [saving,     setSaving]     = useState(false);
+  const [err,        setErr]        = useState('');
+
+  const selType = APPT_TYPES.find(t => t.id === type);
+
+  const save = async () => {
+    if (!date) { setErr('Selecione a data.'); return; }
+    setSaving(true); setErr('');
+    try {
+      const dateTime = time ? `${date}T${time}:00` : `${date}T08:00:00`;
+      await onSave({
+        patientId: patientId ? parseInt(patientId) : null,
+        type,
+        title: title || selType.label,
+        date: dateTime,
+        notes,
+        sendReminder: reminder && selType.reminder,
+      });
+      onClose();
+    } catch (e) {
+      setErr(e?.response?.data?.error || 'Erro ao salvar. Tente novamente.');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:10000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ background:'#fff', borderRadius:14, padding:24, maxWidth:400, width:'100%', boxShadow:'0 8px 40px rgba(0,0,0,0.2)' }}>
+        <div style={{ fontSize:15, fontWeight:700, color:G[800], marginBottom:16 }}>📅 Novo Evento</div>
+
+        {/* Tipo */}
+        <div style={{ marginBottom:14 }}>
+          <div style={{ fontSize:11, fontWeight:600, color:'#888', marginBottom:6 }}>TIPO</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+            {APPT_TYPES.map(t => (
+              <div key={t.id} onClick={()=>{ setType(t.id); setReminder(t.reminder); }}
+                style={{ padding:'8px 10px', borderRadius:8, border:`2px solid ${type===t.id?G[600]:G[200]}`,
+                  background:type===t.id?G[50]:'#fff', cursor:'pointer', fontSize:12, fontWeight:type===t.id?600:400,
+                  color:type===t.id?G[700]:G[600], display:'flex', alignItems:'center', gap:5 }}>
+                <span>{t.icon}</span>{t.label}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Paciente */}
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:600, color:'#888', marginBottom:5 }}>PACIENTE (opcional)</div>
+          <select value={patientId} onChange={e=>setPatientId(e.target.value)}
+            style={{ width:'100%', padding:'9px 10px', borderRadius:8, border:`1px solid ${G[200]}`, fontSize:13, fontFamily:'inherit', background:'#fff', color:G[800] }}>
+            <option value="">— Sem paciente específico —</option>
+            {ps.map(p => <option key={p.id} value={p.id}>{p.user?.name || p.name}</option>)}
+          </select>
+        </div>
+
+        {/* Título */}
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:600, color:'#888', marginBottom:5 }}>TÍTULO</div>
+          <input value={title} onChange={e=>setTitle(e.target.value)} placeholder={selType?.label}
+            style={{ width:'100%', padding:'9px 10px', borderRadius:8, border:`1px solid ${G[200]}`, fontSize:13, fontFamily:'inherit', boxSizing:'border-box' }}/>
+        </div>
+
+        {/* Data e Hora */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
+          <div>
+            <div style={{ fontSize:11, fontWeight:600, color:'#888', marginBottom:5 }}>DATA *</div>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)}
+              style={{ width:'100%', padding:'9px 10px', borderRadius:8, border:`1px solid ${date?G[300]:G[200]}`, fontSize:13, fontFamily:'inherit', boxSizing:'border-box' }}/>
+          </div>
+          <div>
+            <div style={{ fontSize:11, fontWeight:600, color:'#888', marginBottom:5 }}>HORA</div>
+            <input type="time" value={time} onChange={e=>setTime(e.target.value)}
+              style={{ width:'100%', padding:'9px 10px', borderRadius:8, border:`1px solid ${G[200]}`, fontSize:13, fontFamily:'inherit', boxSizing:'border-box' }}/>
+          </div>
+        </div>
+
+        {/* Notas */}
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:600, color:'#888', marginBottom:5 }}>OBSERVAÇÕES</div>
+          <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={2} placeholder="Notas internas..."
+            style={{ width:'100%', padding:'9px 10px', borderRadius:8, border:`1px solid ${G[200]}`, fontSize:13, fontFamily:'inherit', resize:'vertical', boxSizing:'border-box' }}/>
+        </div>
+
+        {/* Lembrete WhatsApp */}
+        {selType?.reminder && (
+          <div onClick={()=>setReminder(r=>!r)}
+            style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', borderRadius:8, background:reminder?G[50]:'#f9f9f9',
+              border:`1px solid ${reminder?G[300]:G[100]}`, cursor:'pointer', marginBottom:16 }}>
+            <div style={{ width:20, height:20, borderRadius:4, background:reminder?G[600]:'#e5e7eb', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              {reminder && <span style={{ color:'#fff', fontSize:12, lineHeight:1 }}>✓</span>}
+            </div>
+            <div>
+              <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>📱 Enviar lembrete WhatsApp</div>
+              <div style={{ fontSize:10, color:'#aaa' }}>Mensagem automática 24h antes da consulta</div>
+            </div>
+          </div>
+        )}
+
+        {err && <div style={{ color:'#dc2626', fontSize:12, marginBottom:12 }}>{err}</div>}
+
+        <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+          <button onClick={onClose} style={{ padding:'9px 18px', borderRadius:8, border:`1px solid ${G[200]}`, background:'#fff', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+            Cancelar
+          </button>
+          <button onClick={save} disabled={saving}
+            style={{ padding:'9px 20px', borderRadius:8, border:'none', background:saving?G[400]:G[600], color:'#fff', fontSize:13, fontWeight:600, cursor:saving?'default':'pointer', fontFamily:'inherit' }}>
+            {saving ? 'Salvando...' : 'Salvar evento'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Agenda({ ps, onSel, mob }) {
+  const [viewDate,   setViewDate]   = useState(new Date());
+  const [selDay,     setSelDay]     = useState(null);
+  const [apptData,   setApptData]   = useState([]);
+  const [showModal,  setShowModal]  = useState(false);
+  const [deleting,   setDeleting]   = useState(null);
+
+  const loadAppts = useCallback(async () => {
+    try {
+      const r = await getAppointments();
+      setApptData(Array.isArray(r.data) ? r.data : []);
+    } catch { setApptData([]); }
   }, []);
+
+  useEffect(() => { loadAppts(); }, [loadAppts]);
+
+  const handleCreateAppt = async (data) => {
+    await createAppointment(data);
+    await loadAppts();
+  };
+
+  const handleDeleteAppt = async (id) => {
+    setDeleting(id);
+    try { await deleteAppointment(id); await loadAppts(); }
+    catch { /* silently fail */ }
+    finally { setDeleting(null); }
+  };
 
   const year  = viewDate.getFullYear();
   const month = viewDate.getMonth();
 
-  const appts = useMemo(() =>
+  // Retornos dos pacientes (campo nr)
+  const patientReturnAppts = useMemo(() =>
     ps.map(p => {
       if (!p.nr) return null;
       const d = new Date(p.nr);
-      return isNaN(d.getTime()) ? null : { p, d };
-    }).filter(Boolean).sort((a,b) => a.d - b.d),
+      return isNaN(d.getTime()) ? null : { p, d, source: 'patient' };
+    }).filter(Boolean),
   [ps]);
 
-  const getDayAppts = (day) =>
-    appts.filter(a => a.d.getFullYear()===year && a.d.getMonth()===month && a.d.getDate()===day);
+  // Agendamentos da API
+  const apiAppts = useMemo(() =>
+    apptData.map(a => ({
+      a,
+      d: new Date(a.date),
+      source: 'api',
+      label: a.title || APPT_TYPES.find(t=>t.id===a.type)?.label || a.type,
+      patientName: a.patient?.user?.name || null,
+      typeInfo: APPT_TYPES.find(t=>t.id===a.type),
+    })).filter(item => !isNaN(item.d.getTime())),
+  [apptData]);
+
+  // Todos os dias com eventos para o calendário
+  const getDayItems = (day) => {
+    const byDay = (d) => d.getFullYear()===year && d.getMonth()===month && d.getDate()===day;
+    return [
+      ...patientReturnAppts.filter(a => byDay(a.d)).map(a => ({ type:'return', ...a })),
+      ...apiAppts.filter(a => byDay(a.d)).map(a => ({ type:'appt', ...a })),
+    ];
+  };
 
   const firstDay    = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month+1, 0).getDate();
@@ -1586,7 +1752,10 @@ function Agenda({ ps, onSel, mob }) {
   const isToday = d => d===today.getDate() && month===today.getMonth() && year===today.getFullYear();
   const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-  const upcoming = appts.filter(a => a.d >= todayMidnight).slice(0, 10);
+  // Próximos retornos (pacientes)
+  const upcoming = patientReturnAppts.filter(a => a.d >= todayMidnight).sort((a,b)=>a.d-b.d).slice(0, 10);
+  // Próximos agendamentos
+  const upcomingAppts = apiAppts.filter(a => a.d >= todayMidnight).sort((a,b)=>a.d-b.d).slice(0, 10);
 
   const MN = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
   const MS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -1594,31 +1763,37 @@ function Agenda({ ps, onSel, mob }) {
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+      {showModal && <NovoEventoModal ps={ps} onClose={()=>setShowModal(false)} onSave={handleCreateAppt}/>}
 
-      {/* Calendário */}
+      {/* Calendário + botão Novo Evento */}
       <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px" }}>
-        {/* Navegação mês */}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
-          <div onClick={()=>{ setViewDate(new Date(year,month-1,1)); setSelDay(null); }}
-            style={{ cursor:"pointer", padding:"4px 8px", borderRadius:7, background:G[50], border:`1px solid ${G[200]}` }}>
-            <ChevronLeft size={14} color={G[700]}/>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div onClick={()=>{ setViewDate(new Date(year,month-1,1)); setSelDay(null); }}
+              style={{ cursor:"pointer", padding:"4px 8px", borderRadius:7, background:G[50], border:`1px solid ${G[200]}` }}>
+              <ChevronLeft size={14} color={G[700]}/>
+            </div>
+            <span style={{ fontSize:14, fontWeight:700, color:G[800] }}>{MN[month]} {year}</span>
+            <div onClick={()=>{ setViewDate(new Date(year,month+1,1)); setSelDay(null); }}
+              style={{ cursor:"pointer", padding:"4px 8px", borderRadius:7, background:G[50], border:`1px solid ${G[200]}` }}>
+              <ChevronRightIcon size={14} color={G[700]}/>
+            </div>
           </div>
-          <span style={{ fontSize:14, fontWeight:700, color:G[800] }}>{MN[month]} {year}</span>
-          <div onClick={()=>{ setViewDate(new Date(year,month+1,1)); setSelDay(null); }}
-            style={{ cursor:"pointer", padding:"4px 8px", borderRadius:7, background:G[50], border:`1px solid ${G[200]}` }}>
-            <ChevronRightIcon size={14} color={G[700]}/>
-          </div>
+          <button onClick={()=>setShowModal(true)}
+            style={{ padding:"6px 12px", borderRadius:8, border:"none", background:G[600], color:"#fff", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:4 }}>
+            + Novo Evento
+          </button>
         </div>
-        {/* Cabeçalho dias da semana */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", textAlign:"center", marginBottom:4 }}>
           {DN.map((d,i) => <div key={i} style={{ fontSize:9, color:"#bbb", fontWeight:600, padding:"2px 0" }}>{d}</div>)}
         </div>
-        {/* Grade */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2 }}>
           {Array.from({length:totalCells},(_,i) => {
-            const day  = i - firstDay + 1;
+            const day   = i - firstDay + 1;
             const valid = day >= 1 && day <= daysInMonth;
-            const da   = valid ? getDayAppts(day) : [];
+            const items = valid ? getDayItems(day) : [];
+            const hasReturn = items.some(x=>x.type==='return');
+            const hasAppt   = items.some(x=>x.type==='appt');
             const isTod = valid && isToday(day);
             const isSel = valid && selDay===day;
             return (
@@ -1628,50 +1803,109 @@ function Agenda({ ps, onSel, mob }) {
                 {valid && <>
                   <div style={{ fontSize:11, fontWeight:isTod||isSel?700:400,
                     color:isSel?"#fff":isTod?G[700]:"#555" }}>{day}</div>
-                  {da.length > 0 && (
-                    <div style={{ display:"flex", justifyContent:"center", gap:2, marginTop:2 }}>
-                      {da.slice(0,3).map((_,j) => (
-                        <div key={j} style={{ width:5,height:5,borderRadius:"50%",
-                          background:isSel?"rgba(255,255,255,0.75)":G[500] }}/>
-                      ))}
-                    </div>
-                  )}
+                  <div style={{ display:"flex", justifyContent:"center", gap:1, marginTop:2 }}>
+                    {hasReturn && <div style={{ width:5,height:5,borderRadius:"50%", background:isSel?"rgba(255,255,255,0.8)":G[500] }}/>}
+                    {hasAppt   && <div style={{ width:5,height:5,borderRadius:"50%", background:isSel?"rgba(255,255,255,0.8)":"#f59e0b" }}/>}
+                  </div>
                 </>}
               </div>
             );
           })}
         </div>
+        <div style={{ display:"flex", gap:12, marginTop:10, justifyContent:"center" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, color:"#888" }}>
+            <div style={{ width:7,height:7,borderRadius:"50%",background:G[500] }}/> Retorno paciente
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, color:"#888" }}>
+            <div style={{ width:7,height:7,borderRadius:"50%",background:"#f59e0b" }}/> Consulta/Exame
+          </div>
+        </div>
       </div>
 
-      {/* Retornos do dia selecionado */}
-      {selDay && (
-        <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[300]}`, padding:"12px 14px" }}>
-          <div style={{ fontSize:12, fontWeight:600, color:G[800], marginBottom:8 }}>
-            {selDay} de {MN[month]}
-            <span style={{ fontSize:11, fontWeight:400, color:"#aaa", marginLeft:6 }}>
-              {getDayAppts(selDay).length} retorno{getDayAppts(selDay).length!==1?"s":""}
-            </span>
-          </div>
-          {getDayAppts(selDay).length === 0 ? (
-            <div style={{ color:"#ccc", fontSize:12, textAlign:"center", padding:"12px 0" }}>Nenhum retorno neste dia</div>
-          ) : getDayAppts(selDay).map((a,i,arr) => (
-            <div key={i} onClick={()=>onSel(a.p.id)}
-              style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
-                borderBottom:i<arr.length-1?`1px solid ${G[50]}`:"none", cursor:"pointer" }}>
-              <Av name={a.p.name} size={34}/>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{a.p.name}</div>
-                <div style={{ fontSize:10, color:"#aaa" }}>
-                  {PLANS.find(x=>x.id===a.p.plan)?.name} · C{a.p.cycle} S{a.p.week}/16
-                </div>
-              </div>
-              <ChevronRightIcon size={14} color={G[400]}/>
+      {/* Eventos do dia selecionado */}
+      {selDay && (() => {
+        const items = getDayItems(selDay);
+        return (
+          <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[300]}`, padding:"12px 14px" }}>
+            <div style={{ fontSize:12, fontWeight:600, color:G[800], marginBottom:8 }}>
+              {selDay} de {MN[month]}
+              <span style={{ fontSize:11, fontWeight:400, color:"#aaa", marginLeft:6 }}>{items.length} evento{items.length!==1?"s":""}</span>
             </div>
-          ))}
+            {items.length === 0 ? (
+              <div style={{ color:"#ccc", fontSize:12, textAlign:"center", padding:"12px 0" }}>Nenhum evento neste dia</div>
+            ) : items.map((item, i, arr) => item.type === 'return' ? (
+              <div key={`r${i}`} onClick={()=>onSel(item.p.id)}
+                style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
+                  borderBottom:i<arr.length-1?`1px solid ${G[50]}`:"none", cursor:"pointer" }}>
+                <div style={{ width:32,height:32,borderRadius:8,background:G[50],display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0 }}>🔄</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{item.p.user?.name || item.p.name}</div>
+                  <div style={{ fontSize:10, color:"#aaa" }}>Retorno · S{item.p.week}/16</div>
+                </div>
+                <ChevronRightIcon size={14} color={G[400]}/>
+              </div>
+            ) : (
+              <div key={`a${item.a.id}`}
+                style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
+                  borderBottom:i<arr.length-1?`1px solid ${G[50]}`:"none" }}>
+                <div style={{ width:32,height:32,borderRadius:8,background:"#fef3c7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0 }}>
+                  {item.typeInfo?.icon || '📌'}
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{item.label}</div>
+                  <div style={{ fontSize:10, color:"#aaa" }}>
+                    {item.d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+                    {item.patientName ? ` · ${item.patientName}` : ''}
+                    {item.a.sendReminder ? ' · 📱' : ''}
+                  </div>
+                </div>
+                <button onClick={()=>handleDeleteAppt(item.a.id)} disabled={deleting===item.a.id}
+                  style={{ padding:"4px 8px", borderRadius:6, border:`1px solid ${G[200]}`, background:"#fff", cursor:"pointer", fontSize:11, color:"#dc2626" }}>
+                  {deleting===item.a.id ? '...' : 'Remover'}
+                </button>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* Próximos agendamentos */}
+      {upcomingAppts.length > 0 && (
+        <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px" }}>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>🗓 Próximas consultas e exames</div>
+          {upcomingAppts.map((a,i,arr) => {
+            const isNow = a.d.toDateString()===today.toDateString();
+            const diff  = Math.ceil((a.d - todayMidnight) / 86400000);
+            return (
+              <div key={a.a.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
+                borderBottom:i<arr.length-1?`1px solid ${G[50]}`:"none" }}>
+                <div style={{ width:38, textAlign:"center", flexShrink:0 }}>
+                  <div style={{ fontSize:15, fontWeight:700, color:isNow?S.grn:"#f59e0b" }}>{a.d.getDate()}</div>
+                  <div style={{ fontSize:9, color:"#aaa" }}>{MS[a.d.getMonth()]}</div>
+                </div>
+                <div style={{ width:30,height:30,borderRadius:7,background:"#fef3c7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0 }}>
+                  {a.typeInfo?.icon||'📌'}
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:G[800], overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {a.label}
+                  </div>
+                  <div style={{ fontSize:10, color:"#aaa" }}>
+                    {a.d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+                    {a.patientName ? ` · ${a.patientName}` : ''}
+                  </div>
+                </div>
+                <Bg color={isNow?S.grn:diff<=2?S.red:diff<=5?S.yel:G[500]}
+                    bg={isNow?S.grnBg:diff<=2?S.redBg:diff<=5?S.yelBg:G[50]}>
+                  {isNow?"Hoje":`${diff}d`}
+                </Bg>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* Próximos retornos */}
+      {/* Próximos retornos de pacientes */}
       <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px" }}>
         <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>📅 Próximos retornos</div>
         {upcoming.length === 0 ? (
@@ -1690,9 +1924,9 @@ function Agenda({ ps, onSel, mob }) {
                 <div style={{ fontSize:15, fontWeight:700, color:isNow?S.grn:G[600] }}>{a.d.getDate()}</div>
                 <div style={{ fontSize:9, color:"#aaa" }}>{MS[a.d.getMonth()]}</div>
               </div>
-              <Av name={a.p.name} size={32}/>
+              <Av name={a.p.user?.name || a.p.name} size={32}/>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:12, fontWeight:600, color:G[800], overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.p.name}</div>
+                <div style={{ fontSize:12, fontWeight:600, color:G[800], overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.p.user?.name || a.p.name}</div>
                 <div style={{ fontSize:10, color:"#aaa" }}>{plan?.name} · S{a.p.week}/16</div>
               </div>
               <Bg color={isNow?S.grn:diff<=2?S.red:diff<=5?S.yel:G[500]}
@@ -1710,87 +1944,154 @@ function Agenda({ ps, onSel, mob }) {
 /* ════════════════════════════════════════════
    MENSAGENS
 ═══════════════════════════════════════════════ */
+
+// Substitui variáveis de template com dados do paciente
+function applyTemplateVars(body, patient) {
+  if (!patient) return body;
+  const name = patient.user?.name || patient.name || '';
+  const plan = PLANS.find(x => x.id === patient.plan)?.name || patient.plan || '';
+  const week = patient.cycles?.[0]?.currentWeek || patient.week || '—';
+  const initialW = patient.initialWeight || '—';
+  const currentW = patient.currentWeight || '—';
+  const diff = patient.initialWeight && patient.currentWeight
+    ? (patient.initialWeight - patient.currentWeight).toFixed(1) : '—';
+  const startDate = patient.startDate ? new Date(patient.startDate).toLocaleDateString('pt-BR') : '—';
+  return body
+    .replace(/\{\{nome\}\}/g, name)
+    .replace(/\{\{plano\}\}/g, plan)
+    .replace(/\{\{semana\}\}/g, week)
+    .replace(/\{\{peso_inicial\}\}/g, initialW)
+    .replace(/\{\{peso_atual\}\}/g, currentW)
+    .replace(/\{\{variacao_peso\}\}/g, diff)
+    .replace(/\{\{data_inicio\}\}/g, startDate);
+}
+
+const TPL_CATEGORIES = {
+  boas_vindas: { label:'Boas-vindas', color:'#10b981', bg:'#d1fae5' },
+  resultado:   { label:'Resultado',   color:'#3b82f6', bg:'#dbeafe' },
+  conquista:   { label:'Conquista',   color:'#f59e0b', bg:'#fef3c7' },
+  lembrete:    { label:'Lembrete',    color:'#8b5cf6', bg:'#ede9fe' },
+  agendamento: { label:'Agendamento', color:'#06b6d4', bg:'#cffafe' },
+  custom:      { label:'Personalizado', color:'#6b7280', bg:'#f3f4f6' },
+};
+
 function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) {
-  const [selConv,   setSelConv]   = useState(patientMode ? `p_${patientPid}` : null);
-  const [draft,     setDraft]     = useState("");
-  const [loading,   setLoading]   = useState(false);
-  const [localMsgs, setLocalMsgs] = useState([]);
+  const [selConv,      setSelConv]      = useState(patientMode ? `p_${patientPid}` : null);
+  const [draft,        setDraft]        = useState("");
+  const [loading,      setLoading]      = useState(false);
+  const [localMsgs,    setLocalMsgs]    = useState([]);
+  const [showTemplates,setShowTemplates]= useState(false);
+  const [templates,    setTemplates]    = useState([]);
+  const [loadingTpls,  setLoadingTpls]  = useState(false);
+  const [sendingWA,    setSendingWA]    = useState(false);
+  const [waMode,       setWaMode]       = useState(false); // true = enviar via WhatsApp
+  const [generating,   setGenerating]   = useState(false);
+  const [genType,      setGenType]      = useState('week_start');
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
 
-  // Converte um MessageLog do banco para o formato de exibição interno
+  const GEN_TYPES = [
+    { id:'welcome',          label:'Boas-vindas' },
+    { id:'week_start',       label:'Início de semana' },
+    { id:'weighin_report',   label:'Resultado de pesagem' },
+    { id:'consulta_reminder',label:'Lembrete de consulta' },
+    { id:'exam_reminder',    label:'Lembrete de exames' },
+    { id:'completion',       label:'Conclusão do programa' },
+  ];
+
+  // Paciente selecionado na conversa ativa
+  const selPid = selConv?.startsWith('p_') ? parseInt(selConv.replace('p_',''),10) : null;
+  const selPatient = selPid ? ps.find(p => p.id === selPid) : null;
+
   const dbToLocal = (m) => {
     const pid = m.patientId ? `p_${m.patientId}` : "team";
-    return {
-      id:         m.id,
-      date:       m.createdAt,
-      senderName: m.sentBy?.name || "",
-      role:       (m.sentBy?.role === "PACIENTE") ? "paciente" : "admin",
-      text:       m.body || "",
-      conv:       pid,
-      read:       true,
-      channel:    m.channel || "interno",
-    };
+    return { id:m.id, date:m.createdAt, senderName:m.sentBy?.name||"", role:(m.sentBy?.role==="PACIENTE")?"paciente":"admin",
+      text:m.body||"", conv:pid, read:true, channel:m.channel||"interno" };
   };
 
-  // Carrega mensagens do banco sempre que selConv mudar
   const loadMessages = useCallback(async () => {
     try {
       setLoading(true);
-      // Para o canal da equipe (sem paciente), envia sem patientId
       const pid = selConv && selConv.startsWith("p_")
-        ? parseInt(selConv.replace("p_", ""), 10)
+        ? parseInt(selConv.replace("p_",""),10)
         : (patientMode && patientPid ? patientPid : null);
       const res = await getMessages(pid);
-      setLocalMsgs((res.data || []).map(dbToLocal));
-    } catch (e) {
-      console.error("Erro ao carregar mensagens:", e);
-    } finally {
-      setLoading(false);
-    }
+      setLocalMsgs((res.data||[]).map(dbToLocal));
+    } catch(e) { console.error("Erro ao carregar mensagens:",e); }
+    finally { setLoading(false); }
   }, [selConv, patientMode, patientPid]);
 
-  useEffect(() => {
-    loadMessages();
-  }, [loadMessages]);
+  useEffect(() => { loadMessages(); }, [loadMessages]);
 
-  // Lista de conversas: canal da equipe + uma por paciente
+  const loadTemplates = useCallback(async () => {
+    if (loadingTpls) return;
+    setLoadingTpls(true);
+    try {
+      const r = await getMessageTemplates();
+      setTemplates(Array.isArray(r.data) ? r.data : []);
+    } catch { setTemplates([]); }
+    finally { setLoadingTpls(false); }
+  }, []);
+
+  useEffect(() => { if (showTemplates) loadTemplates(); }, [showTemplates, loadTemplates]);
+
   const convs = patientMode ? [] : [
     { id:"team", name:"Canal da Equipe", sub:"Comunicação interna" },
-    ...ps.map(p => ({ id:`p_${p.id}`, name:p.name, sub:PLANS.find(x=>x.id===p.plan)?.name||"—", pid:p.id }))
+    ...ps.map(p => ({ id:`p_${p.id}`, name:p.user?.name||p.name, sub:PLANS.find(x=>x.id===p.plan)?.name||"—", pid:p.id }))
   ];
 
   const getThread = useCallback((cid) =>
-    [...localMsgs.filter(m => m.conv === cid)].sort((a,b) => new Date(a.date)-new Date(b.date)),
+    [...localMsgs.filter(m => m.conv===cid)].sort((a,b)=>new Date(a.date)-new Date(b.date)),
   [localMsgs]);
 
-  const unread = (cid) =>
-    localMsgs.filter(m => m.conv===cid && !m.read && m.role!=="admin").length;
+  const unread = (cid) => localMsgs.filter(m=>m.conv===cid&&!m.read&&m.role!=="admin").length;
 
   const send = async () => {
     const txt = draft.trim();
     if (!txt || !selConv) return;
-    const pid = selConv.startsWith("p_")
-      ? parseInt(selConv.replace("p_", ""), 10)
+    const pid = selConv.startsWith("p_") ? parseInt(selConv.replace("p_",""),10)
       : (patientMode && patientPid ? patientPid : null);
-    setDraft(""); // limpa o campo otimisticamente
+    setDraft("");
     try {
-      await sendMessage({ patientId: pid, body: txt, channel: 'interno' });
+      if (waMode && selPatient?.user?.phone) {
+        // Enviar via WhatsApp
+        setSendingWA(true);
+        await sendWhatsAppMsg({ phone: selPatient.user.phone, message: txt, patientId: pid });
+        setSendingWA(false);
+        // Salva no log interno também
+        await sendMessage({ patientId: pid, body: txt, channel: 'whatsapp' });
+      } else {
+        await sendMessage({ patientId: pid, body: txt, channel: 'interno' });
+      }
       await loadMessages();
-      setTimeout(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); inputRef.current?.focus(); }, 50);
-    } catch (e) {
-      setDraft(txt); // restaura o draft se falhar
-      // toast não disponível aqui mas o erro é visível pelo draft restaurado
-      console.error("Erro ao enviar mensagem:", e);
+      setTimeout(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); inputRef.current?.focus(); },50);
+    } catch(e) {
+      setDraft(txt);
+      setSendingWA(false);
+      console.error("Erro ao enviar mensagem:",e);
     }
+  };
+
+  const applyTemplate = (tpl) => {
+    const text = applyTemplateVars(tpl.body, selPatient);
+    setDraft(text);
+    setShowTemplates(false);
+    inputRef.current?.focus();
+  };
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const r = await generateMessage({ type: genType, patientId: selPid });
+      setDraft(r.data?.text || '');
+    } catch { /* silently ignore */ }
+    finally { setGenerating(false); }
   };
 
   const thread      = selConv ? getThread(selConv) : [];
   const selConvInfo = convs.find(c => c.id===selConv);
-
-  // Mobile: ou lista ou thread
-  const showList   = !mob || selConv === null;
-  const showThread = mob ? selConv !== null : true;
+  const showList    = !mob || selConv === null;
+  const showThread  = mob ? selConv !== null : true;
 
   const listPanel = !patientMode && showList && (
     <div style={{ width:mob?"100%":260, flexShrink:0, background:"#fff", borderRadius:12,
@@ -1800,10 +2101,7 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
       </div>
       <div style={{ flex:1, overflowY:"auto" }}>
         {convs.map((c) => {
-          const th   = getThread(c.id);
-          const last = th[th.length-1];
-          const unr  = unread(c.id);
-          const active = selConv===c.id;
+          const th=getThread(c.id), last=th[th.length-1], unr=unread(c.id), active=selConv===c.id;
           return (
             <div key={c.id} onClick={()=>setSelConv(c.id)}
               style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
@@ -1818,9 +2116,7 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
               </div>
               {unr > 0 && (
                 <div style={{ minWidth:16, height:16, borderRadius:8, background:G[600], color:"#fff",
-                  fontSize:9, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, padding:"0 4px" }}>
-                  {unr}
-                </div>
+                  fontSize:9, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, padding:"0 4px" }}>{unr}</div>
               )}
             </div>
           );
@@ -1829,9 +2125,48 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
     </div>
   );
 
+  // Painel de Templates
+  const templatesPanel = showTemplates && !patientMode && (
+    <div style={{ position:"absolute", bottom:"100%", left:0, right:0, background:"#fff", borderRadius:12,
+      border:`1px solid ${G[200]}`, boxShadow:"0 -4px 20px rgba(0,0,0,0.1)", zIndex:20, maxHeight:320, overflow:"hidden",
+      display:"flex", flexDirection:"column" }}>
+      <div style={{ padding:"10px 14px", borderBottom:`1px solid ${G[100]}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>📋 Templates de Mensagem</div>
+        <div onClick={()=>setShowTemplates(false)} style={{ cursor:"pointer", fontSize:16, color:"#aaa" }}>✕</div>
+      </div>
+      {loadingTpls ? (
+        <div style={{ padding:"20px", textAlign:"center", color:"#aaa", fontSize:12 }}>Carregando templates...</div>
+      ) : (
+        <div style={{ overflowY:"auto", flex:1 }}>
+          {templates.map(tpl => {
+            const cat = TPL_CATEGORIES[tpl.category] || TPL_CATEGORIES.custom;
+            const preview = applyTemplateVars(tpl.body, selPatient);
+            return (
+              <div key={tpl.id} onClick={()=>applyTemplate(tpl)}
+                style={{ padding:"10px 14px", cursor:"pointer", borderBottom:`1px solid ${G[50]}`,
+                  display:"flex", flexDirection:"column", gap:4, transition:"background 0.1s" }}
+                onMouseEnter={e=>e.currentTarget.style.background=G[50]}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:10, fontWeight:600, padding:"2px 7px", borderRadius:10,
+                    color:cat.color, background:cat.bg }}>{cat.label}</span>
+                  <span style={{ fontSize:12, fontWeight:600, color:G[800] }}>{tpl.name}</span>
+                </div>
+                <div style={{ fontSize:11, color:"#999", lineHeight:1.4, overflow:"hidden", textOverflow:"ellipsis",
+                  display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
+                  {preview.substring(0,120)}{preview.length>120?"...":""}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
   const threadPanel = showThread && (
     <div style={{ flex:1, background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`,
-      display:"flex", flexDirection:"column", minHeight:mob?380:"auto", overflow:"hidden" }}>
+      display:"flex", flexDirection:"column", minHeight:mob?380:"auto", overflow:"hidden", position:"relative" }}>
       {selConv ? (
         <>
           {/* Header */}
@@ -1842,7 +2177,7 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
               </div>
             )}
             {selConvInfo && <Av name={selConvInfo.name} size={30}/>}
-            <div>
+            <div style={{ flex:1 }}>
               <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>
                 {patientMode ? "Equipe Clínica" : selConvInfo?.name}
               </div>
@@ -1850,28 +2185,39 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
                 {patientMode ? "Instituto Dra. Mariana Wogel" : selConvInfo?.sub}
               </div>
             </div>
+            {/* Botão WhatsApp no header — só para conversas de paciente com telefone */}
+            {!patientMode && selPatient?.user?.phone && (
+              <div onClick={()=>setWaMode(m=>!m)}
+                style={{ padding:"5px 10px", borderRadius:7, border:`1.5px solid ${waMode?"#25D366":G[200]}`,
+                  background:waMode?"#f0fdf4":"#fff", cursor:"pointer", fontSize:11, fontWeight:600,
+                  color:waMode?"#25D366":G[600], display:"flex", alignItems:"center", gap:4 }}>
+                📱 {waMode?"WhatsApp":"Interno"}
+              </div>
+            )}
           </div>
           {/* Mensagens */}
           <div style={{ flex:1, overflowY:"auto", padding:"14px", display:"flex", flexDirection:"column", gap:8 }}>
-            {thread.length === 0 ? (
+            {loading ? (
+              <div style={{ textAlign:"center", color:"#ccc", fontSize:12, marginTop:40 }}>Carregando...</div>
+            ) : thread.length === 0 ? (
               <div style={{ textAlign:"center", color:"#ccc", fontSize:12, marginTop:40, display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
                 <MessageCircle size={36} color={G[200]}/>
                 <span>Nenhuma mensagem ainda.<br/>Seja o primeiro a escrever!</span>
               </div>
             ) : thread.map((m) => {
               const mine = patientMode ? m.role==="paciente" : m.role==="admin";
+              const isWA  = m.channel === "whatsapp";
               return (
                 <div key={m.id} style={{ display:"flex", justifyContent:mine?"flex-end":"flex-start" }}>
                   <div style={{ maxWidth:"78%", padding:"9px 13px",
                     borderRadius:mine?"14px 14px 3px 14px":"14px 14px 14px 3px",
-                    background:mine?G[600]:"#F1F1EF", color:mine?"#fff":"#333" }}>
+                    background:mine?(isWA?"#25D366":G[600]):"#F1F1EF", color:mine?"#fff":"#333" }}>
                     {!mine && (
-                      <div style={{ fontSize:9, fontWeight:700, color:mine?"rgba(255,255,255,0.6)":G[600], marginBottom:3 }}>
-                        {m.senderName}
-                      </div>
+                      <div style={{ fontSize:9, fontWeight:700, color:G[600], marginBottom:3 }}>{m.senderName}</div>
                     )}
-                    <div style={{ fontSize:12, lineHeight:1.4 }}>{m.text}</div>
-                    <div style={{ fontSize:9, opacity:0.55, marginTop:4, textAlign:"right" }}>
+                    <div style={{ fontSize:12, lineHeight:1.4, whiteSpace:"pre-line" }}>{m.text}</div>
+                    <div style={{ fontSize:9, opacity:0.55, marginTop:4, textAlign:"right", display:"flex", gap:4, justifyContent:"flex-end", alignItems:"center" }}>
+                      {isWA && <span>📱</span>}
                       {safeFmt(m.date,"dd/MM HH:mm")}
                     </div>
                   </div>
@@ -1880,21 +2226,59 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
             })}
             <div ref={bottomRef}/>
           </div>
-          {/* Input */}
-          <div style={{ padding:"10px 12px", borderTop:`1px solid ${G[100]}`, display:"flex", gap:8, flexShrink:0 }}>
-            <input
-              ref={inputRef}
-              value={draft}
-              onChange={e=>setDraft(e.target.value)}
-              onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&(e.preventDefault(),send())}
-              placeholder="Escreva uma mensagem..."
-              style={{ flex:1, padding:"9px 14px", borderRadius:22, border:`1.5px solid ${G[300]}`,
-                fontSize:12, fontFamily:"inherit", outline:"none", background:"#FAFAF8" }}
-            />
+
+          {/* Barra de ações (templates + AI) + Input */}
+          {!patientMode && (
+            <div style={{ padding:"8px 12px 4px", borderTop:`1px solid ${G[100]}`, display:"flex", gap:6, flexShrink:0 }}>
+              {/* Botão Templates */}
+              <button onClick={()=>setShowTemplates(s=>!s)}
+                style={{ padding:"5px 10px", borderRadius:7, border:`1px solid ${showTemplates?G[600]:G[200]}`,
+                  background:showTemplates?G[50]:"#fff", fontSize:11, fontWeight:600, cursor:"pointer",
+                  color:showTemplates?G[700]:G[600], fontFamily:"inherit", display:"flex", alignItems:"center", gap:4 }}>
+                📋 Templates
+              </button>
+              {/* Botão Gerar com IA */}
+              {selPid && (
+                <div style={{ display:"flex", gap:4, alignItems:"center" }}>
+                  <select value={genType} onChange={e=>setGenType(e.target.value)}
+                    style={{ padding:"5px 8px", borderRadius:7, border:`1px solid ${G[200]}`, fontSize:10, fontFamily:"inherit", background:"#fff", color:G[700] }}>
+                    {GEN_TYPES.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}
+                  </select>
+                  <button onClick={handleGenerate} disabled={generating}
+                    style={{ padding:"5px 10px", borderRadius:7, border:"none", background:generating?"#e5e7eb":G[600],
+                      color:"#fff", fontSize:11, fontWeight:600, cursor:generating?"default":"pointer", fontFamily:"inherit" }}>
+                    {generating?"Gerando...":"✨ IA"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Painel de templates flutuante */}
+          <div style={{ position:"relative" }}>
+            {templatesPanel}
+          </div>
+
+          {/* Input de mensagem */}
+          <div style={{ padding:"8px 12px 10px", display:"flex", gap:8, flexShrink:0 }}>
+            <div style={{ flex:1, position:"relative" }}>
+              <textarea
+                ref={inputRef}
+                value={draft}
+                onChange={e=>setDraft(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&(e.preventDefault(),send())}
+                placeholder={waMode?"Mensagem para WhatsApp... (Enter envia)":"Mensagem interna... (Enter envia)"}
+                rows={draft.includes('\n') ? 3 : 1}
+                style={{ width:"100%", padding:"9px 14px", borderRadius:14, resize:"none",
+                  border:`1.5px solid ${waMode?"#25D366":G[300]}`, fontSize:12, fontFamily:"inherit",
+                  outline:"none", background:"#FAFAF8", boxSizing:"border-box", lineHeight:1.4 }}
+              />
+            </div>
             <div onClick={send}
-              style={{ width:36,height:36,borderRadius:"50%",background:draft.trim()?G[600]:G[200],
-                display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,transition:"background 0.15s" }}>
-              <Send size={14} color="#fff"/>
+              style={{ width:36,height:36,borderRadius:"50%",background:draft.trim()?(waMode?"#25D366":G[600]):G[200],
+                display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,
+                transition:"background 0.15s", alignSelf:"flex-end" }}>
+              {sendingWA ? <span style={{fontSize:12,color:"#fff"}}>...</span> : <Send size={14} color="#fff"/>}
             </div>
           </div>
         </>

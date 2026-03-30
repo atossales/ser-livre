@@ -133,10 +133,19 @@ export const resolveAlert = (id) => api.patch(`/alerts/${id}/resolve`);
 // ── Appointments ──
 export const getAppointments = () => api.get('/appointments');
 export const createAppointment = (data) => api.post('/appointments', data);
+export const deleteAppointment = (id) => api.delete(`/appointments/${id}`);
 
 // ── WhatsApp ──
 export const sendWhatsAppMsg = (data) => api.post('/whatsapp/send', data);
+export const getWhatsAppStatus = () => api.get('/whatsapp/status');
 export const getMessageLog = (patientId) => api.get(`/patients/${patientId}/messages`);
+
+// ── Message Templates ──
+export const getMessageTemplates = () => api.get('/messages/templates');
+export const createMessageTemplate = (data) => api.post('/messages/templates', data);
+export const updateMessageTemplate = (id, data) => api.put(`/messages/templates/${id}`, data);
+export const deleteMessageTemplate = (id) => api.delete(`/messages/templates/${id}`);
+export const generateMessage = (data) => api.post('/messages/generate', data);
 
 // ── Messages (chat interno) ──
 export const getMessages = (patientId) => api.get('/messages', { params: patientId ? { patientId } : {} });

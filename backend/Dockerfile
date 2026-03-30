@@ -15,4 +15,4 @@ COPY src ./src
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "timeout 60 npx prisma db push --accept-data-loss --skip-generate 2>&1 && echo '[STARTUP] Schema OK'; node src/server.js"]
+CMD ["node", "src/server.js"]

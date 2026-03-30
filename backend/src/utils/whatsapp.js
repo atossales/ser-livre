@@ -336,5 +336,6 @@ module.exports = {
   sendExamReminder,
   sendProgramCompletion,
   checkStatus,
+  formatWithGemini,
   formatPhoneBR,
 };

@@ -28,6 +28,13 @@
 // GET    /api/reports/cohort              → Relatório coorte de pacientes (PDF)
 // GET    /api/appointments                → Lista agendamentos
 // POST   /api/appointments                → Cria agendamento
+// DELETE /api/appointments/:id           → Remove agendamento
+// GET    /api/messages/templates          → Lista templates de mensagem
+// POST   /api/messages/templates          → Cria template
+// PUT    /api/messages/templates/:id      → Edita template
+// DELETE /api/messages/templates/:id      → Remove template
+// POST   /api/messages/generate           → Gera mensagem com Gemini IA
+// GET    /api/whatsapp/status             → Status da instância WhatsApp
 // PUT    /api/users/:id/avatar            → Atualiza foto de perfil
 // GET    /api/staff                       → Lista membros da equipe
 // PUT    /api/users/:id/role              → Atualiza role/status
@@ -868,6 +875,126 @@ app.post('/api/appointments', authRequired, requireRole('ADMIN','MEDICA','ENFERM
   }
 });
 
+app.delete('/api/appointments/:id', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR'), async (req, res) => {
+  try {
+    await prisma.appointment.delete({ where: { id: parseInt(req.params.id) } });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════
+//  TEMPLATES DE MENSAGEM
+// ════════════════════════════════════════════
+
+// Templates padrão do sistema — criados no primeiro acesso
+const DEFAULT_TEMPLATES = [
+  { name: 'Boas-vindas ao programa', category: 'boas_vindas', isSystem: true,
+    body: 'Olá {{nome}},\n\nSeu cadastro no Programa Ser Livre foi realizado com sucesso!\n\n- Plano: {{plano}}\n- Início: {{data_inicio}}\n- Nossa equipe entrará em contato com as orientações iniciais\n\nInstituto Dra. Mariana Wogel' },
+  { name: 'Resultado da pesagem', category: 'resultado', isSystem: true,
+    body: 'Olá {{nome}},\n\nResultado da pesagem — Semana {{semana}}:\n\n- Peso atual: {{peso_atual}}kg\n- Variação: {{variacao_peso}}kg desde o início\n\nAcompanhe sua evolução pelo aplicativo.' },
+  { name: 'Conquista — meta atingida', category: 'conquista', isSystem: true,
+    body: 'Olá {{nome}},\n\nParabéns pela conquista!\n\n- Semana {{semana}} do programa concluída\n- Peso inicial: {{peso_inicial}}kg\n- Peso atual: {{peso_atual}}kg\n- Total perdido: {{variacao_peso}}kg\n\nContinue assim!' },
+  { name: 'Lembrete de consulta', category: 'lembrete', isSystem: true,
+    body: 'Olá {{nome}},\n\nLembrete: você tem consulta de retorno amanhã.\n\n- Leve seus exames caso tenha feito\n- Registre seu peso antes da consulta\n\nInstituto Dra. Mariana Wogel' },
+  { name: 'Lembrete de exames', category: 'lembrete', isSystem: true,
+    body: 'Olá {{nome}},\n\nSemana {{semana}} do programa — momento de realizar exames.\n\nExames solicitados:\n- Hemograma completo\n- Glicemia em jejum\n- Perfil lipídico\n- TSH\n\nAgende com antecedência e traga os resultados.' },
+  { name: 'Início de nova semana', category: 'lembrete', isSystem: true,
+    body: 'Olá {{nome}},\n\nSemana {{semana}} do programa iniciada.\n\n- Mantenha o protocolo em dia\n- Pesagem desta semana: a combinar com a equipe\n\nQualquer dúvida, fale com a equipe.' },
+  { name: 'Conclusão do programa', category: 'conquista', isSystem: true,
+    body: 'Olá {{nome}},\n\nParabéns pela conclusão das 16 semanas!\n\n- Peso inicial: {{peso_inicial}}kg\n- Peso final: {{peso_atual}}kg\n- Total: {{variacao_peso}}kg\n\nNossa equipe entrará em contato para orientações de manutenção.' },
+];
+
+app.get('/api/messages/templates', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR'), async (req, res) => {
+  try {
+    // Garante que os templates padrão existem
+    const count = await prisma.messageTemplate.count({ where: { isSystem: true } });
+    if (count === 0) {
+      await prisma.messageTemplate.createMany({ data: DEFAULT_TEMPLATES, skipDuplicates: true });
+    }
+    const templates = await prisma.messageTemplate.findMany({
+      where: { active: true },
+      orderBy: [{ isSystem: 'desc' }, { category: 'asc' }, { name: 'asc' }]
+    });
+    res.json(templates);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/messages/templates', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR'), async (req, res) => {
+  try {
+    const { name, category, body } = req.body;
+    if (!name || !body) return res.status(400).json({ error: 'name e body são obrigatórios' });
+    const tpl = await prisma.messageTemplate.create({
+      data: { name, category: category || 'custom', body, isSystem: false, createdById: req.user.id }
+    });
+    res.status(201).json(tpl);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+app.put('/api/messages/templates/:id', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR'), async (req, res) => {
+  try {
+    const { name, category, body, active } = req.body;
+    const tpl = await prisma.messageTemplate.update({
+      where: { id: parseInt(req.params.id) },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(category !== undefined && { category }),
+        ...(body !== undefined && { body }),
+        ...(active !== undefined && { active }),
+      }
+    });
+    res.json(tpl);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+app.delete('/api/messages/templates/:id', authRequired, requireRole('ADMIN','MEDICA'), async (req, res) => {
+  try {
+    const tpl = await prisma.messageTemplate.findUnique({ where: { id: parseInt(req.params.id) } });
+    if (tpl?.isSystem) return res.status(400).json({ error: 'Templates do sistema não podem ser excluídos' });
+    await prisma.messageTemplate.update({ where: { id: parseInt(req.params.id) }, data: { active: false } });
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// POST /api/messages/generate — gera mensagem personalizada com Gemini
+app.post('/api/messages/generate', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM','NUTRICIONISTA','PSICOLOGA','TREINADOR'), async (req, res) => {
+  try {
+    const { type, patientId, extraContext } = req.body;
+    if (!type) return res.status(400).json({ error: 'type é obrigatório' });
+
+    let patientData = {};
+    if (patientId) {
+      const p = await prisma.patient.findUnique({
+        where: { id: parseInt(patientId) },
+        include: { user: { select: { name: true, phone: true } }, cycles: { where: { status: 'ACTIVE' }, take: 1 } }
+      });
+      if (p) {
+        patientData = {
+          name: p.user?.name,
+          plan: p.plan,
+          initialWeight: p.initialWeight,
+          currentWeight: p.currentWeight,
+          weekNum: p.cycles[0]?.currentWeek,
+        };
+      }
+    }
+
+    const { formatWithGemini } = require('./utils/whatsapp');
+    const text = await formatWithGemini(type, { ...patientData, ...extraContext });
+    res.json({ text });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/whatsapp/status — verifica conexão da instância WhatsApp
+app.get('/api/whatsapp/status', authRequired, requireRole('ADMIN','MEDICA'), async (req, res) => {
+  try {
+    const { checkStatus } = require('./utils/whatsapp');
+    const status = await checkStatus();
+    res.json(status);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ════════════════════════════════════════════
 //  WHATSAPP — Envio manual
 // ════════════════════════════════════════════
@@ -1311,6 +1438,11 @@ let server;
       console.log('[STARTUP] Tabelas antigas removidas. Rodando prisma db push...');
       await runPrismaPush();
       console.log('[STARTUP] Schema recriado com sucesso.');
+    } else if (idType === 'unknown') {
+      // Tabelas não existem (banco vazio ou foi resetado) — criar do zero
+      console.log('[STARTUP] Tabelas não encontradas. Criando schema com prisma db push...');
+      await runPrismaPush();
+      console.log('[STARTUP] Schema criado com sucesso.');
     } else {
       // Schema correto — apenas garantir colunas novas existem
       const colFixes = [
