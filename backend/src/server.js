@@ -1262,22 +1262,72 @@ app.get('/debug/users', async (req, res) => {
 //  Usa async/await para garantir que o sync complete
 //  antes do servidor começar a aceitar requisições.
 // ════════════════════════════════════════════
+const { spawn } = require('child_process');
+
+// Roda prisma db push em background (não bloqueia o servidor)
+function runPrismaPush() {
+  return new Promise((resolve) => {
+    const p = spawn('npx', ['prisma', 'db', 'push', '--accept-data-loss', '--skip-generate'], {
+      stdio: 'pipe', env: { ...process.env }
+    });
+    p.stdout.on('data', (d) => process.stdout.write('[PRISMA] ' + d.toString()));
+    p.stderr.on('data', (d) => process.stderr.write('[PRISMA] ' + d.toString()));
+    p.on('close', (code) => { console.log(`[PRISMA] db push concluído (exit ${code})`); resolve(code); });
+    p.on('error', (err) => { console.warn('[PRISMA] Erro:', err.message); resolve(1); });
+    // Timeout de 3 minutos
+    setTimeout(() => { p.kill(); console.warn('[PRISMA] db push cancelado por timeout'); resolve(1); }, 180000);
+  });
+}
+
 let server;
 (async () => {
-  // 0. Garantir colunas necessárias existem no banco (idempotente)
-  // Previne erros caso prisma db push tenha travado/falhado no deploy anterior.
-  const schemaMigrations = [
-    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS specialty TEXT`,
-    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS phone TEXT`,
-    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "avatarUrl" TEXT`,
-    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`,
-    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "emailVerified" BOOLEAN NOT NULL DEFAULT false`,
-    `UPDATE "User" SET active = true WHERE active IS NULL OR active = false`,
-  ];
-  for (const sql of schemaMigrations) {
-    try { await prisma.$executeRawUnsafe(sql); } catch (_) { /* coluna já existe ou irrelevante */ }
+  // 0. Detectar schema antigo (id INT) e forçar migração
+  try {
+    const colInfo = await prisma.$queryRaw`
+      SELECT data_type FROM information_schema.columns
+      WHERE table_schema='public' AND table_name='User' AND column_name='id'
+    `;
+    const idType = colInfo[0]?.data_type || 'unknown';
+    console.log(`[STARTUP] User.id type: ${idType}`);
+
+    if (idType === 'integer') {
+      console.log('[STARTUP] Schema antigo detectado (id INT). Recriando banco...');
+      // Dropar tabelas antigas em ordem reversa de dependência
+      const dropSQL = `
+        DROP TABLE IF EXISTS "activity_logs" CASCADE;
+        DROP TABLE IF EXISTS "InviteToken" CASCADE;
+        DROP TABLE IF EXISTS "ResetToken" CASCADE;
+        DROP TABLE IF EXISTS "MessageLog" CASCADE;
+        DROP TABLE IF EXISTS "MessageTemplate" CASCADE;
+        DROP TABLE IF EXISTS "Appointment" CASCADE;
+        DROP TABLE IF EXISTS "ScoreEntry" CASCADE;
+        DROP TABLE IF EXISTS "WeekCheck" CASCADE;
+        DROP TABLE IF EXISTS "Cycle" CASCADE;
+        DROP TABLE IF EXISTS "Alert" CASCADE;
+        DROP TABLE IF EXISTS "Patient" CASCADE;
+        DROP TABLE IF EXISTS "StateBlob" CASCADE;
+        DROP TABLE IF EXISTS "User" CASCADE;
+        DROP TYPE IF EXISTS "Role","Plan","CycleStatus","AlertType","AlertSeverity","AppointmentType" CASCADE;
+      `;
+      await prisma.$executeRawUnsafe(dropSQL);
+      console.log('[STARTUP] Tabelas antigas removidas. Rodando prisma db push...');
+      await runPrismaPush();
+      console.log('[STARTUP] Schema recriado com sucesso.');
+    } else {
+      // Schema correto — apenas garantir colunas novas existem
+      const colFixes = [
+        `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS specialty TEXT`,
+        `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`,
+        `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "emailVerified" BOOLEAN NOT NULL DEFAULT false`,
+        `UPDATE "User" SET active = true WHERE active IS NULL OR active = false`,
+      ];
+      for (const sql of colFixes) {
+        try { await prisma.$executeRawUnsafe(sql); } catch (_) { /* OK */ }
+      }
+    }
+  } catch (schemaErr) {
+    console.warn('[STARTUP] Erro ao verificar schema:', schemaErr.message);
   }
-  console.log('[STARTUP] Colunas verificadas.');
 
   // 1. Sincronizar usuários do Supabase Auth → banco local
   try {
