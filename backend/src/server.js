@@ -265,20 +265,33 @@ app.post('/api/users/:id/resend-invite', authRequired, requireRole('ADMIN', 'MED
 app.get('/api/patients', authRequired, async (req, res) => {
   try {
     const where = req.user.role === 'PACIENTE' ? { userId: req.user.id } : {};
-    const patients = await prisma.patient.findMany({
+    const page     = req.query.page ? Math.max(1, parseInt(req.query.page)) : null;
+    const pageSize = Math.min(parseInt(req.query.pageSize) || 50, 100);
+
+    const query = {
       where,
       include: {
-        user: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
+        user:   { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
         cycles: {
-          where: { status: 'ACTIVE' },
+          where:   { status: 'ACTIVE' },
           include: {
-            scores: { orderBy: { month: 'asc' } },
+            scores:     { orderBy: { month: 'asc' } },
             weekChecks: { orderBy: { weekNumber: 'asc' } }
           }
         }
       },
       orderBy: { createdAt: 'desc' }
-    });
+    };
+
+    if (page) {
+      const [patients, total] = await Promise.all([
+        prisma.patient.findMany({ ...query, take: pageSize, skip: (page - 1) * pageSize }),
+        prisma.patient.count({ where })
+      ]);
+      return res.json({ data: patients, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+    }
+
+    const patients = await prisma.patient.findMany(query);
     res.json(patients);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -726,8 +739,15 @@ app.get('/api/dashboard', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM
     const [patients, alerts, appointments] = await Promise.all([
       prisma.patient.findMany({
         include: {
-          user: { select: { name: true, email: true } },
-          cycles: { where: { status: 'ACTIVE' }, include: { weekChecks: true } }
+          user:   { select: { name: true, email: true } },
+          // Limita a 1 ciclo ativo e as últimas 4 semanas de checklist — evita N+1 em memória
+          cycles: {
+            where:   { status: 'ACTIVE' },
+            take:    1,
+            include: {
+              weekChecks: { orderBy: { weekNumber: 'desc' }, take: 4 }
+            }
+          }
         }
       }),
       prisma.alert.findMany({ where: { resolved: false }, include: { patient: { include: { user: { select: { name: true } } } } }, orderBy: { createdAt: 'desc' }, take: 20 }),
@@ -742,15 +762,16 @@ app.get('/api/dashboard', authRequired, requireRole('ADMIN','MEDICA','ENFERMAGEM
     const totalWeightLost = patients.reduce((sum, p) => sum + Math.max(0, p.initialWeight - p.currentWeight), 0);
 
     // Calcular engagement por paciente (% de itens do checklist preenchidos nas últimas 4 semanas)
+    // weekChecks já vem limitado a 4, ordenado desc — sem carregar dados extras em memória
     const engagements = activePatients.map(p => {
       const cycle = p.cycles[0];
-      if (!cycle) return 0;
-      const recentChecks = cycle.weekChecks.slice(-4);
-      if (!recentChecks.length) return 0;
-      const filled = recentChecks.filter(w => w.pesagem || w.tirzepatida).length;
-      return Math.round((filled / recentChecks.length) * 100);
+      if (!cycle || !cycle.weekChecks.length) return 0;
+      const filled = cycle.weekChecks.filter(w => w.pesagem || w.tirzepatida).length;
+      return Math.round((filled / cycle.weekChecks.length) * 100);
     });
-    const avgEngagement = engagements.length ? Math.round(engagements.reduce((a,b) => a+b, 0) / engagements.length) : 0;
+    const avgEngagement = engagements.length
+      ? Math.round(engagements.reduce((a, b) => a + b, 0) / engagements.length)
+      : 0;
 
     res.json({
       totalPatients: patients.length,

@@ -2515,6 +2515,8 @@ export default function App() {
   const [messages,    setMessages]    = useState([]);
   const [dbLoaded,    setDbLoaded]    = useState(false);
   const [toasts,      setToasts]      = useState([]);
+  const [confirmDel,  setConfirmDel]  = useState(null); // { id, name, redirect }
+  const [reloading,   setReloading]   = useState(false);
 
   const toast = (msg, type = 'success') => {
     const id = crypto.randomUUID();
@@ -2558,6 +2560,7 @@ export default function App() {
   const reloadPatients = useCallback(async () => {
     const token = localStorage.getItem('serlivre_token');
     if (!token) return;
+    setReloading(true);
     try {
       const r = await fetch('/api/patients', { headers: { Authorization: `Bearer ${token}` } });
       if (r.ok) {
@@ -2566,6 +2569,8 @@ export default function App() {
       }
     } catch (e) {
       console.error('Falha ao recarregar pacientes:', e.message);
+    } finally {
+      setReloading(false);
     }
   }, []);
 
@@ -2776,10 +2781,21 @@ export default function App() {
   };
 
   // Excluir paciente — aguarda confirmação da API antes de remover da UI
-  const handleDeletePatient = async (id) => {
+  const handleDeletePatient = (id, redirect = false) => {
+    const patient = ps.find(p => p.id === id);
+    const name = patient?.name || patient?.user?.name || 'este paciente';
+    setConfirmDel({ id, name, redirect });
+  };
+
+  const doDeletePatient = async () => {
+    if (!confirmDel) return;
+    const { id, redirect } = confirmDel;
+    setConfirmDel(null);
     try {
       await apiDeletePatient(id);
       setPs(prev => prev.filter(x => x.id !== id));
+      if (redirect) setPage('pat');
+      toast('Paciente excluído com sucesso.', 'success');
     } catch (err) {
       toast(err?.response?.data?.error || 'Erro ao excluir paciente. Tente novamente.', 'error');
     }
@@ -2926,7 +2942,7 @@ export default function App() {
         onChangePlan={handleChangePlan}
         activityLog={activityLog}
         onLog={addLog}
-        onDelete={id=>{ handleDeletePatient(id); setPage("pat"); }}
+        onDelete={id=>{ handleDeletePatient(id, true); }}
         onFinish={handleFinish}
         onRestart={handleRestart}
         onEdit={handleEdit}
@@ -2946,6 +2962,7 @@ export default function App() {
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
           {page==="det" && <div onClick={()=>setPage("pat")} style={{ cursor:"pointer", padding:3 }}><ArrowLeft size={16} color={G[700]}/></div>}
           <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>{titles[page]}</span>
+          {reloading && <span style={{ fontSize:10, color:G[400], marginLeft:6, fontWeight:400 }}>↻</span>}
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <div style={{ position:"relative", cursor:"pointer" }} onClick={()=>setPage("alert")}>
@@ -2977,6 +2994,25 @@ export default function App() {
       <div style={{ position:'fixed', bottom:72, right:12, zIndex:9999 }}>
         <Toast toasts={toasts} onClose={(id) => setToasts(p => p.filter(t => t.id !== id))} />
       </div>
+      {/* Modal confirmação de exclusão */}
+      {confirmDel && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:10000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:'#fff', borderRadius:14, padding:28, maxWidth:340, width:'100%', boxShadow:'0 8px 40px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontSize:15, fontWeight:700, marginBottom:8, color:'#1a1a1a' }}>Excluir paciente?</div>
+            <div style={{ fontSize:13, color:'#666', marginBottom:24, lineHeight:1.5 }}>
+              Esta ação é permanente. Todos os dados de <strong>{confirmDel.name}</strong> serão excluídos do sistema.
+            </div>
+            <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+              <button onClick={()=>setConfirmDel(null)} style={{ padding:'9px 18px', borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                Cancelar
+              </button>
+              <button onClick={doDeletePatient} style={{ padding:'9px 18px', borderRadius:8, border:'none', background:'#dc2626', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -3021,7 +3057,10 @@ export default function App() {
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 0", borderBottom:`1px solid ${G[200]}`, marginBottom:16 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <Menu size={16} color={G[700]} style={{ cursor:"pointer" }} onClick={()=>setSo(!so)}/>
-            <h1 style={{ fontSize:17, fontWeight:700, color:G[800], margin:0 }}>{titles[page]}</h1>
+            <h1 style={{ fontSize:17, fontWeight:700, color:G[800], margin:0 }}>
+            {titles[page]}
+            {reloading && <span style={{ fontSize:11, color:G[400], marginLeft:8, fontWeight:400 }}>↻ atualizando...</span>}
+          </h1>
           </div>
           <div style={{ position:"relative", cursor:"pointer" }} onClick={()=>setPage("alert")}>
             <Bell size={16} color={G[600]}/>
@@ -3034,6 +3073,25 @@ export default function App() {
       </div>
       {/* Toast unificado — desktop */}
       <Toast toasts={toasts} onClose={(id) => setToasts(p => p.filter(t => t.id !== id))} />
+      {/* Modal confirmação de exclusão */}
+      {confirmDel && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:10000, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+          <div style={{ background:'#fff', borderRadius:14, padding:32, maxWidth:380, width:'100%', boxShadow:'0 8px 40px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontSize:16, fontWeight:700, marginBottom:10, color:'#1a1a1a' }}>Excluir paciente?</div>
+            <div style={{ fontSize:13, color:'#666', marginBottom:28, lineHeight:1.6 }}>
+              Esta ação é permanente e não pode ser desfeita. Todos os dados de <strong>{confirmDel.name}</strong> serão removidos do sistema.
+            </div>
+            <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+              <button onClick={()=>setConfirmDel(null)} style={{ padding:'10px 20px', borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:13, cursor:'pointer', fontFamily:'inherit', fontWeight:500 }}>
+                Cancelar
+              </button>
+              <button onClick={doDeletePatient} style={{ padding:'10px 20px', borderRadius:8, border:'none', background:'#dc2626', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+                Excluir definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
