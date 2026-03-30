@@ -2975,9 +2975,9 @@ function normalizePatient(p) {
         id:    s.id,
         date:  s.createdAt || new Date().toISOString(),
         month: s.month     || `Mês ${i + 1}`,
-        m: { gv: s.gordVisceral||2, mm: s.massaMuscular||2, pcr: s.pcr||2, fer: s.ferritina||2, hb: s.hbGlicada||2, au: s.acidoUrico||2, th: s.trigHdl||2, ca: s.circAbdominal||2 },
-        b: { gi: s.gastrointestinal||2, lib: s.libido||2, dor: s.dores||2, au: s.autoestima||2, en: s.energia||2, so: s.sono||2 },
-        n: { co: s.consistenciaAlimentar||2, ge: s.gestaoEmocional||2, mv: s.movimento||2 },
+        m: { gv: s.gorduraVisceral||2, mm: s.massaMuscular||2, pcr: s.pcrUltrassensivel||2, fer: s.ferritina||2, hb: s.hemoglobinaGlicada||2, au: s.acidoUrico||2, th: s.triglicerideosHdl||2, ca: s.circAbdominal||2 },
+        b: { gi: s.gastrointestinal||2, lib: s.libido||2, dor: s.doresArticulares||2, au: s.autoestimaMental||2, en: s.energiaPerformance||2, so: s.sonoCefaleia||2 },
+        n: { co: s.consistenciaAlimentar||2, ge: s.gestaoEmocional||2, mv: s.movimentoPresenca||2 },
       }))
     : [];
 
@@ -3341,23 +3341,23 @@ export default function App() {
       apiSaveScores({
         cycleId,
         month: format(new Date(), "MMM/yy"),
-        gordVisceral:          sm.gv  || 2,
+        gorduraVisceral:       sm.gv  || 2,
         massaMuscular:         sm.mm  || 2,
-        pcr:                   sm.pcr || 2,
+        pcrUltrassensivel:     sm.pcr || 2,
         ferritina:             sm.fer || 2,
-        hbGlicada:             sm.hb  || 2,
+        hemoglobinaGlicada:    sm.hb  || 2,
         acidoUrico:            sm.au  || 2,
-        trigHdl:               sm.th  || 2,
+        triglicerideosHdl:     sm.th  || 2,
         circAbdominal:         sm.ca  || 2,
         gastrointestinal:      sb.gi  || 2,
         libido:                sb.lib || 2,
-        dores:                 sb.dor || 2,
-        autoestima:            sb.au  || 2,
-        energia:               sb.en  || 2,
-        sono:                  sb.so  || 2,
+        doresArticulares:      sb.dor || 2,
+        autoestimaMental:      sb.au  || 2,
+        energiaPerformance:    sb.en  || 2,
+        sonoCefaleia:          sb.so  || 2,
         consistenciaAlimentar: sn.co  || 2,
         gestaoEmocional:       sn.ge  || 2,
-        movimento:             sn.mv  || 2,
+        movimentoPresenca:     sn.mv  || 2,
       }).then(() => reloadPatients()).catch(err => { console.error('Scores API failed:', err.message); toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error'); });
     }
   };

@@ -205,7 +205,7 @@ model ScoreEntry {
   id          Int      @id @default(autoincrement())
   cycleId     Int
   cycle       Cycle    @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  month       Int      // Mês dentro do ciclo (1, 2, 3, 4)
+  month       String   // Rótulo do mês (ex: "Mar/26")
 
   // ── SCORE METABÓLICO (8 a 24 pts) ──
   // Pilar 1: Composição corporal
