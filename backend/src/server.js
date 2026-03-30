@@ -56,7 +56,7 @@ const cron = require('node-cron');
 
 const { authRequired, requireRole, onlyOwnData, supabaseAdmin } = require('./middleware/auth');
 const { calcularMetabolico, calcularBemEstar, calcularMental, gerarAlertas } = require('./utils/scores');
-const { sendInviteEmail, sendResetEmail } = require('./utils/mailer');
+const { sendInviteEmail, sendWelcomePatientEmail, sendResetEmail } = require('./utils/mailer');
 const { sendWhatsApp } = require('./utils/whatsapp');
 
 const prisma = require('./lib/prisma');
@@ -236,16 +236,30 @@ app.post('/api/auth/register', authRequired, requireRole('ADMIN', 'MEDICA'), asy
   }
 });
 
-// Solicitar reset de senha (Supabase envia o e-mail automaticamente)
+// Solicitar reset de senha — gera link via Supabase + envia via Resend
 app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'E-mail é obrigatório' });
 
-    // Supabase envia o e-mail de reset — não revelamos se o usuário existe
-    await supabaseAdmin.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.APP_URL}/reset-password`
+    // Não revelamos se o usuário existe (segurança anti-enumeração)
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.json({ message: 'Se o e-mail existir no sistema, um link foi enviado.' });
+    }
+
+    // Gera link de recovery via Supabase (token gerenciado pelo Supabase)
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'recovery',
+      email,
+      options: { redirectTo: `${process.env.APP_URL}/reset-password` }
     });
+
+    if (!linkError && linkData?.properties?.action_link) {
+      await sendResetEmail(email, user.name, linkData.properties.action_link);
+    } else {
+      console.warn('[AUTH] Erro ao gerar link de recovery:', linkError?.message);
+    }
 
     res.json({ message: 'Se o e-mail existir no sistema, um link foi enviado.' });
   } catch (err) {
@@ -397,7 +411,7 @@ app.post('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAG
     });
 
     if (linkData) {
-      await sendInviteEmail(email, name, linkData.properties.action_link);
+      await sendWelcomePatientEmail(email, name, linkData.properties.action_link);
     }
 
     res.status(201).json({
