@@ -63,15 +63,17 @@ export function WeighInModal({ p, onClose, onSave, onLog, onSendMsg }) {
 
   const handleSave = () => {
     if (!w) return setErr("Informe o peso total em kg.");
-    if (mVal > 0 && gVal > 0 && (mVal + gVal) > w) {
+    if (!mVal) return setErr("Informe a massa magra em kg. Este campo é obrigatório.");
+    if (!gVal) return setErr("Informe a massa gorda em kg. Este campo é obrigatório.");
+    if ((mVal + gVal) > w * 1.05) {
       return setErr(`Atenção: soma das massas (${(mVal + gVal).toFixed(1)}kg) excede o peso total (${w}kg).`);
     }
     setErr("");
     const entry = {
       date:         new Date(data).toISOString(),
       weight:       w,
-      massaMagra:   mVal || undefined,
-      massaGordura: gVal || undefined,
+      massaMagra:   mVal,
+      massaGordura: gVal,
       sendWhatsApp: sendMsg,  // flag para o backend enviar WhatsApp
       m: (p.history || [])[(p.history || []).length - 1]?.m || {},
       b: (p.history || [])[(p.history || []).length - 1]?.b || {},
@@ -109,22 +111,25 @@ export function WeighInModal({ p, onClose, onSave, onLog, onSendMsg }) {
         {err && <div style={{ color:"#C0392B", fontSize:12, marginBottom:10, padding:"8px 10px", background:"#fef2f2", borderRadius:6 }}>{err}</div>}
 
         {[
-          { label:"Data da pesagem",  val:data, set:setData, type:"date"   },
-          { label:"Peso total (kg)",  val:peso, set:setPeso, type:"number", ph:"84.2" },
-          { label:"Massa magra (kg)", val:mm,   set:setMm,   type:"number", ph:"56.8" },
-          { label:"Massa gorda (kg)", val:mg,   set:setMg,   type:"number", ph:"27.4" },
+          { label:"Data da pesagem",  val:data, set:setData, type:"date",   req:false },
+          { label:"Peso total (kg)",  val:peso, set:setPeso, type:"number", ph:"84.2", req:true },
+          { label:"Massa magra (kg)", val:mm,   set:setMm,   type:"number", ph:"56.8", req:true },
+          { label:"Massa gorda (kg)", val:mg,   set:setMg,   type:"number", ph:"27.4", req:true },
         ].map(f => (
           <div key={f.label} style={{ marginBottom:12 }}>
-            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
+            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>
+              {f.label}{f.req && <span style={{ color:"#C0392B", marginLeft:2 }}>*</span>}
+            </label>
             <input
               type={f.type}
               value={f.val}
               onChange={e => f.set(e.target.value)}
               placeholder={f.ph || ""}
-              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}
+              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${f.req && !f.val ? '#E74C3C' : G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}
             />
           </div>
         ))}
+        <div style={{ fontSize:10, color:"#aaa", marginBottom:4 }}>* Campos obrigatórios</div>
 
         {tot > 0 && (
           <div style={{ background:G[50], borderRadius:8, padding:"8px 12px", marginBottom:12, display:"flex", gap:16, fontSize:11 }}>

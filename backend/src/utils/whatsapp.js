@@ -142,9 +142,14 @@ function defaultTemplate(type, data) {
 }
 
 // ── Envio via Evolution API ────────────────────────────────
+// EVOLUTION_API_URL        → URL pública (ex: https://evolution-evolution-api.xy1pmp.easypanel.host)
+// EVOLUTION_API_INTERNAL_URL → URL interna Docker (ex: http://evolution-evolution-api:8080)
+//   Quando rodando dentro do EasyPanel/Docker, o DNS externo pode falhar (EAI_AGAIN).
+//   Defina EVOLUTION_API_INTERNAL_URL com o endereço interno do serviço para evitar esse problema.
 
 async function sendWhatsApp(phone, message) {
-  const BASE   = process.env.EVOLUTION_API_URL;
+  // Prioriza URL interna (Docker) se disponível — evita EAI_AGAIN no container
+  const BASE   = process.env.EVOLUTION_API_INTERNAL_URL || process.env.EVOLUTION_API_URL;
   const KEY    = process.env.EVOLUTION_API_KEY;
   const INST   = process.env.EVOLUTION_INSTANCE;
 
@@ -159,9 +164,12 @@ async function sendWhatsApp(phone, message) {
     return { ok: false, reason: 'invalid_phone' };
   }
 
+  const endpoint = `${BASE}/message/sendText/${INST}`;
+  console.log(`[WHATSAPP] Enviando para ${number} via ${endpoint}`);
+
   try {
     const res = await httpRequest(
-      `${BASE}/message/sendText/${INST}`,
+      endpoint,
       {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': KEY },
@@ -170,14 +178,32 @@ async function sendWhatsApp(phone, message) {
     );
 
     if (res.status >= 200 && res.status < 300) {
-      console.log(`[WHATSAPP] Enviado para ${number}`);
+      console.log(`[WHATSAPP] ✅ Enviado para ${number} — status ${res.status}`);
       return { ok: true, data: res.data };
     } else {
-      console.error(`[WHATSAPP] Erro ${res.status}:`, res.data);
+      console.error(`[WHATSAPP] ❌ Erro HTTP ${res.status}:`, JSON.stringify(res.data).slice(0,200));
       return { ok: false, reason: `http_${res.status}`, data: res.data };
     }
   } catch (err) {
-    console.error('[WHATSAPP] Erro de rede:', err.message);
+    console.error('[WHATSAPP] ❌ Erro de rede:', err.message);
+    // Se URL interna falhou, tenta a URL externa como fallback (se diferente)
+    const FALLBACK = process.env.EVOLUTION_API_URL;
+    if (FALLBACK && FALLBACK !== BASE) {
+      console.log(`[WHATSAPP] Tentando fallback com URL externa: ${FALLBACK}`);
+      try {
+        const res2 = await httpRequest(
+          `${FALLBACK}/message/sendText/${INST}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': KEY } },
+          { number, text: message }
+        );
+        if (res2.status >= 200 && res2.status < 300) {
+          console.log(`[WHATSAPP] ✅ Enviado via fallback para ${number}`);
+          return { ok: true, data: res2.data };
+        }
+      } catch (err2) {
+        console.error('[WHATSAPP] ❌ Fallback também falhou:', err2.message);
+      }
+    }
     return { ok: false, reason: err.message };
   }
 }

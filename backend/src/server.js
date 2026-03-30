@@ -44,6 +44,21 @@
 // Garante fuso horário correto para CRONs e datas (Brasília = UTC-3)
 process.env.TZ = 'America/Sao_Paulo';
 
+// ════════════════════════════════════════════
+//  GUARD GLOBAL — evita que erros não tratados matem o processo
+//  (especialmente falhas de rede do Supabase / Evolution API)
+// ════════════════════════════════════════════
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL uncaughtException]', err.message, err.stack?.split('\n').slice(0,3).join(' | '));
+  // Não deixa morrer — loga e continua
+});
+
+process.on('unhandledRejection', (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  console.error('[FATAL unhandledRejection]', msg);
+  // Não deixa morrer — loga e continua
+});
+
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');

@@ -15,6 +15,15 @@ const safeFmt = (dateStr, fmt) => {
   try { const d = new Date(dateStr); if (isNaN(d.getTime())) return "—"; return format(d, fmt); }
   catch { return "—"; }
 };
+
+// Máscara de telefone/WhatsApp: (XX) XXXXX-XXXX
+const maskPhone = (value) => {
+  const d = value.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 2)  return d.length ? `(${d}` : '';
+  if (d.length <= 7)  return `(${d.slice(0,2)}) ${d.slice(2)}`;
+  if (d.length <= 11) return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+  return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7,11)}`;
+};
 import * as Lucide from "lucide-react";
 import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
@@ -812,7 +821,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
 /* ════════════════════════════════════════════
    DETALHE DO PACIENTE (5 abas)
 ═══════════════════════════════════════════════ */
-function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onLog, onAddScoreMonth, onChangePlan, activityLog, onDelete, onFinish, onRestart, onEdit, onSendMsg }) {
+function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onLog, onAddScoreMonth, onChangePlan, activityLog, onDelete, onFinish, onRestart, onEdit, onSendMsg, messages, setMessages, currentUser }) {
   const SC = genSC([p]);
   const [tab, setTab]   = useState("ficha");
   const plan = PLANS.find(x=>x.id===p.plan);
@@ -827,17 +836,17 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
   const DEFAULT_SCORE = { m:{gv:2,mm:2,pcr:2,fer:2,hb:2,au:2,th:2,ca:2}, b:{gi:2,lib:2,dor:2,au:2,en:2,so:2}, n:{co:2,ge:2,mv:2} };
   const [es, setEs]          = useState(JSON.parse(JSON.stringify(DEFAULT_SCORE)));
   const [scoreFormOpen, setScoreFormOpen] = useState(false);
-  // Semanas do ciclo para o seletor de score
-  const cycleStart  = p._activeCycle?.startDate ? new Date(p._activeCycle.startDate) : new Date(p.sd || new Date());
-  const currentWeekNum = p.week || 1;
-  const scoreWeeks = Array.from({ length: 16 }, (_, i) => {
-    const weekNum = i + 1;
-    const weekDate = addDays(cycleStart, (weekNum - 1) * 7);
-    const label = `Semana ${weekNum} — ${format(weekDate, 'dd/MM/yy')}`;
-    return { weekNum, weekDate, label, value: `S${String(weekNum).padStart(2,'0')} — ${format(weekDate, 'dd/MM/yy')}` };
-  });
-  const defaultWeekValue = scoreWeeks[currentWeekNum - 1]?.value || scoreWeeks[0]?.value || '';
-  const [scoreRef, setScoreRef] = useState(defaultWeekValue);
+  // Seletor de período do score — datas livres (início e fim da semana)
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const [scoreStartDate, setScoreStartDate] = useState(todayStr);
+  const [scoreEndDate,   setScoreEndDate]   = useState(todayStr);
+  // scoreRef continua sendo o valor serializado salvo no DB
+  const buildScoreRef = (s, e) => {
+    const sf = s ? format(new Date(s+'T12:00:00'), 'dd/MM/yy') : '?';
+    const ef = e ? format(new Date(e+'T12:00:00'), 'dd/MM/yy') : '?';
+    return `${sf} — ${ef}`;
+  };
+  const [scoreRef, setScoreRef] = useState(() => buildScoreRef(todayStr, todayStr));
   const [sw, setSw]   = useState(p.week);
   const [showWeighIn, setShowWeighIn] = useState(false);
   const [showChangePlan, setShowChangePlan] = useState(false);
@@ -849,12 +858,13 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
   const [editBirth, setEditBirth] = useState(p.birthDate||'');
 
   const tabs = [
-    {k:"ficha",    l:"Ficha",     i:User},
-    {k:"jornada",  l:"Jornada",   i:ClipboardCheck},
-    {k:"scores",   l:"Scores",    i:Activity},
-    {k:"evolucao", l:"Evolução",  i:TrendingUp},
-    {k:"graficos", l:"Gráficos",  i:BarChart3},
-    {k:"rel",      l:"Relatório", i:FileText},
+    {k:"ficha",    l:"Ficha",      i:User},
+    {k:"jornada",  l:"Jornada",    i:ClipboardCheck},
+    {k:"scores",   l:"Scores",     i:Activity},
+    {k:"evolucao", l:"Evolução",   i:TrendingUp},
+    {k:"graficos", l:"Gráficos",   i:BarChart3},
+    {k:"msgs",     l:"Mensagens",  i:MessageCircle},
+    {k:"rel",      l:"Relatório",  i:FileText},
   ];
 
   return (
@@ -905,12 +915,13 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                   {[
                     { label:"Nome completo", val:editName, set:setEditName, type:"text" },
                     { label:"E-mail", val:editEmail, set:setEditEmail, type:"email" },
-                    { label:"Telefone", val:editPhone, set:setEditPhone, type:"tel" },
+                    { label:"Telefone / WhatsApp", val:editPhone, set:setEditPhone, type:"tel", ph:"(24) 99999-0000" },
                     { label:"Data de nascimento", val:editBirth, set:setEditBirth, type:"date" },
                   ].map(f => (
                     <div key={f.label} style={{ marginBottom:12 }}>
                       <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
-                      <input type={f.type} value={f.val} onChange={e=>f.set(e.target.value)}
+                      <input type={f.type} value={f.val} placeholder={f.ph||""}
+                        onChange={e=>f.set(f.type==='tel' ? maskPhone(e.target.value) : e.target.value)}
                         style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
                     </div>
                   ))}
@@ -1163,15 +1174,16 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                 <div key={s.id||i} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
                     <div>
-                      {/* S01 — 30/03/26 → destaca "Semana 1" e a data */}
+                      {/* Exibe o período do score — suporta formato antigo S01 e novo dd/MM/yy — dd/MM/yy */}
                       {s.month?.startsWith('S') ? (
                         <>
-                          <span style={{ fontSize:13, fontWeight:700, color:G[800] }}>
-                            Semana {parseInt(s.month.slice(1))}
-                          </span>
-                          <span style={{ fontSize:11, color:"#aaa", marginLeft:6 }}>
-                            {s.month.split(' — ')[1] || ''}
-                          </span>
+                          <span style={{ fontSize:13, fontWeight:700, color:G[800] }}>Semana {parseInt(s.month.slice(1,3))}</span>
+                          <span style={{ fontSize:11, color:"#aaa", marginLeft:6 }}>{s.month.split(' — ')[1] || ''}</span>
+                        </>
+                      ) : s.month?.includes(' — ') ? (
+                        <>
+                          <span style={{ fontSize:12, fontWeight:700, color:G[800] }}>📅 {s.month.split(' — ')[0]}</span>
+                          <span style={{ fontSize:11, color:"#aaa", marginLeft:4 }}>→ {s.month.split(' — ')[1]}</span>
                         </>
                       ) : (
                         <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>{s.month}</span>
@@ -1202,15 +1214,25 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
                   <div style={{ fontSize:14, fontWeight:700, color:G[800] }}>Novo score clínico</div>
                   <button onClick={()=>setScoreFormOpen(false)} style={{ background:"none", border:"none", fontSize:18, cursor:"pointer", color:"#aaa", lineHeight:1 }}>✕</button>
                 </div>
-                {/* Semana de referência */}
+                {/* Período de referência — datas livres */}
                 <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"10px 14px" }}>
-                  <div style={{ fontSize:12, fontWeight:600, color:G[700], marginBottom:2 }}>Semana de referência</div>
-                  <div style={{ fontSize:11, color:"#aaa", marginBottom:8 }}>Ciclo {p._activeCycle?.number||1} — semana do programa em que o score foi coletado</div>
-                  <select value={scoreRef} onChange={e=>setScoreRef(e.target.value)} style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:`1px solid ${G[300]}`, fontSize:13, fontFamily:"inherit", background:"#fff", color:G[800], cursor:"pointer" }}>
-                    {scoreWeeks.map(w => (
-                      <option key={w.weekNum} value={w.value}>{w.label}</option>
-                    ))}
-                  </select>
+                  <div style={{ fontSize:12, fontWeight:600, color:G[700], marginBottom:2 }}>Período de referência</div>
+                  <div style={{ fontSize:11, color:"#aaa", marginBottom:8 }}>Informe o início e fim da semana em que este score foi coletado</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                    <div>
+                      <label style={{ fontSize:10, fontWeight:500, color:G[600], display:"block", marginBottom:3 }}>Início da semana</label>
+                      <input type="date" value={scoreStartDate}
+                        onChange={e=>{ setScoreStartDate(e.target.value); setScoreRef(buildScoreRef(e.target.value, scoreEndDate)); }}
+                        style={{ width:"100%", padding:"8px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+                    </div>
+                    <div>
+                      <label style={{ fontSize:10, fontWeight:500, color:G[600], display:"block", marginBottom:3 }}>Fim da semana</label>
+                      <input type="date" value={scoreEndDate}
+                        onChange={e=>{ setScoreEndDate(e.target.value); setScoreRef(buildScoreRef(scoreStartDate, e.target.value)); }}
+                        style={{ width:"100%", padding:"8px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+                    </div>
+                  </div>
+                  {scoreRef && <div style={{ fontSize:10, color:G[500], marginTop:6, textAlign:"center" }}>📅 Período: <strong>{scoreRef}</strong></div>}
                 </div>
                 {/* Metabólico */}
                 <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
@@ -1421,8 +1443,103 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
         </div>
       )}
 
+      {/* ABA MENSAGENS */}
+      {tab==="msgs" && (
+        <MiniChat
+          p={p}
+          messages={(messages||[]).filter(m => m.conv === `p_${p.id}` || m.patientId === p.id)}
+          onSend={(text) => {
+            const userRaw = (() => { try { return JSON.parse(localStorage.getItem('serlivre_user')||'{}'); } catch { return {}; } })();
+            const msg = {
+              id: crypto.randomUUID(),
+              date: new Date().toISOString(),
+              senderName: userRaw.name || 'Equipe',
+              role: 'admin',
+              text,
+              conv: `p_${p.id}`,
+              patientId: p.id,
+              read: false,
+            };
+            setMessages && setMessages(prev => [...prev, msg]);
+            onSendMsg && onSendMsg(msg);
+          }}
+        />
+      )}
+
       {/* ABA RELATÓRIO */}
       {tab==="rel" && <RelTab p={p} mob={mob} plan={plan} met={met} be={be} mn={mn}/>}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
+   MINI CHAT — Mensagens dentro da ficha do paciente
+═══════════════════════════════════════════════ */
+function MiniChat({ p, messages, onSend }) {
+  const [text, setText] = useState('');
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSend = () => {
+    const t = text.trim();
+    if (!t) return;
+    onSend(t);
+    setText('');
+  };
+
+  const sorted = [...(messages||[])].sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 280px)', minHeight:300, background:'#fff', borderRadius:10, border:`1px solid ${G[200]}`, overflow:'hidden' }}>
+      {/* Header */}
+      <div style={{ padding:'10px 14px', borderBottom:`1px solid ${G[200]}`, background:G[50], display:'flex', alignItems:'center', gap:8 }}>
+        <MessageCircle size={14} color={G[600]}/>
+        <span style={{ fontSize:12, fontWeight:600, color:G[800] }}>Conversa com {p.name.split(' ')[0]}</span>
+        <span style={{ fontSize:10, color:'#aaa', marginLeft:'auto' }}>{sorted.length} mensagem{sorted.length!==1?'s':''}</span>
+      </div>
+
+      {/* Mensagens */}
+      <div style={{ flex:1, overflowY:'auto', padding:12, display:'flex', flexDirection:'column', gap:8 }}>
+        {sorted.length === 0 ? (
+          <div style={{ textAlign:'center', color:'#ccc', fontSize:12, marginTop:40 }}>
+            <MessageCircle size={32} color="#ddd" style={{ marginBottom:8 }}/>
+            <div>Nenhuma mensagem ainda</div>
+            <div style={{ fontSize:10, marginTop:4 }}>Envie a primeira mensagem para {p.name.split(' ')[0]}</div>
+          </div>
+        ) : sorted.map((m, i) => {
+          const isAdmin = m.role === 'admin' || m.role !== 'paciente';
+          return (
+            <div key={m.id||i} style={{ display:'flex', flexDirection:'column', alignItems:isAdmin?'flex-end':'flex-start' }}>
+              <div style={{ maxWidth:'80%', background:isAdmin?G[600]:'#f0f0f0', color:isAdmin?'#fff':G[800], borderRadius:isAdmin?'12px 12px 2px 12px':'12px 12px 12px 2px', padding:'8px 12px', fontSize:12, lineHeight:1.5, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
+                {m.text}
+              </div>
+              <div style={{ fontSize:9, color:'#aaa', marginTop:2, paddingInline:4 }}>
+                {m.senderName} · {safeFmt(m.date,'dd/MM HH:mm')}
+              </div>
+            </div>
+          );
+        })}
+        <div ref={bottomRef}/>
+      </div>
+
+      {/* Input */}
+      <div style={{ padding:'8px 12px', borderTop:`1px solid ${G[200]}`, display:'flex', gap:8, alignItems:'flex-end' }}>
+        <textarea
+          value={text}
+          onChange={e=>setText(e.target.value)}
+          onKeyDown={e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); } }}
+          placeholder="Digite uma mensagem... (Enter para enviar)"
+          rows={2}
+          style={{ flex:1, padding:'8px 10px', borderRadius:8, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:'inherit', resize:'none', outline:'none', lineHeight:1.5 }}
+        />
+        <button onClick={handleSend} disabled={!text.trim()}
+          style={{ padding:'8px 14px', background:text.trim()?G[600]:'#e0e0e0', color:text.trim()?'#fff':'#aaa', border:'none', borderRadius:8, cursor:text.trim()?'pointer':'default', fontFamily:'inherit', display:'flex', alignItems:'center', gap:5, fontSize:12, fontWeight:600, height:38 }}>
+          <Send size={13}/>
+        </button>
+      </div>
     </div>
   );
 }
@@ -2894,11 +3011,12 @@ function NewMemberModal({ onClose, onSave }) {
           { label:"Nome completo", val:nome, set:setNome, type:"text",  ph:"Ana Lima" },
           { label:"Especialidade", val:specialty, set:setSpecialty, type:"text", ph:"Nutricionista Clínica" },
           { label:"E-mail",        val:email, set:setEmail, type:"email", ph:"email@instituto.com" },
-          { label:"Telefone",      val:phone, set:setPhone, type:"tel",   ph:"(24) 99999-0000" },
+          { label:"Telefone / WhatsApp", val:phone, set:setPhone, type:"tel", ph:"(24) 99999-0000" },
         ].map(f => (
           <div key={f.label} style={{ marginBottom:12 }}>
             <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
-            <input type={f.type} value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph}
+            <input type={f.type} value={f.val}
+              onChange={e=>f.set(f.type==='tel' ? maskPhone(e.target.value) : e.target.value)} placeholder={f.ph}
               style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
           </div>
         ))}
@@ -2951,11 +3069,12 @@ function NewLeadModal({ onClose, onSave }) {
           { label:"E-mail *", val:email, set:setEmail, type:"email", ph:"paciente@email.com" },
           { label:"Data de nascimento", val:nasc, set:setNasc, type:"date", ph:"" },
           { label:"Peso inicial (kg)", val:peso, set:setPeso, type:"number", ph:"80.5" },
-          { label:"Telefone", val:phone, set:setPhone, type:"tel", ph:"(24) 99999-0000" },
+          { label:"Telefone / WhatsApp", val:phone, set:setPhone, type:"tel", ph:"(24) 99999-0000" },
         ].map(f => (
           <div key={f.label} style={{ marginBottom:12 }}>
             <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{f.label}</label>
-            <input type={f.type} value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph}
+            <input type={f.type} value={f.val}
+              onChange={e=>f.set(f.type==='tel' ? maskPhone(e.target.value) : e.target.value)} placeholder={f.ph}
               style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
           </div>
         ))}
@@ -3237,21 +3356,38 @@ export default function App() {
   };
 
   // Recarrega lista de pacientes da API real
-  const reloadPatients = useCallback(async () => {
+  const reloadPatients = useCallback(async ({ silent = false } = {}) => {
     const token = localStorage.getItem('serlivre_token');
     if (!token) return;
     setReloading(true);
-    try {
-      const r = await fetch('/api/patients', { headers: { Authorization: `Bearer ${token}` } });
-      if (r.ok) {
-        const data = await r.json();
-        if (Array.isArray(data)) setPs(data.map(normalizePatient));
+    // Tenta até 2 vezes em caso de falha de rede
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const r = await fetch('/api/patients', { headers: { Authorization: `Bearer ${token}` } });
+        if (r.ok) {
+          const data = await r.json();
+          if (Array.isArray(data)) {
+            setPs(data.map(normalizePatient));
+            setReloading(false);
+            return; // sucesso
+          }
+        } else if (r.status === 401) {
+          // Token expirado — força logout
+          localStorage.removeItem('serlivre_token');
+          localStorage.removeItem('serlivre_user');
+          setLg(false);
+          setReloading(false);
+          return;
+        }
+      } catch (e) {
+        console.error(`[reloadPatients] tentativa ${attempt} falhou:`, e.message);
+        if (attempt === 2 && !silent) {
+          toast('Falha ao carregar pacientes. Verifique a conexão e recarregue a página.', 'error');
+        }
+        if (attempt < 2) await new Promise(r => setTimeout(r, 1500));
       }
-    } catch (e) {
-      console.error('Falha ao recarregar pacientes:', e.message);
-    } finally {
-      setReloading(false);
     }
+    setReloading(false);
   }, []);
 
   const SC = genSC(ps);
@@ -3637,6 +3773,9 @@ export default function App() {
         onFinish={handleFinish}
         onRestart={handleRestart}
         onEdit={handleEdit}
+        messages={messages}
+        setMessages={setMessages}
+        currentUser={currentUser}
         onSendMsg={msg=>setMessages(prev=>[...prev,msg])}/>}
       {page==="alert" && <Alerts ps={ps} onSel={go} onResolve={handleResolveAlert}/>}
       {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog} onToast={toast} currentUser={currentUser}/>}
