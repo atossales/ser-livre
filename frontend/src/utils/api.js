@@ -138,7 +138,6 @@ export const deleteAppointment = (id) => api.delete(`/appointments/${id}`);
 // ── WhatsApp ──
 export const sendWhatsAppMsg = (data) => api.post('/whatsapp/send', data);
 export const getWhatsAppStatus = () => api.get('/whatsapp/status');
-export const getMessageLog = (patientId) => api.get(`/patients/${patientId}/messages`);
 
 // ── Message Templates ──
 export const getMessageTemplates = () => api.get('/messages/templates');

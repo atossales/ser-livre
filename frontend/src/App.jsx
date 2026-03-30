@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage } from './utils/api';
+import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getWhatsAppStatus, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage } from './utils/api';
 import { supabase } from './utils/supabase';
 import { ResetPassword } from './components/ResetPassword';
 import { Toast } from './components/Toast';
@@ -69,37 +69,6 @@ const TODAY = new Date();
 const fmt   = d => { const dt = new Date(d); return `${String(dt.getDate()).padStart(2,"0")}/${String(dt.getMonth()+1).padStart(2,"0")}`; };
 const addD  = (d, n) => { const r = new Date(d); r.setDate(r.getDate()+n); return r; };
 
-/* ════════════════════════════════════════════
-   DADOS INICIAIS (PERSISTENTES)
-═══════════════════════════════════════════════ */
-const MOCK_HIST_BASE = [
-  { date: subDays(new Date(), 42).toISOString(), weight: 89.5, massaMagra: 54.3, massaGordura: 35.2, m:{gv:2,mm:2,pcr:3,fer:2,hb:2,au:3,th:2,ca:2}, b:{gi:2,lib:2,dor:3,au:2,en:2,so:3}, n:{co:2,ge:2,mv:3} },
-  { date: subDays(new Date(), 21).toISOString(), weight: 87.1, massaMagra: 55.2, massaGordura: 31.9, m:{gv:3,mm:2,pcr:3,fer:3,hb:2,au:3,th:2,ca:3}, b:{gi:3,lib:3,dor:3,au:2,en:2,so:3}, n:{co:2,ge:3,mv:2} },
-  { date: new Date().toISOString(),              weight: 84.2, massaMagra: 56.8, massaGordura: 27.4, m:{gv:3,mm:3,pcr:2,fer:3,hb:3,au:2,th:3,ca:2}, b:{gi:3,lib:2,dor:2,au:3,en:3,so:2}, n:{co:3,ge:2,mv:3} }
-];
-
-const MOCK_PATIENTS = [
-  { id: 1, name: "Ana Carolina Silva", plan: "platinum_plus", cycle: 1, week: 6, birthDate: "1992-05-15", phone: "(24) 99912-3456", sd: "2025-11-01", iw: 89.5, cw: 84.2, history: MOCK_HIST_BASE, nr: addDays(new Date(), 2).toISOString(), eng: 92, pass: "123", scoreHistory: [
-    { id:1, date: subDays(new Date(), 120).toISOString(), month:"Nov/25", m:{gv:1,mm:2,pcr:2,fer:1,hb:1,au:2,th:1,ca:2}, b:{gi:2,lib:1,dor:2,au:1,en:2,so:2}, n:{co:1,ge:1,mv:2} },
-    { id:2, date: subDays(new Date(), 90).toISOString(),  month:"Dez/25", m:{gv:2,mm:2,pcr:2,fer:2,hb:2,au:2,th:2,ca:2}, b:{gi:2,lib:2,dor:2,au:2,en:2,so:3}, n:{co:2,ge:2,mv:2} },
-    { id:3, date: subDays(new Date(), 60).toISOString(),  month:"Jan/26", m:{gv:2,mm:2,pcr:3,fer:2,hb:2,au:3,th:2,ca:2}, b:{gi:3,lib:2,dor:3,au:2,en:2,so:3}, n:{co:2,ge:2,mv:3} },
-    { id:4, date: subDays(new Date(), 30).toISOString(),  month:"Fev/26", m:{gv:3,mm:2,pcr:3,fer:3,hb:2,au:3,th:2,ca:3}, b:{gi:3,lib:3,dor:3,au:2,en:3,so:3}, n:{co:2,ge:3,mv:2} },
-    { id:5, date: new Date().toISOString(),               month:"Mar/26", m:{gv:3,mm:3,pcr:2,fer:3,hb:3,au:2,th:3,ca:2}, b:{gi:3,lib:2,dor:2,au:3,en:3,so:2}, n:{co:3,ge:2,mv:3} },
-  ] },
-  { id: 2, name: "Beatriz Oliveira", plan: "gold", cycle: 1, week: 12, birthDate: "1983-11-20", phone: "(24) 99834-5678", sd: "2025-09-15", iw: 95.0, cw: 86.8, history: MOCK_HIST_BASE.map(h => ({...h, weight: h.weight+5})), nr: addDays(new Date(), 5).toISOString(), eng: 88, pass: "123", scoreHistory: [
-    { id:1, date: subDays(new Date(), 150).toISOString(), month:"Set/25", m:{gv:1,mm:1,pcr:1,fer:1,hb:1,au:1,th:1,ca:1}, b:{gi:1,lib:1,dor:1,au:1,en:1,so:2}, n:{co:1,ge:1,mv:1} },
-    { id:2, date: subDays(new Date(), 120).toISOString(), month:"Out/25", m:{gv:2,mm:1,pcr:2,fer:2,hb:1,au:2,th:1,ca:2}, b:{gi:2,lib:1,dor:2,au:2,en:1,so:2}, n:{co:2,ge:1,mv:2} },
-    { id:3, date: subDays(new Date(), 90).toISOString(),  month:"Nov/25", m:{gv:2,mm:2,pcr:2,fer:2,hb:2,au:2,th:2,ca:2}, b:{gi:2,lib:2,dor:2,au:2,en:2,so:3}, n:{co:2,ge:2,mv:2} },
-    { id:4, date: subDays(new Date(), 60).toISOString(),  month:"Dez/25", m:{gv:2,mm:2,pcr:3,fer:2,hb:2,au:2,th:2,ca:2}, b:{gi:3,lib:2,dor:2,au:2,en:2,so:3}, n:{co:2,ge:2,mv:2} },
-    { id:5, date: subDays(new Date(), 30).toISOString(),  month:"Jan/26", m:{gv:3,mm:2,pcr:3,fer:3,hb:2,au:3,th:2,ca:3}, b:{gi:3,lib:2,dor:3,au:3,en:3,so:3}, n:{co:3,ge:2,mv:3} },
-    { id:6, date: new Date().toISOString(),               month:"Fev/26", m:{gv:3,mm:3,pcr:3,fer:3,hb:3,au:3,th:3,ca:2}, b:{gi:3,lib:3,dor:3,au:3,en:3,so:3}, n:{co:3,ge:3,mv:2} },
-  ] },
-  { id: 3, name: "Camila Ferreira", plan: "essential", cycle: 2, week: 3, birthDate: format(addDays(new Date(), 5), "yyyy-MM-dd"), phone: "(24) 99756-7890", sd: "2025-06-01", iw: 78.3, cw: 71.1, history: MOCK_HIST_BASE.map(h => ({...h, weight: h.weight-10, met:12, be:10})), nr: new Date().toISOString(), eng: 95, pass: "123", scoreHistory: [
-    { id:1, date: subDays(new Date(), 60).toISOString(),  month:"Jan/26", m:{gv:1,mm:1,pcr:1,fer:1,hb:1,au:1,th:1,ca:1}, b:{gi:1,lib:1,dor:1,au:1,en:1,so:1}, n:{co:1,ge:1,mv:1} },
-    { id:2, date: subDays(new Date(), 30).toISOString(),  month:"Fev/26", m:{gv:2,mm:1,pcr:2,fer:1,hb:2,au:2,th:1,ca:2}, b:{gi:2,lib:1,dor:2,au:2,en:2,so:2}, n:{co:2,ge:1,mv:2} },
-    { id:3, date: new Date().toISOString(),               month:"Mar/26", m:{gv:2,mm:2,pcr:2,fer:2,hb:2,au:2,th:2,ca:2}, b:{gi:2,lib:2,dor:2,au:2,en:2,so:2}, n:{co:2,ge:2,mv:2} },
-  ] },
-];
 
 const MOCK_TEAM = [
   { id:1, name:"Dra. Mariana Wogel", role:"admin",   label:"Administradora", specialty:"Nutróloga",  color:G[600], email:"mariana@institutowogel.com",  phone:"(24) 99999-0001", createdAt:"2024-01-01T00:00:00.000Z" },
@@ -1986,9 +1955,16 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
   const [templates,    setTemplates]    = useState([]);
   const [loadingTpls,  setLoadingTpls]  = useState(false);
   const [sendingWA,    setSendingWA]    = useState(false);
-  const [waMode,       setWaMode]       = useState(false); // true = enviar via WhatsApp
+  const [waMode,       setWaMode]       = useState(false);
   const [generating,   setGenerating]   = useState(false);
   const [genType,      setGenType]      = useState('week_start');
+  // Template CRUD
+  const [tplModal,     setTplModal]     = useState(null);  // null | 'new' | {id, name, category, body, isSystem}
+  const [tplForm,      setTplForm]      = useState({ name:'', category:'boas_vindas', body:'' });
+  const [savingTpl,    setSavingTpl]    = useState(false);
+  const [deletingTpl,  setDeletingTpl]  = useState(null);
+  // WhatsApp status
+  const [waStatus,     setWaStatus]     = useState(null);
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
 
@@ -2090,6 +2066,54 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
     finally { setGenerating(false); }
   };
 
+  // ── WhatsApp status — carrega ao montar (só para equipe)
+  useEffect(() => {
+    if (patientMode) return;
+    getWhatsAppStatus()
+      .then(r => setWaStatus(r.data))
+      .catch(() => setWaStatus(null));
+  }, [patientMode]);
+
+  // ── Template CRUD handlers ──────────────────────────────
+  const openNewTpl = () => {
+    setTplForm({ name:'', category:'boas_vindas', body:'' });
+    setTplModal('new');
+  };
+
+  const openEditTpl = (tpl) => {
+    setTplForm({ name: tpl.name, category: tpl.category, body: tpl.body });
+    setTplModal(tpl);
+  };
+
+  const handleSaveTpl = async () => {
+    if (!tplForm.name.trim() || !tplForm.body.trim()) return;
+    setSavingTpl(true);
+    try {
+      if (tplModal === 'new') {
+        await createMessageTemplate({ name: tplForm.name.trim(), category: tplForm.category, body: tplForm.body.trim() });
+      } else {
+        await updateMessageTemplate(tplModal.id, { name: tplForm.name.trim(), category: tplForm.category, body: tplForm.body.trim() });
+      }
+      setTplModal(null);
+      // Recarrega lista forçando novo fetch
+      setLoadingTpls(false);
+      setTemplates([]);
+      const r = await getMessageTemplates();
+      setTemplates(Array.isArray(r.data) ? r.data : []);
+    } catch(e) { console.error('Erro ao salvar template:', e); }
+    finally { setSavingTpl(false); }
+  };
+
+  const handleDeleteTpl = async (tpl) => {
+    if (tpl.isSystem) return;
+    setDeletingTpl(tpl.id);
+    try {
+      await deleteMessageTemplate(tpl.id);
+      setTemplates(prev => prev.filter(t => t.id !== tpl.id));
+    } catch(e) { console.error('Erro ao excluir template:', e); }
+    finally { setDeletingTpl(null); }
+  };
+
   const thread      = selConv ? getThread(selConv) : [];
   const selConvInfo = convs.find(c => c.id===selConv);
   const showList    = !mob || selConv === null;
@@ -2098,8 +2122,21 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
   const listPanel = !patientMode && showList && (
     <div style={{ width:mob?"100%":260, flexShrink:0, background:"#fff", borderRadius:12,
       border:`1px solid ${G[200]}`, overflow:"hidden", display:"flex", flexDirection:"column" }}>
-      <div style={{ padding:"12px 14px", borderBottom:`1px solid ${G[100]}` }}>
+      <div style={{ padding:"12px 14px", borderBottom:`1px solid ${G[100]}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Mensagens</div>
+        {/* Badge de status do WhatsApp */}
+        {waStatus !== null && (
+          <div style={{ display:"flex", alignItems:"center", gap:5, padding:"3px 8px", borderRadius:10,
+            background: waStatus.connected ? "#f0fdf4" : "#fef2f2",
+            border:`1px solid ${waStatus.connected ? "#bbf7d0" : "#fecaca"}` }}>
+            <div style={{ width:6, height:6, borderRadius:"50%",
+              background: waStatus.connected ? "#22c55e" : "#ef4444" }}/>
+            <span style={{ fontSize:9, fontWeight:600,
+              color: waStatus.connected ? "#16a34a" : "#dc2626" }}>
+              {waStatus.connected ? "WA Online" : "WA Offline"}
+            </span>
+          </div>
+        )}
       </div>
       <div style={{ flex:1, overflowY:"auto" }}>
         {convs.map((c) => {
@@ -2127,34 +2164,66 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
     </div>
   );
 
-  // Painel de Templates
+  // Painel de Templates (com CRUD)
   const templatesPanel = showTemplates && !patientMode && (
     <div style={{ position:"absolute", bottom:"100%", left:0, right:0, background:"#fff", borderRadius:12,
-      border:`1px solid ${G[200]}`, boxShadow:"0 -4px 20px rgba(0,0,0,0.1)", zIndex:20, maxHeight:320, overflow:"hidden",
+      border:`1px solid ${G[200]}`, boxShadow:"0 -4px 20px rgba(0,0,0,0.1)", zIndex:20, maxHeight:360, overflow:"hidden",
       display:"flex", flexDirection:"column" }}>
-      <div style={{ padding:"10px 14px", borderBottom:`1px solid ${G[100]}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+      {/* Header do painel */}
+      <div style={{ padding:"10px 14px", borderBottom:`1px solid ${G[100]}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
         <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>📋 Templates de Mensagem</div>
-        <div onClick={()=>setShowTemplates(false)} style={{ cursor:"pointer", fontSize:16, color:"#aaa" }}>✕</div>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <button onClick={openNewTpl}
+            style={{ padding:"4px 10px", borderRadius:7, border:`1px solid ${G[400]}`, background:G[50],
+              fontSize:10, fontWeight:600, color:G[700], cursor:"pointer", fontFamily:"inherit",
+              display:"flex", alignItems:"center", gap:3 }}>
+            ＋ Novo
+          </button>
+          <div onClick={()=>setShowTemplates(false)} style={{ cursor:"pointer", fontSize:16, color:"#aaa", lineHeight:1 }}>✕</div>
+        </div>
       </div>
+      {/* Lista */}
       {loadingTpls ? (
         <div style={{ padding:"20px", textAlign:"center", color:"#aaa", fontSize:12 }}>Carregando templates...</div>
+      ) : templates.length === 0 ? (
+        <div style={{ padding:"24px", textAlign:"center", color:"#ccc", fontSize:12 }}>
+          Nenhum template. Clique em <strong>+ Novo</strong> para criar.
+        </div>
       ) : (
         <div style={{ overflowY:"auto", flex:1 }}>
           {templates.map(tpl => {
-            const cat = TPL_CATEGORIES[tpl.category] || TPL_CATEGORIES.custom;
+            const cat     = TPL_CATEGORIES[tpl.category] || TPL_CATEGORIES.custom;
             const preview = applyTemplateVars(tpl.body, selPatient);
+            const isDel   = deletingTpl === tpl.id;
             return (
-              <div key={tpl.id} onClick={()=>applyTemplate(tpl)}
-                style={{ padding:"10px 14px", cursor:"pointer", borderBottom:`1px solid ${G[50]}`,
-                  display:"flex", flexDirection:"column", gap:4, transition:"background 0.1s" }}
-                onMouseEnter={e=>e.currentTarget.style.background=G[50]}
-                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ fontSize:10, fontWeight:600, padding:"2px 7px", borderRadius:10,
-                    color:cat.color, background:cat.bg }}>{cat.label}</span>
-                  <span style={{ fontSize:12, fontWeight:600, color:G[800] }}>{tpl.name}</span>
+              <div key={tpl.id}
+                style={{ padding:"10px 14px", borderBottom:`1px solid ${G[50]}`,
+                  display:"flex", flexDirection:"column", gap:4 }}>
+                {/* Linha superior: badge + nome + ações */}
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:9, fontWeight:600, padding:"2px 7px", borderRadius:10,
+                    color:cat.color, background:cat.bg, flexShrink:0 }}>{cat.label}</span>
+                  <span style={{ fontSize:12, fontWeight:600, color:G[800], flex:1, cursor:"pointer" }}
+                    onClick={()=>applyTemplate(tpl)}>{tpl.name}</span>
+                  {/* Botão Editar */}
+                  <div onClick={()=>openEditTpl(tpl)}
+                    title="Editar template"
+                    style={{ cursor:"pointer", padding:"2px 5px", borderRadius:5, background:G[50],
+                      fontSize:11, color:G[600], flexShrink:0, border:`1px solid ${G[200]}` }}>✏️</div>
+                  {/* Botão Excluir (oculto para templates do sistema) */}
+                  {!tpl.isSystem && (
+                    <div onClick={()=>handleDeleteTpl(tpl)}
+                      title="Excluir template"
+                      style={{ cursor: isDel?"not-allowed":"pointer", padding:"2px 5px", borderRadius:5,
+                        background:"#fef2f2", fontSize:11, color:"#dc2626", flexShrink:0,
+                        border:"1px solid #fecaca", opacity: isDel ? 0.5 : 1 }}>
+                      {isDel ? "..." : "🗑️"}
+                    </div>
+                  )}
                 </div>
-                <div style={{ fontSize:11, color:"#999", lineHeight:1.4, overflow:"hidden", textOverflow:"ellipsis",
+                {/* Preview do corpo clicável */}
+                <div onClick={()=>applyTemplate(tpl)} style={{ fontSize:11, color:"#999", lineHeight:1.4,
+                  cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis",
                   display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
                   {preview.substring(0,120)}{preview.length>120?"...":""}
                 </div>
@@ -2294,11 +2363,80 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
     </div>
   );
 
-  return (
-    <div style={{ display:"flex", gap:12, height:mob?"auto":undefined }}>
-      {listPanel}
-      {threadPanel}
+  // ── Modal de criação / edição de template ───────────────
+  const tplModalEl = tplModal !== null && (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000,
+      display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"#fff", borderRadius:14, padding:24, width:"100%", maxWidth:480,
+        boxShadow:"0 20px 60px rgba(0,0,0,0.25)", maxHeight:"90vh", overflowY:"auto" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+          <div style={{ fontSize:15, fontWeight:700, color:G[800] }}>
+            {tplModal === 'new' ? '➕ Novo Template' : '✏️ Editar Template'}
+          </div>
+          <div onClick={()=>setTplModal(null)} style={{ cursor:"pointer", color:"#aaa", fontSize:18 }}>✕</div>
+        </div>
+
+        {/* Nome */}
+        <div style={{ marginBottom:12 }}>
+          <label style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:4, display:"block" }}>Nome do template *</label>
+          <input value={tplForm.name} onChange={e=>setTplForm(p=>({...p,name:e.target.value}))}
+            placeholder="Ex: Lembrete de consulta semanal"
+            style={{ width:"100%", padding:"9px 11px", borderRadius:8, border:`1px solid ${G[300]}`,
+              fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+        </div>
+
+        {/* Categoria */}
+        <div style={{ marginBottom:12 }}>
+          <label style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:4, display:"block" }}>Categoria</label>
+          <select value={tplForm.category} onChange={e=>setTplForm(p=>({...p,category:e.target.value}))}
+            style={{ width:"100%", padding:"9px 11px", borderRadius:8, border:`1px solid ${G[300]}`,
+              fontSize:12, fontFamily:"inherit", background:"#fff", outline:"none", boxSizing:"border-box" }}>
+            {Object.entries(TPL_CATEGORIES).map(([k,v])=>(
+              <option key={k} value={k}>{v.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Corpo */}
+        <div style={{ marginBottom:8 }}>
+          <label style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:4, display:"block" }}>Mensagem *</label>
+          <textarea value={tplForm.body} onChange={e=>setTplForm(p=>({...p,body:e.target.value}))}
+            placeholder="Olá {{nome}}, ..."
+            rows={6}
+            style={{ width:"100%", padding:"9px 11px", borderRadius:8, border:`1px solid ${G[300]}`,
+              fontSize:12, fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box", lineHeight:1.5 }}/>
+        </div>
+
+        {/* Dica de variáveis */}
+        <div style={{ background:G[50], borderRadius:8, padding:"8px 12px", marginBottom:16, fontSize:10, color:G[600], lineHeight:1.7 }}>
+          <strong>Variáveis disponíveis:</strong><br/>
+          <code>{"{{nome}}"}</code> · <code>{"{{plano}}"}</code> · <code>{"{{semana}}"}</code> · <code>{"{{peso_inicial}}"}</code> · <code>{"{{peso_atual}}"}</code> · <code>{"{{variacao_peso}}"}</code> · <code>{"{{data_inicio}}"}</code>
+        </div>
+
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={handleSaveTpl} disabled={savingTpl || !tplForm.name.trim() || !tplForm.body.trim()}
+            style={{ flex:1, padding:"10px", borderRadius:8, background: (!tplForm.name.trim() || !tplForm.body.trim()) ? G[300] : G[600],
+              color:"#fff", border:"none", fontSize:13, fontWeight:600, cursor: savingTpl?"not-allowed":"pointer", fontFamily:"inherit" }}>
+            {savingTpl ? "Salvando..." : "💾 Salvar"}
+          </button>
+          <button onClick={()=>setTplModal(null)}
+            style={{ flex:1, padding:"10px", borderRadius:8, background:G[100], color:G[800],
+              border:"none", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+            Cancelar
+          </button>
+        </div>
+      </div>
     </div>
+  );
+
+  return (
+    <>
+      {tplModalEl}
+      <div style={{ display:"flex", gap:12, height:mob?"auto":undefined }}>
+        {listPanel}
+        {threadPanel}
+      </div>
+    </>
   );
 }
 
@@ -2795,7 +2933,6 @@ function Login({ onLogin }) {
             <div style={{ textAlign:"center", marginTop:10 }}>
               <span onClick={()=>setForgotMode(true)} style={{ fontSize:11, color:G[600], cursor:"pointer", textDecoration:"underline" }}>Esqueceu a senha?</span>
             </div>
-            <div style={{ textAlign:"center", marginTop:6, fontSize:10, color:"#ccc" }}>Demo: clique Entrar com qualquer dado</div>
           </>
         )}
       </div>
