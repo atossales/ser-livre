@@ -181,6 +181,10 @@ model WeekCheck {
   nutriPlanoAlimentar    Boolean?
   nutriScoresClinicos    Boolean?
 
+  // Bioimpedância — composição corporal
+  massaMagra   Float?   // Massa magra registrada (kg)
+  massaGordura Float?   // Massa gorda registrada (kg)
+
   // Controle
   observations String?
   filledById   String?

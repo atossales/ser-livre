@@ -632,9 +632,10 @@ function PList({  ps, onSel, mob, onAdd, onDelete }) {
    RELATÓRIO — componente com estado próprio
 ═══════════════════════════════════════════════ */
 function RelTab({ p, mob, plan, met, be, mn }) {
-  const [relDe,   setRelDe]   = useState("");
-  const [relAte,  setRelAte]  = useState("");
-  const [relComp, setRelComp] = useState(false);
+  const [relDe,        setRelDe]        = useState("");
+  const [relAte,       setRelAte]       = useState("");
+  const [relComp,      setRelComp]      = useState(false);
+  const [generatingPdf,setGeneratingPdf]= useState(false);
 
   const sh = p.scoreHistory || [];
   const shFilt = relDe||relAte ? sh.filter(s => {
@@ -852,7 +853,9 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
   const pm   = sc ? pM(sc.m) : {comp:0,infl:0,glic:0,card:0};
   const hist = HIST(p.id);
   const [cl, setCl]   = useState(() => genCL(p, tier, p._activeCycle?.weekChecks || []));
-  const [es, setEs]   = useState(sc ? JSON.parse(JSON.stringify(sc)) : null);
+  // Estado para edição de scores — inicializa com o último score ou valores padrão (2 = moderado)
+  const DEFAULT_SCORE = { m:{gv:2,mm:2,pcr:2,fer:2,hb:2,au:2,th:2,ca:2}, b:{gi:2,lib:2,dor:2,au:2,en:2,so:2}, n:{co:2,ge:2,mv:2} };
+  const [es, setEs]   = useState(sc ? JSON.parse(JSON.stringify(sc)) : JSON.parse(JSON.stringify(DEFAULT_SCORE)));
   const [sw, setSw]   = useState(p.week);
   const [showWeighIn, setShowWeighIn] = useState(false);
   const [showChangePlan, setShowChangePlan] = useState(false);
@@ -862,7 +865,6 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
   const [editPhone, setEditPhone] = useState(p.phone||'');
   const [editEmail, setEditEmail] = useState(p.email||'');
   const [editBirth, setEditBirth] = useState(p.birthDate||'');
-  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const tabs = [
     {k:"ficha",    l:"Ficha",     i:User},
@@ -1156,7 +1158,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onL
       )}
 
       {/* ABA SCORES */}
-      {tab==="scores" && es && (
+      {tab==="scores" && (
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
             <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>🧬 Saúde metabólica (8-24)</div>
@@ -3226,7 +3228,7 @@ export default function App() {
   // Adicionar pesagem — persiste via weekCheck API
   const handleAddWeighIn = async (entry) => {
     setPs(prev => prev.map(x => x.id === sp.id ? { ...x, cw: entry.weight, history: [...(x.history || []), entry] } : x));
-    const cycleId   = sp._activeCycle?.id;
+    const cycleId    = sp._activeCycle?.id;
     const weekNumber = sp.week || 1;
     if (cycleId) {
       apiSaveWeekCheck({
@@ -3236,6 +3238,7 @@ export default function App() {
         massaMagra:     entry.massaMagra   || undefined,
         massaGordura:   entry.massaGordura || undefined,
         weekDate:       entry.date         || new Date().toISOString(),
+        sendWhatsApp:   entry.sendWhatsApp || false,  // backend envia WhatsApp se true
       }).then(() => reloadPatients()).catch(err => { console.error('WeekCheck API failed:', err.message); toast(err.response?.data?.error || 'Erro ao salvar. Tente novamente.', 'error'); });
     }
   };

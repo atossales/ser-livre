@@ -70,8 +70,9 @@ export function WeighInModal({ p, onClose, onSave, onLog, onSendMsg }) {
     const entry = {
       date:         new Date(data).toISOString(),
       weight:       w,
-      massaMagra:   mVal,
-      massaGordura: gVal,
+      massaMagra:   mVal || undefined,
+      massaGordura: gVal || undefined,
+      sendWhatsApp: sendMsg,  // flag para o backend enviar WhatsApp
       m: (p.history || [])[(p.history || []).length - 1]?.m || {},
       b: (p.history || [])[(p.history || []).length - 1]?.b || {},
       n: (p.history || [])[(p.history || []).length - 1]?.n || {},

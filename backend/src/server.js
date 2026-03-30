@@ -445,7 +445,7 @@ app.put('/api/patients/:id', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFER
   }
 });
 
-app.delete('/api/patients/:id', authRequired, requireRole('ADMIN'), async (req, res) => {
+app.delete('/api/patients/:id', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
   try {
     const patientId = parseInt(req.params.id);
     const patient = await prisma.patient.findUnique({ where: { id: patientId } });
@@ -462,7 +462,7 @@ app.delete('/api/patients/:id', authRequired, requireRole('ADMIN'), async (req, 
   }
 });
 
-app.delete('/api/patients', authRequired, requireRole('ADMIN'), async (req, res) => {
+app.delete('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -670,7 +670,9 @@ app.post('/api/weekchecks', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERM
       ...(nutriPlanoAlimentar   !== undefined && { nutriPlanoAlimentar }),
       ...(nutriScoresClinicos   !== undefined && { nutriScoresClinicos }),
       ...(observations    !== undefined && { observations }),
-      // body composition (não estão no schema como colunas — ignorado se schema não tiver)
+      // Bioimpedância — composição corporal
+      ...(massaMagra   !== undefined && massaMagra   !== null && { massaMagra:   parseFloat(massaMagra)   || undefined }),
+      ...(massaGordura !== undefined && massaGordura !== null && { massaGordura: parseFloat(massaGordura) || undefined }),
     };
 
     const check = await prisma.weekCheck.upsert({
@@ -680,12 +682,56 @@ app.post('/api/weekchecks', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERM
     });
 
     if (pesoRegistrado) {
-      const cycle = await prisma.cycle.findUnique({ where: { id: cycleId } });
+      const cycle = await prisma.cycle.findUnique({
+        where: { id: cycleId },
+        include: { patient: { include: { user: { select: { name: true, phone: true } } } } }
+      });
       if (cycle) {
+        // Atualiza peso atual do paciente
         await prisma.patient.update({
           where: { id: cycle.patientId },
           data: { currentWeight: pesoRegistrado }
         });
+
+        // Envia WhatsApp com resultado da pesagem se sendWhatsApp=true no body
+        if (req.body.sendWhatsApp && cycle.patient?.user?.phone) {
+          const patient = cycle.patient;
+          const name    = patient.user.name || 'paciente';
+          const phone   = patient.user.phone;
+
+          // Busca pesagem anterior para calcular variação
+          const prevCheck = await prisma.weekCheck.findFirst({
+            where: { cycleId, weekNumber: { lt: weekNumber }, pesoRegistrado: { not: null } },
+            orderBy: { weekNumber: 'desc' }
+          });
+          const prevPeso = prevCheck?.pesoRegistrado ?? null;
+          const diff     = prevPeso !== null ? +(prevPeso - pesoRegistrado).toFixed(1) : null;
+
+          const linhas = [
+            `📊 *Pesagem registrada — Semana ${weekNumber}*`,
+            ``,
+            `⚖️ Peso atual: *${pesoRegistrado}kg*`,
+            diff !== null ? `📉 Variação: ${diff >= 0 ? `-${diff}` : `+${Math.abs(diff)}`}kg em relação à semana anterior` : null,
+            (massaMagra || massaGordura) ? `💪 Massa magra: ${massaMagra||'—'}kg | Gordura: ${massaGordura||'—'}kg` : null,
+            ``,
+            `Continue assim! — Equipe Ser Livre`,
+          ].filter(Boolean).join('\n');
+
+          const { sendWhatsApp: sendWA } = require('./utils/whatsapp');
+          sendWA(phone, linhas).catch(e => console.warn('[WEEKCHECK] WhatsApp send falhou:', e.message));
+
+          // Registra no log de mensagens
+          await prisma.messageLog.create({
+            data: {
+              patientId: cycle.patientId,
+              sentById:  req.user.id,
+              phone,
+              body:    linhas,
+              channel: 'whatsapp',
+              status:  'sent',
+            }
+          }).catch(() => {});
+        }
       }
     }
 
