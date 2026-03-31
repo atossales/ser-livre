@@ -375,7 +375,7 @@ app.post('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAG
   try {
     const { name, email, phone, plan, initialWeight, height, birthDate,
             // Circunferências iniciais (opcionais — para pacientes em execução com dados retroativos)
-            circumferenceDate, torax, abdomen, cintura, quadril, panturrilha, braco } = req.body;
+            circumferenceDate, torax, abdomen, cintura, quadril, coxa, panturrilha, braco, antebraco } = req.body;
     if (!name || !email) return res.status(400).json({ error: 'name e email são obrigatórios' });
     if (initialWeight !== undefined && (isNaN(parseFloat(initialWeight)) || parseFloat(initialWeight) <= 0)) {
       return res.status(400).json({ error: 'initialWeight deve ser um número positivo' });
@@ -422,7 +422,7 @@ app.post('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAG
       });
 
       // Salva circunferências iniciais se fornecidas
-      const hasCircumference = torax || abdomen || cintura || quadril || panturrilha || braco;
+      const hasCircumference = torax || abdomen || cintura || quadril || coxa || panturrilha || braco || antebraco;
       if (hasCircumference) {
         const circumDate = circumferenceDate ? new Date(circumferenceDate) : new Date();
         circumDate.setUTCHours(0, 0, 0, 0);
@@ -436,6 +436,8 @@ app.post('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAG
             quadril:     quadril     ? parseFloat(quadril)     : null,
             panturrilha: panturrilha ? parseFloat(panturrilha) : null,
             braco:       braco       ? parseFloat(braco)       : null,
+            coxa:        coxa        ? parseFloat(coxa)        : null,
+            antebraco:   antebraco   ? parseFloat(antebraco)   : null,
           }
         });
       }
@@ -711,7 +713,7 @@ app.get('/api/scores/:cycleId', authRequired, async (req, res) => {
 
 app.post('/api/circumferences', authRequired, requireRole('ADMIN', 'MEDICA', 'NUTRICIONISTA', 'ENFERMAGEM'), async (req, res) => {
   try {
-    const { cycleId, date, torax, abdomen, cintura, quadril, panturrilha, braco, observations } = req.body;
+    const { cycleId, date, torax, abdomen, cintura, quadril, panturrilha, braco, coxa, antebraco, observations } = req.body;
 
     if (!cycleId) return res.status(400).json({ error: 'cycleId é obrigatório' });
     if (!date)    return res.status(400).json({ error: 'date é obrigatória' });
@@ -738,6 +740,8 @@ app.post('/api/circumferences', authRequired, requireRole('ADMIN', 'MEDICA', 'NU
         quadril:      quadril     != null ? parseFloat(quadril)     : null,
         panturrilha:  panturrilha != null ? parseFloat(panturrilha) : null,
         braco:        braco       != null ? parseFloat(braco)       : null,
+        coxa:         coxa        != null ? parseFloat(coxa)        : null,
+        antebraco:    antebraco   != null ? parseFloat(antebraco)   : null,
         observations: observations || null,
         filledById:   req.user.id
       },
@@ -748,6 +752,8 @@ app.post('/api/circumferences', authRequired, requireRole('ADMIN', 'MEDICA', 'NU
         quadril:      quadril     != null ? parseFloat(quadril)     : null,
         panturrilha:  panturrilha != null ? parseFloat(panturrilha) : null,
         braco:        braco       != null ? parseFloat(braco)       : null,
+        coxa:         coxa        != null ? parseFloat(coxa)        : null,
+        antebraco:    antebraco   != null ? parseFloat(antebraco)   : null,
         observations: observations || null,
         filledById:   req.user.id
       }

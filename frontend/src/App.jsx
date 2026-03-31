@@ -2209,7 +2209,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
       {tab==="circunferencias" && (() => {
         const circ = p.circumferenceHistory || [];
         const hist = p.history || [];
-        const COLORS = { torax:S.blue, abdomen:S.red, cintura:S.grn, quadril:S.yel, panturrilha:S.pur, braco:"#E67E22" };
+        const COLORS = { torax:S.blue, abdomen:S.red, cintura:S.grn, quadril:S.yel, coxa:"#8E44AD", panturrilha:S.pur, braco:"#E67E22", antebraco:"#D35400" };
         const lastCirc = circ[circ.length - 1];
         const prevCirc = circ[circ.length - 2];
         const lastBody = hist[hist.length - 1];
@@ -2346,32 +2346,191 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
         ] : [];
         const DONUT_COLORS = [G[400], S.grn];
 
-        // Female SVG silhouette
+        // Female SVG silhouette — separate shapes per body part for proportional rendering
         const FemaleSilhouette = () => {
-          const refB=88, refC=68, refQ=96;
-          const cB=lastCirc?.torax||refB, cC=lastCirc?.cintura||refC, cQ=lastCirc?.quadril||refQ;
-          const sB=Math.max(0.85,Math.min(1.35,cB/refB)), sC=Math.max(0.85,Math.min(1.35,cC/refC)), sQ=Math.max(0.85,Math.min(1.35,cQ/refQ));
-          const cx=100, bw=28*sB, cw=22*sC, qw=30*sQ;
-          const mkPath=(bw,cw,qw)=>{
-            const yn=58,ys=65,yb=95,yw=140,yh=175,yc=195,yk=270,ya=335,yf=345;
-            return `M${cx} 15 C${cx+13} 15 ${cx+17} 25 ${cx+17} 33 C${cx+17} 43 ${cx+13} 50 ${cx} 50 C${cx-13} 50 ${cx-17} 43 ${cx-17} 33 C${cx-17} 25 ${cx-13} 15 ${cx} 15 Z `+
-            `M${cx-5} 52 L${cx+5} 52 L${cx+5} ${yn} L${cx-5} ${yn} Z `+
-            `M${cx-bw} ${ys} C${cx-bw-4} ${ys} ${cx-bw-10} ${ys+5} ${cx-bw-12} ${ys+20} L${cx-bw-14} ${yb-5} Q${cx-bw-16} ${yb} ${cx-bw-14} ${yb+5} L${cx-bw-12} ${yb+10} C${cx-bw-8} ${yb+18} ${cx-bw-4} ${yb+12} ${cx-bw} ${yb+5} `+
-            `C${cx-cw} ${yw-10} ${cx-cw} ${yw} ${cx-cw} ${yw} C${cx-cw-2} ${yw+15} ${cx-qw+2} ${yh-10} ${cx-qw} ${yh} C${cx-qw+2} ${yc-5} ${cx-qw+5} ${yc} ${cx-8} ${yc} Q${cx-3} ${yc+20} ${cx-9} ${yk} C${cx-10} ${yk+20} ${cx-8} ${ya-10} ${cx-7} ${ya} L${cx-11} ${yf} L${cx-2} ${yf} L${cx+2} ${yf} L${cx+11} ${yf} L${cx+7} ${ya} C${cx+8} ${ya-10} ${cx+10} ${yk+20} ${cx+9} ${yk} Q${cx+3} ${yc+20} ${cx+8} ${yc} C${cx+qw-5} ${yc} ${cx+qw-2} ${yc-5} ${cx+qw} ${yh} C${cx+qw-2} ${yh-10} ${cx+cw+2} ${yw+15} ${cx+cw} ${yw} C${cx+cw} ${yw} ${cx+cw} ${yw-10} ${cx+bw} ${yb+5} C${cx+bw+4} ${yb+12} ${cx+bw+8} ${yb+18} ${cx+bw+12} ${yb+10} L${cx+bw+14} ${yb+5} Q${cx+bw+16} ${yb} ${cx+bw+14} ${yb-5} L${cx+bw+12} ${ys+20} C${cx+bw+10} ${ys+5} ${cx+bw+4} ${ys} ${cx+bw} ${ys} Q${cx+5} ${yn+2} ${cx+5} ${yn} L${cx-5} ${yn} Q${cx-5} ${yn+2} ${cx-bw} ${ys} Z`;
+          const lastC = lastCirc;
+          const prevC = prevCirc;
+          // Measurements with sensible defaults
+          const m = {
+            torax: lastC?.torax || 90,
+            cintura: lastC?.cintura || 70,
+            quadril: lastC?.quadril || 98,
+            braco: lastC?.braco || 30,
+            antebraco: lastC?.antebraco || 24,
+            coxa: lastC?.coxa || 56,
+            panturrilha: lastC?.panturrilha || 36,
           };
+          // Ideal references (healthy female)
+          const ideal = { torax:88, cintura:68, quadril:96, braco:28, antebraco:22, coxa:54, panturrilha:34 };
+
+          // Scale: how much wider each body part is vs ideal (clamped 0.9-1.3)
+          const sc = (key) => Math.max(0.9, Math.min(1.3, m[key] / ideal[key]));
+
+          // Center X and body proportions
+          const svgCx = 105;
+
+          // Body part widths (half-width in SVG units)
+          const hw = {
+            head: 13, neck: 5,
+            shoulder: 26 * sc('torax'),
+            bust: 24 * sc('torax'),
+            waist: 18 * sc('cintura'),
+            hip: 27 * sc('quadril'),
+            upperArm: 5.5 * sc('braco'),
+            forearm: 4.5 * sc('antebraco'),
+            thigh: 10 * sc('coxa'),
+            calf: 6 * sc('panturrilha'),
+            ankle: 4, foot: 5,
+          };
+
+          // Ideal widths for dashed outline
+          const ihw = { shoulder: 26, bust: 24, waist: 18, hip: 27, upperArm: 5.5, forearm: 4.5, thigh: 10, calf: 6 };
+
+          // Y positions
+          const yp = { head:12, neck:48, shoulder:60, bust:85, waist:125, hip:160, crotch:180, midThigh:220, knee:260, midCalf:295, ankle:325, foot:335 };
+
+          // Build torso path with smooth curves
+          const torsoPath = (w) => `
+            M${svgCx-w.shoulder} ${yp.shoulder}
+            C${svgCx-w.bust} ${yp.bust-10} ${svgCx-w.bust} ${yp.bust} ${svgCx-w.bust} ${yp.bust}
+            C${svgCx-w.waist-2} ${yp.waist-15} ${svgCx-w.waist} ${yp.waist} ${svgCx-w.waist} ${yp.waist}
+            C${svgCx-w.hip+5} ${yp.hip-15} ${svgCx-w.hip} ${yp.hip} ${svgCx-w.hip} ${yp.hip}
+            L${svgCx-w.hip+4} ${yp.crotch}
+            L${svgCx+w.hip-4} ${yp.crotch}
+            L${svgCx+w.hip} ${yp.hip}
+            C${svgCx+w.hip} ${yp.hip} ${svgCx+w.hip-5} ${yp.hip-15} ${svgCx+w.waist} ${yp.waist}
+            C${svgCx+w.waist} ${yp.waist} ${svgCx+w.waist+2} ${yp.waist-15} ${svgCx+w.bust} ${yp.bust}
+            C${svgCx+w.bust} ${yp.bust} ${svgCx+w.bust} ${yp.bust-10} ${svgCx+w.shoulder} ${yp.shoulder}
+            Q${svgCx+w.neck+2} ${yp.shoulder-2} ${svgCx+w.neck} ${yp.neck}
+            L${svgCx-w.neck} ${yp.neck}
+            Q${svgCx-w.neck-2} ${yp.shoulder-2} ${svgCx-w.shoulder} ${yp.shoulder}
+            Z`;
+
+          const fillActual = `${G[300]}44`;
+          const strokeActual = G[500];
+          const fillIdeal = `${S.grn}15`;
+          const strokeIdeal = S.grn;
+
+          const actualTorso = torsoPath(hw);
+          const idealTorso = torsoPath({...hw, shoulder:ihw.shoulder, bust:ihw.bust, waist:ihw.waist, hip:ihw.hip});
+
+          // Measurement line helper
+          const mLine = (x1,y1,x2,y2) => <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={G[300]} strokeWidth="0.5" strokeDasharray="2,2"/>;
+
+          // Delta badge for labels
+          const dBadge = (cur, prev) => {
+            if (!prev) return null;
+            const d = (cur - prev).toFixed(1);
+            const isGood = parseFloat(d) < 0;
+            return <span style={{ fontSize:7, fontWeight:600, color: isGood ? S.grn : parseFloat(d) > 0 ? S.red : '#aaa', marginLeft:2 }}>{parseFloat(d)>0?'+':''}{d}</span>;
+          };
+
           return (
-            <svg viewBox="0 0 200 360" width="100%" height="100%" style={{ maxHeight:320 }}>
-              <defs>
-                <linearGradient id="relIdealGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.grn} stopOpacity="0.1"/><stop offset="100%" stopColor={S.grn} stopOpacity="0.03"/></linearGradient>
-                <linearGradient id="relActualGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={G[400]} stopOpacity="0.25"/><stop offset="100%" stopColor={G[200]} stopOpacity="0.1"/></linearGradient>
-              </defs>
-              <path d={mkPath(28,22,30)} fill="url(#relIdealGrad)" stroke={S.grn} strokeWidth="0.8" strokeDasharray="3,3" strokeLinejoin="round" opacity="0.5"/>
-              <path d={mkPath(bw,cw,qw)} fill="url(#relActualGrad)" stroke={G[400]} strokeWidth="1" strokeLinejoin="round"/>
-            </svg>
+            <div style={{ width:220, flexShrink:0, position:"relative" }}>
+              <svg viewBox="0 0 210 350" width="210" height="350" style={{ display:"block", margin:"0 auto" }}>
+                <defs>
+                  <linearGradient id="gActual" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={G[300]} stopOpacity="0.3"/>
+                    <stop offset="100%" stopColor={G[200]} stopOpacity="0.1"/>
+                  </linearGradient>
+                </defs>
+
+                {/* HEAD */}
+                <ellipse cx={svgCx} cy={yp.head+15} rx={hw.head} ry={17} fill={fillActual} stroke={strokeActual} strokeWidth="1"/>
+                {/* NECK */}
+                <rect x={svgCx-hw.neck} y={yp.neck} width={hw.neck*2} height={12} rx={3} fill={fillActual} stroke={strokeActual} strokeWidth="0.8"/>
+
+                {/* IDEAL TORSO (dashed green) */}
+                <path d={idealTorso} fill={fillIdeal} stroke={strokeIdeal} strokeWidth="0.8" strokeDasharray="3,3" opacity="0.5"/>
+                {/* ACTUAL TORSO */}
+                <path d={actualTorso} fill="url(#gActual)" stroke={strokeActual} strokeWidth="1"/>
+
+                {/* ARMS */}
+                {['left','right'].map(side => {
+                  const dir = side === 'left' ? -1 : 1;
+                  const sx = svgCx + dir * (hw.shoulder + 2);
+                  const ua = hw.upperArm * 2;
+                  const fa = hw.forearm * 2;
+                  return <g key={side}>
+                    {/* Upper arm */}
+                    <path d={`M${sx} ${yp.shoulder+3} C${sx+dir*2} ${yp.shoulder+15} ${sx+dir*3} ${yp.bust} ${sx+dir*2} ${yp.waist-5} L${sx+dir*(2-ua)} ${yp.waist-5} C${sx+dir*(3-ua)} ${yp.bust} ${sx+dir*(2-ua)} ${yp.shoulder+15} ${sx+dir*(-ua+2)} ${yp.shoulder+3} Z`}
+                      fill={fillActual} stroke={strokeActual} strokeWidth="0.8"/>
+                    {/* Forearm */}
+                    <path d={`M${sx+dir*2} ${yp.waist-3} C${sx+dir*2} ${yp.waist+10} ${sx+dir*1} ${yp.waist+25} ${sx} ${yp.waist+35} L${sx+dir*(-fa)} ${yp.waist+35} C${sx+dir*(1-fa)} ${yp.waist+25} ${sx+dir*(2-fa)} ${yp.waist+10} ${sx+dir*(2-fa)} ${yp.waist-3} Z`}
+                      fill={fillActual} stroke={strokeActual} strokeWidth="0.8"/>
+                    {/* Hand */}
+                    <ellipse cx={sx+dir*(-fa/2+1)} cy={yp.waist+38} rx={3} ry={4} fill={fillActual} stroke={strokeActual} strokeWidth="0.5"/>
+                  </g>;
+                })}
+
+                {/* LEGS */}
+                {['left','right'].map(side => {
+                  const dir = side === 'left' ? -1 : 1;
+                  const lx = svgCx + dir * (hw.hip * 0.35);
+                  const th = hw.thigh;
+                  const ca = hw.calf;
+                  return <g key={`leg_${side}`}>
+                    {/* Thigh */}
+                    <path d={`M${lx-th} ${yp.crotch} C${lx-th} ${yp.midThigh-15} ${lx-ca-1} ${yp.knee-10} ${lx-ca} ${yp.knee} L${lx+ca} ${yp.knee} C${lx+ca+1} ${yp.knee-10} ${lx+th} ${yp.midThigh-15} ${lx+th} ${yp.crotch} Z`}
+                      fill={fillActual} stroke={strokeActual} strokeWidth="0.8"/>
+                    {/* Calf */}
+                    <path d={`M${lx-ca} ${yp.knee+1} C${lx-ca-1} ${yp.midCalf-10} ${lx-4} ${yp.ankle-5} ${lx-4} ${yp.ankle} L${lx+4} ${yp.ankle} C${lx+4} ${yp.ankle-5} ${lx+ca+1} ${yp.midCalf-10} ${lx+ca} ${yp.knee+1} Z`}
+                      fill={fillActual} stroke={strokeActual} strokeWidth="0.8"/>
+                    {/* Foot */}
+                    <ellipse cx={lx} cy={yp.foot} rx={hw.foot} ry={3} fill={fillActual} stroke={strokeActual} strokeWidth="0.5"/>
+                  </g>;
+                })}
+
+                {/* MEASUREMENT LINES */}
+                {mLine(8, yp.bust, svgCx-hw.shoulder-3, yp.bust)}
+                {mLine(svgCx+hw.shoulder+8, yp.shoulder+10, 200, yp.shoulder+10)}
+                {mLine(svgCx+hw.waist+3, yp.waist, 200, yp.waist)}
+                {mLine(svgCx+hw.hip+3, yp.hip, 200, yp.hip)}
+                {mLine(8, yp.midThigh, svgCx-hw.hip*0.35-hw.thigh-2, yp.midThigh)}
+                {mLine(8, yp.midCalf+5, svgCx-hw.hip*0.35-hw.calf-2, yp.midCalf+5)}
+                {mLine(svgCx+hw.shoulder+12, yp.waist+15, 200, yp.waist+15)}
+              </svg>
+
+              {/* LABELS with values and deltas */}
+              <div style={{ position:"absolute", left:0, top: 152, fontSize:9, fontWeight:700, color:G[800], textAlign:"right", width:30 }}>
+                {m.braco}{dBadge(m.braco, prevC?.braco)}
+                <div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Braco</div>
+              </div>
+              <div style={{ position:"absolute", right:0, top: 62, fontSize:9, fontWeight:700, color:G[800] }}>
+                {m.torax}{dBadge(m.torax, prevC?.torax)}
+                <div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Torax</div>
+              </div>
+              <div style={{ position:"absolute", right:0, top: 118, fontSize:9, fontWeight:700, color:G[800] }}>
+                {m.cintura}{dBadge(m.cintura, prevC?.cintura)}
+                <div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Cintura</div>
+              </div>
+              <div style={{ position:"absolute", right:0, top: 152, fontSize:9, fontWeight:700, color:G[800] }}>
+                {m.quadril}{dBadge(m.quadril, prevC?.quadril)}
+                <div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Quadril</div>
+              </div>
+              <div style={{ position:"absolute", left:0, top: 210, fontSize:9, fontWeight:700, color:G[800], textAlign:"right", width:30 }}>
+                {m.coxa}{dBadge(m.coxa, prevC?.coxa)}
+                <div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Coxa</div>
+              </div>
+              <div style={{ position:"absolute", left:0, top: 282, fontSize:9, fontWeight:700, color:G[800], textAlign:"right", width:30 }}>
+                {m.panturrilha}{dBadge(m.panturrilha, prevC?.panturrilha)}
+                <div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Pant.</div>
+              </div>
+              <div style={{ position:"absolute", right:0, top: 190, fontSize:9, fontWeight:700, color:G[800] }}>
+                {m.antebraco}{dBadge(m.antebraco, prevC?.antebraco)}
+                <div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Antebraco</div>
+              </div>
+
+              {/* Legend */}
+              <div style={{ display:"flex", gap:12, justifyContent:"center", marginTop:4, fontSize:8, color:"#aaa" }}>
+                <span style={{ display:"flex", alignItems:"center", gap:3 }}><span style={{ width:14, height:2, background:G[500], display:"inline-block" }}/>Atual</span>
+                <span style={{ display:"flex", alignItems:"center", gap:3 }}><span style={{ width:14, height:0, borderTop:`1.5px dashed ${S.grn}`, display:"inline-block" }}/>Ideal</span>
+              </div>
+            </div>
           );
         };
 
-        // Measurement labels for silhouette
+        // Measurement labels for silhouette (legacy — kept for compatibility)
         const SilLabel = ({ label, val, prev, top, left, right, align }) => (
           <div style={{ position:"absolute", top, left, right, textAlign:align||"left", minWidth:70 }}>
             <div style={{ fontSize:9, color:G[500], fontWeight:600 }}>{label}</div>
@@ -2397,7 +2556,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
         const chartData = circ.map((c, i) => ({
           label: safeFmt(c.date, 'dd/MM/yy'),
           torax: c.torax, abdomen: c.abdomen, cintura: c.cintura,
-          quadril: c.quadril, panturrilha: c.panturrilha, braco: c.braco,
+          quadril: c.quadril, coxa: c.coxa, panturrilha: c.panturrilha, braco: c.braco, antebraco: c.antebraco,
         }));
 
         const noData = !curWeight && circ.length === 0;
@@ -2519,16 +2678,8 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                 <div style={cardS}>
                   {secTitle("Silhueta e Perimetros")}
                   <div style={{ display:"flex", gap:16, flexDirection:mob?"column":"row" }}>
-                    {/* Silhouette */}
-                    <div style={{ position:"relative", width:mob?"100%":200, minHeight:340 }}>
-                      <FemaleSilhouette/>
-                      <SilLabel label="Braco" val={lastCirc.braco} prev={prevCirc?.braco} top="22%" right="60%" align="right"/>
-                      <SilLabel label="Torax" val={lastCirc.torax} prev={prevCirc?.torax} top="32%" left="58%"/>
-                      <SilLabel label="Cintura" val={lastCirc.cintura} prev={prevCirc?.cintura} top="44%" right="58%" align="right"/>
-                      <SilLabel label="Quadril" val={lastCirc.quadril} prev={prevCirc?.quadril} top="52%" left="58%"/>
-                      <SilLabel label="Coxa" val={lastCirc.panturrilha} prev={prevCirc?.panturrilha} top="68%" right="58%" align="right"/>
-                      <SilLabel label="Panturrilha" val={lastCirc.panturrilha} prev={prevCirc?.panturrilha} top="82%" left="58%"/>
-                    </div>
+                    {/* Silhouette — self-contained with labels */}
+                    <FemaleSilhouette/>
                     {/* Perimetros e Razoes */}
                     <div style={{ flex:1, display:"flex", flexDirection:"column", gap:10 }}>
                       {cintura != null && (
@@ -4720,13 +4871,15 @@ const CIRC_FIELDS = [
   { key:"abdomen",     label:"Abdômen",     ph:"90.0"  },
   { key:"cintura",     label:"Cintura",     ph:"85.0"  },
   { key:"quadril",     label:"Quadril",     ph:"100.0" },
+  { key:"coxa",        label:"Coxa",        ph:"55.0"  },
   { key:"panturrilha", label:"Panturrilha", ph:"38.0"  },
   { key:"braco",       label:"Braço",       ph:"32.0"  },
+  { key:"antebraco",   label:"Antebraço",   ph:"24.0"  },
 ];
 
 function CircumferenceModal({ p, onClose, onSave, onLog }) {
   const [date, setDate]   = useState(format(new Date(),'yyyy-MM-dd'));
-  const [vals, setVals]   = useState({ torax:"", abdomen:"", cintura:"", quadril:"", panturrilha:"", braco:"" });
+  const [vals, setVals]   = useState({ torax:"", abdomen:"", cintura:"", quadril:"", coxa:"", panturrilha:"", braco:"", antebraco:"" });
   const [body, setBody]   = useState({ peso:"", gordura:"", massaMagra:"", massaGorda:"" });
   const [obs,  setObs]    = useState("");
   const [err,  setErr]    = useState("");
@@ -4735,7 +4888,7 @@ function CircumferenceModal({ p, onClose, onSave, onLog }) {
   // Pré-popula com a última medição do paciente (se existir)
   useEffect(() => {
     const last = (p.circumferenceHistory || []).slice(-1)[0];
-    if (last) setVals({ torax: last.torax||"", abdomen: last.abdomen||"", cintura: last.cintura||"", quadril: last.quadril||"", panturrilha: last.panturrilha||"", braco: last.braco||"" });
+    if (last) setVals({ torax: last.torax||"", abdomen: last.abdomen||"", cintura: last.cintura||"", quadril: last.quadril||"", coxa: last.coxa||"", panturrilha: last.panturrilha||"", braco: last.braco||"", antebraco: last.antebraco||"" });
   }, []);
 
   const hasValue = Object.values(vals).some(v => v && parseFloat(v) > 0);
@@ -4939,6 +5092,8 @@ function NewLeadModal({ onClose, onSave }) {
   const [quadril, setQuadril]             = useState("");
   const [panturrilha, setPanturrilha]     = useState("");
   const [braco, setBraco]                 = useState("");
+  const [coxa, setCoxa]                   = useState("");
+  const [antebraco, setAntebraco]         = useState("");
 
   const handleSave = () => {
     const w = parseFloat(peso);
@@ -4952,7 +5107,7 @@ function NewLeadModal({ onClose, onSave }) {
       history: [], scoreHistory: [], circumferenceHistory: [],
       nr: addDays(new Date(), 7).toISOString(), eng: 100,
       // Circunferências iniciais (enviadas ao backend junto com o paciente)
-      ...(showCirc && { circumferenceDate: circDate, torax, abdomen, cintura, quadril, panturrilha, braco })
+      ...(showCirc && { circumferenceDate: circDate, torax, abdomen, cintura, quadril, coxa, panturrilha, braco, antebraco })
     };
     onSave(np);
     onClose();
@@ -4963,8 +5118,10 @@ function NewLeadModal({ onClose, onSave }) {
     { label:"Abdômen",    val:abdomen,     set:setAbdomen,     ph:"90.0"  },
     { label:"Cintura",    val:cintura,     set:setCintura,     ph:"85.0"  },
     { label:"Quadril",    val:quadril,     set:setQuadril,     ph:"100.0" },
+    { label:"Coxa",       val:coxa,        set:setCoxa,        ph:"55.0"  },
     { label:"Panturrilha",val:panturrilha, set:setPanturrilha, ph:"38.0"  },
     { label:"Braço",      val:braco,       set:setBraco,       ph:"32.0"  },
+    { label:"Antebraço",  val:antebraco,   set:setAntebraco,   ph:"24.0"  },
   ];
 
   return (
@@ -5255,6 +5412,8 @@ function normalizePatient(p) {
           quadril:      c.quadril     != null ? Number(c.quadril)     : null,
           panturrilha:  c.panturrilha != null ? Number(c.panturrilha) : null,
           braco:        c.braco       != null ? Number(c.braco)       : null,
+          coxa:         c.coxa        != null ? Number(c.coxa)        : null,
+          antebraco:    c.antebraco   != null ? Number(c.antebraco)   : null,
           observations: c.observations || null,
         }))
       : [],

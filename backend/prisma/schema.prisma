@@ -155,13 +155,15 @@ model Circumference {
   // Data da medição (normalizada para meia-noite UTC para evitar duplicatas no mesmo dia)
   date        DateTime
 
-  // As 6 medidas em centímetros
+  // Medidas em centímetros
   torax       Float?   // Tórax (cm)
   abdomen     Float?   // Abdômen (cm)
   cintura     Float?   // Cintura (cm)
   quadril     Float?   // Quadril (cm)
   panturrilha Float?   // Panturrilha (cm)
   braco       Float?   // Braço (cm)
+  coxa        Float?   // Coxa (cm)
+  antebraco   Float?   // Antebraço (cm)
 
   // Quem registrou
   filledById  String?
