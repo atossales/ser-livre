@@ -1488,13 +1488,31 @@ app.put('/api/users/:id/email', authRequired, async (req, res) => {
     if (!email || !email.includes('@')) {
       return res.status(400).json({ error: 'Email inválido' });
     }
-    // Update in Supabase Auth (email_confirm: true pula verificação)
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.params.id, { email, email_confirm: true });
-    if (error) return res.status(400).json({ error: error.message });
+    // Verifica se o email é o mesmo
+    const currentUser = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (currentUser && currentUser.email === email.trim().toLowerCase()) {
+      return res.json({ message: 'Email já está atualizado' });
+    }
+    // Verifica se o email já está em uso por outro usuário
+    const existing = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+    if (existing && existing.id !== req.params.id) {
+      return res.status(400).json({ error: 'Este email já está em uso por outro usuário' });
+    }
+    // Update in Supabase Auth
+    const { data: updatedAuth, error } = await supabaseAdmin.auth.admin.updateUserById(req.params.id, {
+      email: email.trim().toLowerCase(),
+      email_confirm: true,
+    });
+    if (error) {
+      console.error('[EMAIL-UPDATE] Supabase error:', error.message, error);
+      return res.status(400).json({ error: error.message });
+    }
     // Update in Prisma
-    await prisma.user.update({ where: { id: req.params.id }, data: { email } });
+    await prisma.user.update({ where: { id: req.params.id }, data: { email: email.trim().toLowerCase() } });
+    console.log(`[EMAIL-UPDATE] Email atualizado para ${email} (user: ${req.params.id})`);
     res.json({ message: 'Email atualizado com sucesso' });
   } catch (err) {
+    console.error('[EMAIL-UPDATE] Error:', err.message);
     res.status(400).json({ error: err.message });
   }
 });
