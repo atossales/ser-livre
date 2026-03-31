@@ -5,3 +5,4 @@ dist/
 .env.local
 *.log
 deploy.sh
+backend/.env
