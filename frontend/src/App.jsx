@@ -685,182 +685,686 @@ function RelTab({ p, mob, plan, met, be, mn }) {
       </div>
 
       {/* Conteúdo do relatório (exportável) */}
-      <div id={`rel-${p.id}`} style={{ display:"flex", flexDirection:"column", gap:10 }}>
+      <div id={`rel-${p.id}`} style={{ display:"flex", flexDirection:"column", gap:0, background:"#fff", fontFamily:"'Segoe UI',system-ui,sans-serif" }}>
 
-        {/* Cabeçalho */}
-        <div style={{ background:`linear-gradient(135deg,${G[700]},${G[900]})`, borderRadius:12, padding:"20px 18px", color:"#fff", pageBreakInside:"avoid" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:12 }}>
-            <img src="https://i.imgur.com/iI43uBa.png" alt="Instituto Dra. Mariana Wogel"
-              onError={e=>{ e.target.src="https://i.imgur.com/iI43uBa.jpg"; }}
-              style={{ width:52, height:52, borderRadius:8, objectFit:"contain", background:"rgba(255,255,255,0.1)", padding:4 }}/>
-            <div>
-              <div style={{ fontSize:11, opacity:0.5 }}>Programa Ser Livre</div>
-              <div style={{ fontSize:14, fontWeight:700, opacity:0.9 }}>Instituto Dra. Mariana Wogel</div>
-            </div>
-          </div>
-          <div style={{ fontSize:19, fontWeight:700 }}>Relatório Clínico</div>
-          <div style={{ fontSize:12, opacity:0.6, marginTop:2 }}>{p.name} · Emitido em {fmt(TODAY)}/{TODAY.getFullYear()}</div>
-          {(relDe||relAte) && <div style={{ fontSize:10, opacity:0.4, marginTop:2 }}>Período: {relDe||"início"} → {relAte||"hoje"}</div>}
-        </div>
+        {/* ═══════════ PAGE 1: Análise Global ═══════════ */}
+        {(() => {
+          const heightM = (p.height || 165) / 100;
+          const weight = p.cw || p.iw || 70;
+          const age = calcAge(p.birthDate);
+          const leanMass = mmLast;
+          const fatMass = mgLast;
+          const totalMass = (leanMass + fatMass) || weight;
+          const fatPct = totalMass > 0 ? (fatMass / totalMass * 100) : 0;
+          const leanPct = totalMass > 0 ? (leanMass / totalMass * 100) : 0;
+          const imc = heightM > 0 ? (weight / (heightM * heightM)) : 0;
+          const imm = heightM > 0 ? (leanMass / (heightM * heightM)) : 0;
+          const img = heightM > 0 ? (fatMass / (heightM * heightM)) : 0;
+          const waterL = (leanMass * 0.723);
+          const waterPct = weight > 0 ? (waterL / weight * 100) : 0;
+          const ger = 500 + (22 * leanMass);
 
-        {/* Dados da ficha */}
-        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
-          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>📋 Dados do paciente</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"6px 20px", fontSize:12 }}>
-            <div><span style={{ color:"#aaa" }}>Nome: </span><strong>{p.name}</strong></div>
-            <div><span style={{ color:"#aaa" }}>Plano: </span><strong>{plan?.name}</strong></div>
-            <div><span style={{ color:"#aaa" }}>Nascimento: </span>{p.birthDate} ({calcAge(p.birthDate)} anos)</div>
-            <div><span style={{ color:"#aaa" }}>Telefone: </span>{p.phone}</div>
-            <div><span style={{ color:"#aaa" }}>Início do programa: </span>{p.sd}</div>
-            <div><span style={{ color:"#aaa" }}>Ciclo/Semana: </span>C{p.cycle} — S{p.week}/16</div>
-          </div>
-        </div>
+          // Previous values
+          const prevH = pHist.length >= 2 ? pHist[pHist.length - 2] : null;
+          const prevWeight = prevH?.weight || p.iw || weight;
+          const prevLean = prevH?.massaMagra || 0;
+          const prevFat = prevH?.massaGordura || 0;
+          const prevTotal = (prevLean + prevFat) || prevWeight;
+          const prevFatPct = prevTotal > 0 ? (prevFat / prevTotal * 100) : 0;
+          const prevImm = heightM > 0 ? (prevLean / (heightM * heightM)) : 0;
+          const prevImg = heightM > 0 ? (prevFat / (heightM * heightM)) : 0;
 
-        {/* Evolução de peso */}
-        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
-          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>⚖️ Evolução de peso</div>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:10 }}>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.iw}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Peso inicial</div></div>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:G[50], borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{p.cw}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Peso atual</div></div>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>-{(p.iw-p.cw).toFixed(1)}kg</div><div style={{ fontSize:9, color:"#aaa" }}>Perdido</div></div>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:S.grnBg, borderRadius:8 }}><div style={{ fontSize:16, fontWeight:700, color:S.grn }}>{p.iw>0?(((p.iw-p.cw)/p.iw)*100).toFixed(1):"0.0"}%</div><div style={{ fontSize:9, color:"#aaa" }}>Redução</div></div>
-          </div>
-          {histFilt.length > 0 && (
-            <div style={{ overflowX:"auto" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:400 }}>
-                <thead><tr>{["Data","Peso","MM (kg)","%MM","MG (kg)","%MG"].map(h=><th key={h} style={{ textAlign:"left", padding:"5px 7px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600, textTransform:"uppercase" }}>{h}</th>)}</tr></thead>
-                <tbody>{[...histFilt].reverse().map((h,i)=>{ const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return <tr key={i} style={{ background:i===0?G[50]:"transparent" }}><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10 }}>{safeFmt(h.date,"dd/MM/yy")}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{h.weight.toFixed(1)}kg</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0).toFixed(1)}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.blue }}>{(h.massaMagra||0)>0?(h.massaMagra/t*100).toFixed(0):"-"}%</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0).toFixed(1)}</td><td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:S.yel }}>{(h.massaGordura||0)>0?(h.massaGordura/t*100).toFixed(0):"-"}%</td></tr>; })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+          const deltaW = weight - prevWeight;
+          const deltaFat = fatMass - prevFat;
+          const deltaLean = leanMass - prevLean;
+          const deltaFatPct = fatPct - prevFatPct;
+          const deltaImm = imm - prevImm;
+          const deltaImg = img - prevImg;
 
-        {/* Composição corporal atual */}
-        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
-          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>🧬 Composição corporal atual</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:S.blueBg, borderRadius:8 }}><div style={{ fontSize:18, fontWeight:700, color:S.blue }}>{mmLast.toFixed(1)}kg</div><div style={{ fontSize:10, color:S.blue, fontWeight:600 }}>Massa Magra</div><div style={{ fontSize:10, color:"#aaa" }}>{(mmLast/totComp*100).toFixed(1)}% do total</div></div>
-            <div style={{ textAlign:"center", padding:"10px 8px", background:S.yelBg, borderRadius:8 }}><div style={{ fontSize:18, fontWeight:700, color:S.yel }}>{mgLast.toFixed(1)}kg</div><div style={{ fontSize:10, color:S.yel, fontWeight:600 }}>Massa Gorda</div><div style={{ fontSize:10, color:"#aaa" }}>{(mgLast/totComp*100).toFixed(1)}% do total</div></div>
-          </div>
-          <div style={{ height:7, borderRadius:4, overflow:"hidden", display:"flex" }}>
-            <div style={{ width:`${(mmLast/totComp*100).toFixed(1)}%`, background:S.blue }}/>
-            <div style={{ width:`${(mgLast/totComp*100).toFixed(1)}%`, background:S.yel }}/>
-          </div>
-        </div>
-
-        {/* Circunferências */}
-        {(p.circumferenceHistory||[]).length > 0 && (() => {
-          const circFilt = relDe||relAte ? (p.circumferenceHistory||[]).filter(c => {
+          // Circumference data
+          const circAll = p.circumferenceHistory || [];
+          const circFilt = relDe||relAte ? circAll.filter(c => {
             const d = new Date(c.date);
             if(relDe && d < new Date(relDe)) return false;
             if(relAte && d > new Date(relAte)) return false;
             return true;
-          }) : (p.circumferenceHistory||[]);
-          const lastC = circFilt[circFilt.length-1];
-          const prevC = circFilt[circFilt.length-2];
-          return circFilt.length > 0 ? (
-            <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
-              <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>📏 Circunferências corporais</div>
-              {/* Cards última medição */}
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6, marginBottom:10 }}>
-                {CIRC_FIELDS.map(f => {
-                  const val  = lastC?.[f.key];
-                  const pval = prevC?.[f.key];
-                  const diff = (val!=null && pval!=null) ? (val - pval).toFixed(1) : null;
-                  return (
-                    <div key={f.key} style={{ textAlign:"center", padding:"8px 6px", background:G[50], borderRadius:8 }}>
-                      <div style={{ fontSize:13, fontWeight:700, color:G[700] }}>{val!=null?`${val}cm`:"—"}</div>
-                      <div style={{ fontSize:9, color:"#aaa", fontWeight:600 }}>{f.label}</div>
-                      {diff!==null && <div style={{ fontSize:9, color:parseFloat(diff)<0?S.grn:parseFloat(diff)>0?S.red:"#aaa", fontWeight:600 }}>{parseFloat(diff)>0?`+${diff}`:diff}cm</div>}
+          }) : circAll;
+          const lastC = circFilt[circFilt.length - 1];
+          const prevC = circFilt.length >= 2 ? circFilt[circFilt.length - 2] : null;
+          const cintura = lastC?.cintura || 0;
+          const quadril = lastC?.quadril || 0;
+          const prevCintura = prevC?.cintura || 0;
+          const prevQuadril = prevC?.quadril || 0;
+          const rce = heightM > 0 ? (cintura / 100 / heightM) : 0;
+          const rcq = quadril > 0 ? (cintura / quadril) : 0;
+          const prevRce = heightM > 0 ? (prevCintura / 100 / heightM) : 0;
+          const prevRcq = prevQuadril > 0 ? (prevCintura / prevQuadril) : 0;
+          const iconicidade = cintura > 0 && weight > 0 && heightM > 0
+            ? ((cintura / 100) / (0.109 * Math.sqrt(weight / heightM)))
+            : 0;
+          const prevIconicidade = prevCintura > 0 && prevWeight > 0 && heightM > 0
+            ? ((prevCintura / 100) / (0.109 * Math.sqrt(prevWeight / heightM)))
+            : 0;
+
+          // IMC classification
+          const imcClass = imc < 18.5 ? { l:"Baixo peso", c:"#3498DB" }
+            : imc < 25 ? { l:"Eutrofia", c:S.grn }
+            : imc < 30 ? { l:"Sobrepeso", c:S.yel }
+            : { l:"Obesidade", c:S.red };
+
+          // Fat% classification (female)
+          const fatClass = fatPct < 15 ? { l:"Atenção", c:"#3498DB" }
+            : fatPct <= 25 ? { l:"Baixo risco", c:S.grn }
+            : fatPct <= 32 ? { l:"Risco moderado", c:S.yel }
+            : { l:"Alto risco", c:S.red };
+
+          // IMM classification (female)
+          const immClass = imm < 15 ? { l:"Baixo", c:S.red }
+            : imm <= 18 ? { l:"Adequado", c:S.grn }
+            : { l:"Alto", c:S.blue };
+
+          // IMG classification (female)
+          const imgClass = img < 5 ? { l:"Baixo", c:S.blue }
+            : img <= 9 ? { l:"Adequado", c:S.grn }
+            : { l:"Alto", c:S.red };
+
+          // Cintura classification (female)
+          const cintClass = cintura < 80 ? { l:"Baixo risco", c:S.grn }
+            : cintura <= 88 ? { l:"Risco moderado", c:S.yel }
+            : { l:"Alto risco", c:S.red };
+
+          // RCE classification
+          const rceClass = rce < 0.5 ? { l:"Baixo risco", c:S.grn }
+            : rce <= 0.6 ? { l:"Risco moderado", c:S.yel }
+            : { l:"Alto risco", c:S.red };
+
+          // RCQ classification (female)
+          const rcqClass = rcq < 0.85 ? { l:"Adequado", c:S.grn }
+            : { l:"Inadequado", c:S.red };
+
+          // Conicidade classification (female)
+          const conicClass = iconicidade < 1.18 ? { l:"Adequado", c:S.grn }
+            : iconicidade <= 1.22 ? { l:"Moderado", c:S.yel }
+            : { l:"Inadequado", c:S.red };
+
+          // IMM grid position
+          const immRow = imm < 15 ? 0 : imm <= 18 ? 1 : 2;
+          const imgCol = img < 5 ? 0 : img <= 9 ? 1 : 2;
+
+          // Delta badge helper
+          const DeltaBadge = ({ val, invert=false, unit="kg" }) => {
+            if (val == null || isNaN(val) || val === 0) return null;
+            const good = invert ? val > 0 : val < 0;
+            const color = good ? S.grn : S.red;
+            const bg = good ? S.grnBg : S.redBg;
+            return <span style={{ display:"inline-flex", alignItems:"center", padding:"1px 6px", borderRadius:10, fontSize:9, fontWeight:600, color, background:bg, marginLeft:4 }}>{val > 0 ? "+" : ""}{val.toFixed(1)}{unit}</span>;
+          };
+
+          // Section title helper
+          const SectionTitle = ({ children }) => (
+            <div style={{ borderLeft:`4px solid ${G[500]}`, background:G[50], padding:"8px 12px", marginBottom:10, pageBreakInside:"avoid" }}>
+              <span style={{ fontSize:13, fontWeight:700, color:G[800] }}>{children}</span>
+            </div>
+          );
+
+          // Classification bar helper
+          const ClassBar = ({ zones, value, prevValue, height=14 }) => {
+            const total = zones.reduce((s, z) => s + z.width, 0);
+            let cumPct = 0;
+            const markerPos = (() => {
+              let pos = 0;
+              for (const z of zones) {
+                const zonePct = (z.width / total) * 100;
+                if (value <= z.max) {
+                  const within = z.max === z.min ? 0.5 : (value - z.min) / (z.max - z.min);
+                  return pos + within * zonePct;
+                }
+                pos += zonePct;
+              }
+              return 100;
+            })();
+            const prevPos = prevValue != null ? (() => {
+              let pos = 0;
+              for (const z of zones) {
+                const zonePct = (z.width / total) * 100;
+                if (prevValue <= z.max) {
+                  const within = z.max === z.min ? 0.5 : (prevValue - z.min) / (z.max - z.min);
+                  return pos + within * zonePct;
+                }
+                pos += zonePct;
+              }
+              return 100;
+            })() : null;
+            return (
+              <div style={{ position:"relative", marginTop:6, marginBottom:prevValue != null ? 20 : 6 }}>
+                <div style={{ display:"flex", height, borderRadius:4, overflow:"hidden" }}>
+                  {zones.map((z, i) => (
+                    <div key={i} style={{ flex:z.width, background:z.color, position:"relative" }}>
+                      <span style={{ position:"absolute", bottom:-14, left:"50%", transform:"translateX(-50%)", fontSize:8, color:"#999", whiteSpace:"nowrap" }}>{z.label}</span>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
+                {/* Current marker */}
+                <div style={{ position:"absolute", top:-4, left:`${Math.min(Math.max(markerPos, 1), 99)}%`, transform:"translateX(-50%)" }}>
+                  <div style={{ width:0, height:0, borderLeft:"5px solid transparent", borderRight:"5px solid transparent", borderTop:`6px solid ${G[800]}` }} />
+                </div>
+                {/* Previous marker */}
+                {prevPos != null && (
+                  <div style={{ position:"absolute", top:-4, left:`${Math.min(Math.max(prevPos, 1), 99)}%`, transform:"translateX(-50%)" }}>
+                    <div style={{ width:6, height:6, borderRadius:"50%", background:"#ccc", border:"1px solid #999" }} />
+                  </div>
+                )}
               </div>
-              {/* Tabela histórica de circunferências */}
-              {circFilt.length > 1 && (
-                <div style={{ overflowX:"auto" }}>
-                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:10, minWidth:380 }}>
-                    <thead><tr>{["Data","Tórax","Abdômen","Cintura","Quadril","Panturrilha","Braço"].map(h=><th key={h} style={{ textAlign:"left", padding:"4px 6px", borderBottom:`1px solid ${G[200]}`, fontSize:8, color:G[600], fontWeight:600, textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>)}</tr></thead>
-                    <tbody>{[...circFilt].reverse().map((c,i)=>(
-                      <tr key={c.id||i} style={{ background:i===0?G[50]:"transparent" }}>
-                        <td style={{ padding:"4px 6px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:9, whiteSpace:"nowrap" }}>{safeFmt(c.date,"dd/MM/yy")}</td>
-                        {CIRC_FIELDS.map(f=><td key={f.key} style={{ padding:"4px 6px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400 }}>{c[f.key]!=null?`${c[f.key]}cm`:"—"}</td>)}
+            );
+          };
+
+          // Donut data
+          const donutData = [
+            { name:"Massa gorda", value:parseFloat(fatPct.toFixed(1)), fill:G[500] },
+            { name:"Massa magra", value:parseFloat(leanPct.toFixed(1)), fill:"#27AE60" }
+          ];
+
+          // Ser Livre Score calculation
+          const scoreIndicators = [];
+          // Fat% score (0-100): 15-25 is ideal for women
+          if (fatPct > 0) scoreIndicators.push(fatPct <= 25 ? 100 : fatPct <= 32 ? 60 : fatPct < 15 ? 50 : 20);
+          if (img > 0) scoreIndicators.push(img <= 9 ? 100 : img <= 13 ? 60 : 20);
+          if (imm > 0) scoreIndicators.push(imm >= 15 && imm <= 18 ? 100 : imm >= 13 ? 60 : 20);
+          if (cintura > 0) {
+            scoreIndicators.push(rce < 0.5 ? 100 : rce <= 0.6 ? 60 : 20);
+            if (quadril > 0) scoreIndicators.push(rcq < 0.85 ? 100 : 20);
+            if (iconicidade > 0) scoreIndicators.push(iconicidade < 1.18 ? 100 : iconicidade <= 1.22 ? 60 : 20);
+          }
+          const serLivreScore = scoreIndicators.length > 0
+            ? Math.round(scoreIndicators.reduce((a, b) => a + b, 0) / scoreIndicators.length)
+            : 0;
+          const scoreColor = serLivreScore >= 80 ? S.grn : serLivreScore >= 50 ? S.yel : S.red;
+
+          // Mini chart helper
+          const MiniChart = ({ data, dataKey, color="#2980B9", height:h=60 }) => (
+            <div style={{ width:"100%", height:h }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data} margin={{ top:2, right:2, bottom:2, left:2 }}>
+                  <defs>
+                    <linearGradient id={`grad-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={color} stopOpacity={0.3}/>
+                      <stop offset="100%" stopColor={color} stopOpacity={0.05}/>
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={1.5} fill={`url(#grad-${dataKey})`} dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          );
+
+          return (
+            <>
+            {/* PAGE 1 */}
+            <div style={{ padding:"18px 16px", pageBreakInside:"avoid" }}>
+
+              {/* Header */}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", border:`1px solid ${G[300]}`, borderRadius:8, padding:"14px 16px", marginBottom:14, background:"#fff" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <img src="https://i.imgur.com/iI43uBa.png" alt="Logo" onError={e=>{ e.target.src="https://i.imgur.com/iI43uBa.jpg"; }} style={{ width:48, height:48, borderRadius:6, objectFit:"contain" }}/>
+                  <div>
+                    <div style={{ fontSize:14, fontWeight:700, color:G[800] }}>Instituto Dra. Mariana Wogel</div>
+                    <div style={{ fontSize:10, color:G[500] }}>Programa Ser Livre</div>
+                  </div>
+                </div>
+                <div style={{ textAlign:"right" }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:G[800], textTransform:"uppercase" }}>{p.name}</div>
+                  <div style={{ fontSize:10, color:"#888" }}>Feminino | {age} anos | {heightM.toFixed(2)}m</div>
+                  <div style={{ fontSize:10, color:"#888" }}>Avaliacao em: {format(new Date(), "dd/MM/yyyy")}</div>
+                </div>
+              </div>
+
+              {/* Analise global da composicao corporal */}
+              <SectionTitle>Analise global da composicao corporal</SectionTitle>
+              <div style={{ display:"flex", gap:16, marginBottom:16, flexWrap:"wrap" }}>
+                {/* Donut chart */}
+                <div style={{ width:180, height:180, flexShrink:0 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={donutData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={2} dataKey="value" startAngle={90} endAngle={-270}
+                        label={({ name, value }) => `${value}%`} labelLine={false}>
+                        {donutData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                {/* Info list */}
+                <div style={{ flex:1, fontSize:11, lineHeight:1.8, minWidth:200 }}>
+                  <div style={{ marginBottom:4 }}>
+                    <strong>Peso:</strong> {weight.toFixed(1)} kg <DeltaBadge val={deltaW} />
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:4, marginBottom:2 }}>
+                    <span style={{ display:"inline-block", width:10, height:10, background:G[500], borderRadius:2 }}/>
+                    <strong>Massa gorda:</strong> {fatMass.toFixed(1)} kg <DeltaBadge val={deltaFat} />
+                  </div>
+                  <div style={{ fontSize:9, color:"#888", marginLeft:14, marginBottom:4 }}>Representa toda a massa de gordura presente no corpo.</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:4, marginBottom:2 }}>
+                    <span style={{ display:"inline-block", width:10, height:10, background:S.grn, borderRadius:2 }}/>
+                    <strong>Massa magra:</strong> {leanMass.toFixed(1)} kg <DeltaBadge val={deltaLean} invert />
+                  </div>
+                  <div style={{ fontSize:9, color:"#888", marginLeft:14, marginBottom:4 }}>Representa o conjunto de musculos, ossos, orgaos e agua.</div>
+                  <div style={{ marginBottom:2 }}>
+                    <span style={{ color:S.blue }}>&#9679;</span> <strong>Agua corporal:</strong> {waterL.toFixed(1)} L ({waterPct.toFixed(1)}% do peso)
+                  </div>
+                  <div>
+                    <span style={{ color:S.yel }}>&#9679;</span> <strong>Gasto energetico de repouso:</strong> {ger.toFixed(0)} kcal
+                  </div>
+                </div>
+              </div>
+
+              {/* IMC */}
+              <SectionTitle>Indice de massa corporal (IMC)</SectionTitle>
+              <div style={{ marginBottom:16, padding:"0 4px" }}>
+                <div style={{ fontSize:12, marginBottom:4 }}>
+                  <strong style={{ fontSize:18, color:imcClass.c }}>{imc.toFixed(1)}</strong> kg/m2 — <span style={{ color:imcClass.c, fontWeight:600 }}>{imcClass.l}</span>
+                </div>
+                <div style={{ fontSize:9, color:"#888", marginBottom:6 }}>Baixo peso {'<'}18.5 | Eutrofia 18.5-24.9 | Sobrepeso 25-29.9 | Obesidade {'>'}=30</div>
+                <ClassBar zones={[
+                  { min:0, max:18.5, width:18.5, color:"#85C1E9", label:"Baixo peso" },
+                  { min:18.5, max:25, width:6.5, color:"#82E0AA", label:"Eutrofia" },
+                  { min:25, max:30, width:5, color:"#F9E79F", label:"Sobrepeso" },
+                  { min:30, max:50, width:20, color:"#F1948A", label:"Obesidade" }
+                ]} value={imc} />
+              </div>
+
+              {/* Percentual de gordura */}
+              <SectionTitle>Percentual de gordura</SectionTitle>
+              <div style={{ marginBottom:16, padding:"0 4px" }}>
+                <div style={{ fontSize:12, marginBottom:4 }}>
+                  <strong style={{ fontSize:18, color:fatClass.c }}>{fatPct.toFixed(1)}%</strong> <DeltaBadge val={deltaFatPct} unit="%" />
+                </div>
+                <div style={{ fontSize:9, color:"#888", marginBottom:6 }}>Avaliacao do percentual de gordura corporal com base em referencias para mulheres.</div>
+                <ClassBar zones={[
+                  { min:0, max:15, width:15, color:"#85C1E9", label:"Atencao <15%" },
+                  { min:15, max:25, width:10, color:"#82E0AA", label:"Baixo risco 15-25%" },
+                  { min:25, max:32, width:7, color:"#F9E79F", label:"Moderado 25-32%" },
+                  { min:32, max:55, width:23, color:"#F1948A", label:"Alto risco >32%" }
+                ]} value={fatPct} prevValue={prevH ? prevFatPct : null} />
+                {prevH && (
+                  <div style={{ fontSize:8, color:"#aaa", marginTop:16, display:"flex", gap:12 }}>
+                    <span>&#9660; Atual</span> <span>&#9679; Anterior</span>
+                  </div>
+                )}
+              </div>
+
+              {/* IMM and IMG side by side */}
+              <SectionTitle>Indice de massa magra (IMM) e Indice de massa gorda (IMG)</SectionTitle>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+                {/* IMM */}
+                <div style={{ border:`1px solid ${G[200]}`, borderRadius:8, padding:10 }}>
+                  <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:4 }}>Indice de massa magra</div>
+                  <div style={{ fontSize:16, fontWeight:700, color:immClass.c }}>{imm.toFixed(1)} <span style={{ fontSize:10, fontWeight:400 }}>kg/m2</span> <DeltaBadge val={deltaImm} invert unit="" /></div>
+                  <ClassBar zones={[
+                    { min:0, max:15, width:15, color:"#F1948A", label:"Baixo <15" },
+                    { min:15, max:18, width:3, color:"#82E0AA", label:"Adequado 15-18" },
+                    { min:18, max:30, width:12, color:"#85C1E9", label:"Alto >18" }
+                  ]} value={imm} prevValue={prevH ? prevImm : null} />
+                  <div style={{ fontSize:9, color:"#888", marginTop:16 }}>Resultado: <strong style={{ color:immClass.c }}>{immClass.l}</strong></div>
+                </div>
+                {/* IMG */}
+                <div style={{ border:`1px solid ${G[200]}`, borderRadius:8, padding:10 }}>
+                  <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:4 }}>Indice de massa gorda</div>
+                  <div style={{ fontSize:16, fontWeight:700, color:imgClass.c }}>{img.toFixed(1)} <span style={{ fontSize:10, fontWeight:400 }}>kg/m2</span> <DeltaBadge val={deltaImg} unit="" /></div>
+                  <ClassBar zones={[
+                    { min:0, max:5, width:5, color:"#85C1E9", label:"Baixo <5" },
+                    { min:5, max:9, width:4, color:"#82E0AA", label:"Adequado 5-9" },
+                    { min:9, max:25, width:16, color:"#F1948A", label:"Alto >9" }
+                  ]} value={img} prevValue={prevH ? prevImg : null} />
+                  <div style={{ fontSize:9, color:"#888", marginTop:16 }}>Resultado: <strong style={{ color:imgClass.c }}>{imgClass.l}</strong></div>
+                </div>
+              </div>
+
+              {/* Relacao Massa magra X Massa gorda */}
+              <SectionTitle>Relacao Massa magra X Massa gorda</SectionTitle>
+              <div style={{ display:"flex", gap:16, marginBottom:10, flexWrap:"wrap" }}>
+                {/* Quadrant chart */}
+                <div style={{ flexShrink:0 }}>
+                  <table style={{ borderCollapse:"collapse", fontSize:9 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width:60 }}/>
+                        <th style={{ padding:4, textAlign:"center", color:"#888", fontWeight:500 }}>IMG Baixo</th>
+                        <th style={{ padding:4, textAlign:"center", color:"#888", fontWeight:500 }}>IMG Adequado</th>
+                        <th style={{ padding:4, textAlign:"center", color:"#888", fontWeight:500 }}>IMG Alto</th>
                       </tr>
-                    ))}</tbody>
+                    </thead>
+                    <tbody>
+                      {["Alto","Adequada","Baixo"].map((rowLabel, ri) => {
+                        const rowIdx = 2 - ri;
+                        return (
+                          <tr key={ri}>
+                            <td style={{ padding:4, fontWeight:500, color:"#888", textAlign:"right" }}>IMM {rowLabel}</td>
+                            {[0,1,2].map(ci => {
+                              const isHere = rowIdx === immRow && ci === imgCol;
+                              const cellColors = [
+                                ["#EBF5FB","#E8F8F5","#FEF9E7"],
+                                ["#E8F8F5","#EAFAF1","#FDEDEC"],
+                                ["#FEF9E7","#FDEDEC","#FDEDEC"]
+                              ];
+                              return (
+                                <td key={ci} style={{ width:56, height:40, textAlign:"center", border:"1px solid #eee", background:cellColors[ri][ci], position:"relative" }}>
+                                  {isHere && <div style={{ width:14, height:14, borderRadius:"50%", background:S.grn, border:"2px solid #fff", boxShadow:"0 0 4px rgba(0,0,0,0.2)", margin:"auto" }}/>}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
                   </table>
                 </div>
+                {/* Explanation */}
+                <div style={{ flex:1, fontSize:10, color:"#666", lineHeight:1.6, minWidth:180 }}>
+                  <p style={{ margin:"0 0 4px" }}><strong>IMM (Indice de Massa Magra):</strong> Avalia a quantidade de massa magra em relacao a altura. Valores adequados indicam boa preservacao muscular.</p>
+                  <p style={{ margin:"0 0 4px" }}><strong>IMG (Indice de Massa Gorda):</strong> Avalia a quantidade de gordura em relacao a altura. Valores elevados indicam excesso de adiposidade.</p>
+                  <p style={{ margin:0 }}>A combinacao desses indices permite classificar a composicao corporal de forma mais precisa que o IMC isolado.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* ═══════════ PAGE 2: Perimetros e Indices ═══════════ */}
+            <div className="pdf-page-break" />
+            <div style={{ padding:"18px 16px", pageBreakInside:"avoid" }}>
+
+              {/* Silhueta com medidas */}
+              <SectionTitle>Perimetros corporais</SectionTitle>
+              <div style={{ display:"flex", gap:16, marginBottom:16, flexWrap:"wrap" }}>
+                {/* SVG Silhouette */}
+                <div style={{ width:180, flexShrink:0, position:"relative", padding:"10px 0" }}>
+                  <svg viewBox="0 0 160 340" width="160" height="340" style={{ display:"block", margin:"0 auto" }}>
+                    {/* Simplified female silhouette */}
+                    <ellipse cx="80" cy="30" rx="18" ry="22" fill={G[200]} stroke={G[400]} strokeWidth="1"/>
+                    {/* Neck */}
+                    <rect x="74" y="52" width="12" height="12" rx="3" fill={G[200]} stroke={G[400]} strokeWidth="1"/>
+                    {/* Torso */}
+                    <path d="M55 64 Q50 100 48 140 Q46 170 52 200 L60 200 Q65 180 72 200 L88 200 Q95 180 100 200 L108 200 Q114 170 112 140 Q110 100 105 64 Z" fill={G[100]} stroke={G[400]} strokeWidth="1"/>
+                    {/* Arms */}
+                    <path d="M55 68 Q38 80 30 120 Q28 130 32 140 L38 138 Q40 125 44 110 Q48 95 52 80" fill={G[100]} stroke={G[400]} strokeWidth="1"/>
+                    <path d="M105 68 Q122 80 130 120 Q132 130 128 140 L122 138 Q120 125 116 110 Q112 95 108 80" fill={G[100]} stroke={G[400]} strokeWidth="1"/>
+                    {/* Legs */}
+                    <path d="M60 200 Q58 240 56 280 Q54 300 58 320 L72 320 Q74 300 72 280 Q73 240 72 200" fill={G[100]} stroke={G[400]} strokeWidth="1"/>
+                    <path d="M88 200 Q87 240 88 280 Q86 300 88 320 L102 320 Q106 300 104 280 Q102 240 100 200" fill={G[100]} stroke={G[400]} strokeWidth="1"/>
+                    {/* Measurement lines */}
+                    {/* Braco */}
+                    <line x1="20" y1="120" x2="42" y2="120" stroke={G[500]} strokeWidth="0.8" strokeDasharray="2,2"/>
+                    {/* Torax */}
+                    <line x1="118" y1="85" x2="148" y2="85" stroke={G[500]} strokeWidth="0.8" strokeDasharray="2,2"/>
+                    {/* Cintura */}
+                    <line x1="118" y1="140" x2="148" y2="140" stroke={G[500]} strokeWidth="0.8" strokeDasharray="2,2"/>
+                    {/* Quadril */}
+                    <line x1="118" y1="195" x2="148" y2="195" stroke={G[500]} strokeWidth="0.8" strokeDasharray="2,2"/>
+                    {/* Panturrilha */}
+                    <line x1="40" y1="290" x2="20" y2="290" stroke={G[500]} strokeWidth="0.8" strokeDasharray="2,2"/>
+                  </svg>
+                  {/* Labels on the silhouette */}
+                  {lastC && (
+                    <>
+                      <div style={{ position:"absolute", left:0, top:115, fontSize:8, color:G[700], fontWeight:600, textAlign:"right", width:28 }}>
+                        {lastC.braco ? `${lastC.braco}` : "--"}
+                        <div style={{ fontSize:7, color:"#aaa" }}>Braco</div>
+                      </div>
+                      <div style={{ position:"absolute", right:0, top:78, fontSize:8, color:G[700], fontWeight:600 }}>
+                        {lastC.torax ? `${lastC.torax}` : "--"}
+                        <div style={{ fontSize:7, color:"#aaa" }}>Torax</div>
+                      </div>
+                      <div style={{ position:"absolute", right:0, top:133, fontSize:8, color:G[700], fontWeight:600 }}>
+                        {lastC.cintura ? `${lastC.cintura}` : "--"}
+                        <div style={{ fontSize:7, color:"#aaa" }}>Cintura</div>
+                      </div>
+                      <div style={{ position:"absolute", right:0, top:188, fontSize:8, color:G[700], fontWeight:600 }}>
+                        {lastC.quadril ? `${lastC.quadril}` : "--"}
+                        <div style={{ fontSize:7, color:"#aaa" }}>Quadril</div>
+                      </div>
+                      <div style={{ position:"absolute", left:0, top:280, fontSize:8, color:G[700], fontWeight:600, textAlign:"right", width:28 }}>
+                        {lastC.panturrilha ? `${lastC.panturrilha}` : "--"}
+                        <div style={{ fontSize:7, color:"#aaa" }}>Pant.</div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Risk bars */}
+                <div style={{ flex:1, minWidth:200 }}>
+                  {/* Cintura */}
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:2 }}>
+                      Cintura: <strong>{cintura || "--"} cm</strong>
+                      {prevC && cintura > 0 && <DeltaBadge val={cintura - prevCintura} unit="cm" />}
+                    </div>
+                    {cintura > 0 && <ClassBar zones={[
+                      { min:0, max:80, width:80, color:"#82E0AA", label:"Baixo risco <80" },
+                      { min:80, max:88, width:8, color:"#F9E79F", label:"Moderado 80-88" },
+                      { min:88, max:130, width:42, color:"#F1948A", label:"Alto risco >88" }
+                    ]} value={cintura} prevValue={prevCintura || null} />}
+                  </div>
+                  {/* Quadril */}
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:2 }}>
+                      Quadril: <strong>{quadril || "--"} cm</strong>
+                      {prevC && quadril > 0 && <DeltaBadge val={quadril - prevQuadril} unit="cm" />}
+                    </div>
+                  </div>
+                  {/* RCE */}
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:2 }}>
+                      Razao cintura-estatura: <strong>{rce > 0 ? rce.toFixed(2) : "--"}</strong>
+                      {prevC && rce > 0 && <DeltaBadge val={rce - prevRce} unit="" />}
+                    </div>
+                    {rce > 0 && <ClassBar zones={[
+                      { min:0, max:0.5, width:50, color:"#82E0AA", label:"Baixo risco <0.5" },
+                      { min:0.5, max:0.6, width:10, color:"#F9E79F", label:"Moderado 0.5-0.6" },
+                      { min:0.6, max:1.0, width:40, color:"#F1948A", label:"Alto risco >0.6" }
+                    ]} value={rce} prevValue={prevRce || null} />}
+                  </div>
+                  {/* RCQ */}
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:2 }}>
+                      Razao cintura/quadril: <strong>{rcq > 0 ? rcq.toFixed(2) : "--"}</strong>
+                      {prevC && rcq > 0 && <DeltaBadge val={rcq - prevRcq} unit="" />}
+                    </div>
+                    {rcq > 0 && <ClassBar zones={[
+                      { min:0, max:0.85, width:85, color:"#82E0AA", label:"Adequado <0.85" },
+                      { min:0.85, max:1.2, width:35, color:"#F1948A", label:"Inadequado >=0.85" }
+                    ]} value={rcq} prevValue={prevRcq || null} />}
+                  </div>
+                  <div style={{ fontSize:9, color:"#888", marginTop:8, lineHeight:1.5 }}>
+                    Os perimetros corporais sao medidas complementares que auxiliam na avaliacao da distribuicao de gordura e risco cardiometabolico.
+                  </div>
+                </div>
+              </div>
+
+              {/* Indice de conicidade */}
+              <SectionTitle>Indice de conicidade</SectionTitle>
+              <div style={{ marginBottom:16, padding:"0 4px" }}>
+                <div style={{ fontSize:12, marginBottom:4 }}>
+                  <strong style={{ fontSize:18, color:conicClass.c }}>{iconicidade > 0 ? iconicidade.toFixed(2) : "--"}</strong>
+                  {prevC && iconicidade > 0 && <DeltaBadge val={iconicidade - prevIconicidade} unit="" />}
+                </div>
+                <div style={{ fontSize:9, color:"#888", marginBottom:6 }}>Avalia o formato corporal: valores mais baixos indicam formato bicocavo (menor risco), enquanto valores elevados indicam formato cilindrico a biconico (maior risco cardiovascular).</div>
+                {iconicidade > 0 && <ClassBar zones={[
+                  { min:0, max:1.18, width:60, color:"#82E0AA", label:"Adequado <1.18" },
+                  { min:1.18, max:1.22, width:10, color:"#F9E79F", label:"Moderado 1.18-1.22" },
+                  { min:1.22, max:1.6, width:30, color:"#F1948A", label:"Inadequado >1.22" }
+                ]} value={iconicidade} prevValue={prevIconicidade || null} />}
+              </div>
+
+              {/* Resumo de indicadores */}
+              <SectionTitle>Resumo de indicadores</SectionTitle>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6, marginBottom:16 }}>
+                {[
+                  { label:"Percentual de gordura", val:fatClass.l, c:fatClass.c },
+                  { label:"Indice de massa gorda", val:imgClass.l, c:imgClass.c },
+                  { label:"Indice de massa magra", val:immClass.l, c:immClass.c },
+                  { label:"Razao cintura/estatura", val:cintura > 0 ? rceClass.l : "--", c:cintura > 0 ? rceClass.c : "#aaa" },
+                  { label:"Razao cintura/quadril", val:rcq > 0 ? rcqClass.l : "--", c:rcq > 0 ? rcqClass.c : "#aaa" },
+                  { label:"Indice de conicidade", val:iconicidade > 0 ? conicClass.l : "--", c:iconicidade > 0 ? conicClass.c : "#aaa" }
+                ].map((ind, i) => (
+                  <div key={i} style={{ textAlign:"center", padding:"8px 6px", border:`1px solid ${G[200]}`, borderRadius:8, background:"#fff" }}>
+                    <div style={{ fontSize:9, color:"#888", marginBottom:3 }}>{ind.label}</div>
+                    <div style={{ fontSize:11, fontWeight:700, color:ind.c }}>{ind.val}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Ser Livre Score */}
+              <SectionTitle>Ser Livre Score</SectionTitle>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16, marginBottom:10 }}>
+                <div style={{ width:80, height:80, borderRadius:"50%", border:`4px solid ${scoreColor}`, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column" }}>
+                  <div style={{ fontSize:24, fontWeight:700, color:scoreColor }}>{serLivreScore}</div>
+                  <div style={{ fontSize:8, color:"#888" }}>/100</div>
+                </div>
+                <div style={{ fontSize:10, color:"#666", maxWidth:250 }}>
+                  Score composto baseado na media de todos os indicadores corporais avaliados, normalizado para uma escala de 0 a 100.
+                </div>
+              </div>
+            </div>
+
+            {/* ═══════════ PAGE 3: Historico de avaliacoes ═══════════ */}
+            <div className="pdf-page-break" />
+            <div style={{ padding:"18px 16px" }}>
+
+              <SectionTitle>Evolucao dos indicadores</SectionTitle>
+              {/* Evolution charts - 2 column grid */}
+              {histFilt.length > 1 && (
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+                  {/* Peso */}
+                  <div style={{ border:`1px solid ${G[200]}`, borderRadius:8, padding:10, pageBreakInside:"avoid" }}>
+                    <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:2 }}>Peso <DeltaBadge val={deltaW} /></div>
+                    <div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{weight.toFixed(1)} kg</div>
+                    <MiniChart data={histFilt.map(h => ({ v:h.weight }))} dataKey="v" color={G[600]} />
+                  </div>
+                  {/* Fat % */}
+                  <div style={{ border:`1px solid ${G[200]}`, borderRadius:8, padding:10, pageBreakInside:"avoid" }}>
+                    <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:2 }}>Percentual de gordura <DeltaBadge val={deltaFatPct} unit="%" /></div>
+                    <div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{fatPct.toFixed(1)}%</div>
+                    <MiniChart data={histFilt.map(h => { const t=(h.massaMagra||0)+(h.massaGordura||0)||1; return { v: (h.massaGordura||0)/t*100 }; })} dataKey="v" color={S.yel} />
+                  </div>
+                  {/* Lean mass */}
+                  <div style={{ border:`1px solid ${G[200]}`, borderRadius:8, padding:10, pageBreakInside:"avoid" }}>
+                    <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:2 }}>Massa magra <DeltaBadge val={deltaLean} invert /></div>
+                    <div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{leanMass.toFixed(1)} kg</div>
+                    <MiniChart data={histFilt.map(h => ({ v:h.massaMagra||0 }))} dataKey="v" color={S.grn} />
+                  </div>
+                  {/* Fat mass */}
+                  <div style={{ border:`1px solid ${G[200]}`, borderRadius:8, padding:10, pageBreakInside:"avoid" }}>
+                    <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:2 }}>Massa gorda <DeltaBadge val={deltaFat} /></div>
+                    <div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{fatMass.toFixed(1)} kg</div>
+                    <MiniChart data={histFilt.map(h => ({ v:h.massaGordura||0 }))} dataKey="v" color={S.red} />
+                  </div>
+                </div>
               )}
-              <div style={{ fontSize:9, color:"#bbb", marginTop:6 }}>Última medição: {safeFmt(lastC?.date,"dd/MM/yyyy")}</div>
+
+              {/* Indicadores reference table */}
+              <SectionTitle>Tabela de indicadores</SectionTitle>
+              <div style={{ overflowX:"auto", marginBottom:16 }}>
+                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:10 }}>
+                  <thead>
+                    <tr style={{ background:G[50] }}>
+                      <th style={{ textAlign:"left", padding:"6px 8px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600 }}>Indicador</th>
+                      <th style={{ textAlign:"left", padding:"6px 8px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600 }}>Referencia</th>
+                      {prevH && <th style={{ textAlign:"center", padding:"6px 8px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600 }}>{safeFmt(prevH.date, "dd/MM/yy")}</th>}
+                      <th style={{ textAlign:"center", padding:"6px 8px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600 }}>{lastH ? safeFmt(lastH.date, "dd/MM/yy") : "Atual"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { label:"IMG (kg/m2)", ref:"5 - 9", prev:prevImg.toFixed(1), cur:img.toFixed(1), c:imgClass.c },
+                      { label:"IMM (kg/m2)", ref:"15 - 18", prev:prevImm.toFixed(1), cur:imm.toFixed(1), c:immClass.c },
+                      { label:"Razao cintura/estatura", ref:"< 0.5", prev:prevRce > 0 ? prevRce.toFixed(2) : "--", cur:rce > 0 ? rce.toFixed(2) : "--", c:rceClass.c },
+                      { label:"Razao cintura/quadril", ref:"< 0.85", prev:prevRcq > 0 ? prevRcq.toFixed(2) : "--", cur:rcq > 0 ? rcq.toFixed(2) : "--", c:rcqClass.c },
+                      { label:"Indice de conicidade", ref:"< 1.18", prev:prevIconicidade > 0 ? prevIconicidade.toFixed(2) : "--", cur:iconicidade > 0 ? iconicidade.toFixed(2) : "--", c:conicClass.c }
+                    ].map((row, i) => (
+                      <tr key={i} style={{ background:i % 2 === 0 ? "#fff" : G[50] }}>
+                        <td style={{ padding:"5px 8px", borderBottom:`1px solid ${G[100]}`, fontWeight:600 }}>{row.label}</td>
+                        <td style={{ padding:"5px 8px", borderBottom:`1px solid ${G[100]}`, color:"#888" }}>{row.ref}</td>
+                        {prevH && <td style={{ padding:"5px 8px", borderBottom:`1px solid ${G[100]}`, textAlign:"center" }}>{row.prev}</td>}
+                        <td style={{ padding:"5px 8px", borderBottom:`1px solid ${G[100]}`, textAlign:"center", fontWeight:600, color:row.c }}>{row.cur}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Circumference evolution charts */}
+              {circFilt.length > 1 && (
+                <>
+                  <SectionTitle>Evolucao de perimetros</SectionTitle>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:16 }}>
+                    {CIRC_FIELDS.map(f => {
+                      const curVal = lastC?.[f.key];
+                      const prevVal = prevC?.[f.key];
+                      const delta = (curVal != null && prevVal != null) ? curVal - prevVal : null;
+                      return (
+                        <div key={f.key} style={{ border:`1px solid ${G[200]}`, borderRadius:8, padding:8, pageBreakInside:"avoid" }}>
+                          <div style={{ fontSize:10, fontWeight:600, color:G[700], marginBottom:2 }}>
+                            {f.label}: {curVal != null ? `${curVal} cm` : "--"}
+                            {delta !== null && <DeltaBadge val={delta} unit="cm" />}
+                          </div>
+                          <MiniChart
+                            data={circFilt.map(c => ({ v: c[f.key] || 0 }))}
+                            dataKey="v"
+                            color={G[500]}
+                            height={45}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* Scores clinicos */}
+              <SectionTitle>Scores clinicos atuais</SectionTitle>
+              <div style={{ marginBottom:12 }}>
+                {[{l:"Saude metabolica",t:met,m:24,fn:sM},{l:"Bem-estar",t:be,m:18,fn:sB},{l:"Blindagem mental",t:mn,m:9,fn:sN}].map((s,i) => {
+                  const st=s.fn(s.t);
+                  return <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"7px 0", borderBottom:`1px solid ${G[100]}`, flexWrap:"wrap", gap:3 }}><span style={{ fontSize:12 }}>{s.l}</span><div style={{ display:"flex", alignItems:"center", gap:6 }}><div style={{ width:80, height:6, background:G[100], borderRadius:3, overflow:"hidden" }}><div style={{ height:"100%", width:`${(s.t/s.m*100).toFixed(0)}%`, background:st.c, borderRadius:3 }}/></div><Bg color={st.c} bg={st.bg}>{st.e} {s.t}/{s.m} — {st.l}</Bg></div></div>;
+                })}
+              </div>
+
+              {/* Comparativo mensal (se ativado e houver dados) */}
+              {relComp && shFilt.length >= 2 && (
+                <div style={{ marginBottom:12, pageBreakInside:"avoid" }}>
+                  <SectionTitle>Comparativo: {comp1.month} - {comp2.month}</SectionTitle>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:8 }}>
+                    {[{l:"Metabolico",c1:cM(comp1.m),c2:cM(comp2.m),max:24,fn:sM},{l:"Bem-estar",c1:cB(comp1.b),c2:cB(comp2.b),max:18,fn:sB},{l:"Mental",c1:cN(comp1.n),c2:cN(comp2.n),max:9,fn:sN}].map((s,i)=>{
+                      const d=s.c2-s.c1; const st=s.fn(s.c2);
+                      return <div key={i} style={{ textAlign:"center", padding:"10px 8px", background:st.bg, borderRadius:8 }}>
+                        <div style={{ fontSize:11, color:st.c, fontWeight:600 }}>{s.l}</div>
+                        <div style={{ fontSize:20, fontWeight:700, color:st.c }}>{s.c2}/{s.max}</div>
+                        <div style={{ fontSize:11, fontWeight:600, color:d>0?S.grn:d<0?S.red:"#aaa", marginTop:3 }}>{d>0?"+":""}{d!==0?d:"="} pts</div>
+                        <div style={{ fontSize:9, color:"#aaa" }}>era {s.c1}</div>
+                      </div>;
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Plano de acao */}
+              <SectionTitle>Plano de acao</SectionTitle>
+              <div style={{ marginBottom:12 }}>
+                {met<=12 && <div style={{ padding:"6px 10px", background:S.redBg, borderRadius:6, marginBottom:4, fontSize:11, border:`1px solid #F5B7B1` }}><strong style={{ color:S.red }}>Metabolico critico</strong> — Protocolo de ataque + detox</div>}
+                {be<10   && <div style={{ padding:"6px 10px", background:S.redBg, borderRadius:6, marginBottom:4, fontSize:11, border:`1px solid #F5B7B1` }}><strong style={{ color:S.red }}>Bem-estar critico</strong> — Intervencao medica imediata</div>}
+                {met>=13 && met<=16 && <div style={{ padding:"6px 10px", background:S.yelBg, borderRadius:6, marginBottom:4, fontSize:11, border:`1px solid #F9E79F` }}><strong style={{ color:S.yel }}>Transicao metabolica</strong> — Ajustes terapeuticos</div>}
+                {met>=17 && <div style={{ padding:"6px 10px", background:S.grnBg, borderRadius:6, marginBottom:4, fontSize:11, border:`1px solid #ABEBC6` }}><strong style={{ color:S.grn }}>Saudavel</strong> — Manutencao + evolucao continua</div>}
+                {mn<=4   && <div style={{ padding:"6px 10px", background:S.redBg, borderRadius:6, marginBottom:4, fontSize:11, border:`1px solid #F5B7B1` }}><strong style={{ color:S.red }}>Risco de recaida</strong> — Sessao individual com psicologa</div>}
+                {be>=10&&be<=13&&met>=17 && <div style={{ padding:"6px 10px", background:S.yelBg, borderRadius:6, marginBottom:4, fontSize:11, border:`1px solid #F9E79F` }}><strong style={{ color:S.yel }}>Bem-estar em alerta</strong> — Nutricionista intervem</div>}
+              </div>
+
+              {/* Rodape */}
+              <div style={{ textAlign:"center", padding:"16px 0 8px", borderTop:`1px solid ${G[200]}`, fontSize:10, color:"#999", marginTop:10 }}>
+                <div style={{ fontWeight:600, color:G[700] }}>Dra. Mariana Wogel — Nutrologa</div>
+                <div>Praca Sao Sebastiao 119 — Tres Rios, RJ</div>
+                <div style={{ fontSize:9, color:"#ccc", marginTop:4 }}>Relatorio gerado em {format(new Date(),"dd/MM/yyyy 'as' HH:mm")}</div>
+              </div>
             </div>
-          ) : null;
+            </>
+          );
         })()}
-
-        {/* Scores atuais */}
-        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
-          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>📊 Scores clínicos atuais</div>
-          {[{l:"Saúde metabólica",t:met,m:24,fn:sM},{l:"Bem-estar",t:be,m:18,fn:sB},{l:"Blindagem mental",t:mn,m:9,fn:sN}].map((s,i) => {
-            const st=s.fn(s.t);
-            return <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"7px 0", borderBottom:`1px solid ${G[100]}`, flexWrap:"wrap", gap:3 }}><span style={{ fontSize:12 }}>{s.l}</span><div style={{ display:"flex", alignItems:"center", gap:6 }}><div style={{ width:80, height:6, background:G[100], borderRadius:3, overflow:"hidden" }}><div style={{ height:"100%", width:`${(s.t/s.m*100).toFixed(0)}%`, background:st.c, borderRadius:3 }}/></div><Bg color={st.c} bg={st.bg}>{st.e} {s.t}/{s.m} — {st.l}</Bg></div></div>;
-          })}
-        </div>
-
-        {/* Comparativo mensal (se ativado e houver dados) */}
-        {relComp && shFilt.length >= 2 && (
-          <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
-            <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>📈 Comparativo: {comp1.month} → {comp2.month}</div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
-              {[{l:"Metabólico",c1:cM(comp1.m),c2:cM(comp2.m),max:24,fn:sM},{l:"Bem-estar",c1:cB(comp1.b),c2:cB(comp2.b),max:18,fn:sB},{l:"Mental",c1:cN(comp1.n),c2:cN(comp2.n),max:9,fn:sN}].map((s,i)=>{
-                const d=s.c2-s.c1; const st=s.fn(s.c2);
-                return <div key={i} style={{ textAlign:"center", padding:"10px 8px", background:st.bg, borderRadius:8 }}>
-                  <div style={{ fontSize:11, color:st.c, fontWeight:600 }}>{s.l}</div>
-                  <div style={{ fontSize:20, fontWeight:700, color:st.c }}>{s.c2}/{s.max}</div>
-                  <div style={{ fontSize:11, fontWeight:600, color:d>0?S.grn:d<0?S.red:"#aaa", marginTop:3 }}>{d>0?"+":""}{d!==0?d:"="} pts</div>
-                  <div style={{ fontSize:9, color:"#aaa" }}>era {s.c1}</div>
-                </div>;
-              })}
-            </div>
-            <div style={{ overflowX:"auto", marginTop:10 }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:420 }}>
-                <thead><tr>{["Mês","Met","Δ","Bem","Δ","Mental","Δ","Status"].map(h=><th key={h} style={{ textAlign:"left", padding:"5px 7px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600, textTransform:"uppercase" }}>{h}</th>)}</tr></thead>
-                <tbody>{shFilt.map((s,i)=>{
-                  const met_=cM(s.m),bem_=cB(s.b),men_=cN(s.n);
-                  const pr_=i>0?shFilt[i-1]:null;
-                  const dM=pr_?met_-cM(pr_.m):null,dB=pr_?bem_-cB(pr_.b):null,dN=pr_?men_-cN(pr_.n):null;
-                  const overall=met_>=17&&bem_>13&&men_>=8?"Elite":met_>=13&&bem_>=10&&men_>=5?"Ok":"Atenção";
-                  const ovC=overall==="Elite"?S.pur:overall==="Ok"?S.grn:S.red;
-                  return <tr key={i} style={{ background:i===shFilt.length-1?G[50]:"transparent" }}>
-                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}`, fontWeight:i===shFilt.length-1?600:400 }}>{s.month}</td>
-                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}`, color:sM(met_).c, fontWeight:600 }}>{met_}/24</td>
-                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}`, fontSize:10 }}>{dM===null?"—":<span style={{ color:dM>0?S.grn:dM<0?S.red:"#aaa", fontWeight:600 }}>{dM>0?"+":""}{dM}</span>}</td>
-                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}`, color:sB(bem_).c, fontWeight:600 }}>{bem_}/18</td>
-                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}`, fontSize:10 }}>{dB===null?"—":<span style={{ color:dB>0?S.grn:dB<0?S.red:"#aaa", fontWeight:600 }}>{dB>0?"+":""}{dB}</span>}</td>
-                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}`, color:sN(men_).c, fontWeight:600 }}>{men_}/9</td>
-                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}`, fontSize:10 }}>{dN===null?"—":<span style={{ color:dN>0?S.grn:dN<0?S.red:"#aaa", fontWeight:600 }}>{dN>0?"+":""}{dN}</span>}</td>
-                    <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[100]}` }}><Bg color={ovC} bg={ovC+"22"}>{overall}</Bg></td>
-                  </tr>;
-                })}</tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Plano de ação */}
-        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px", pageBreakInside:"avoid" }}>
-          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:8 }}>🎯 Plano de ação</div>
-          {met<=12 && <div style={{ padding:"6px 10px", background:S.redBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🔴 <strong>Metabólico crítico</strong> — Protocolo de ataque + detox</div>}
-          {be<10   && <div style={{ padding:"6px 10px", background:S.redBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🔴 <strong>Bem-estar crítico</strong> — Intervenção médica imediata</div>}
-          {met>=13 && met<=16 && <div style={{ padding:"6px 10px", background:S.yelBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🟡 <strong>Transição metabólica</strong> — Ajustes terapêuticos</div>}
-          {met>=17 && <div style={{ padding:"6px 10px", background:S.grnBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🟢 <strong>Saudável</strong> — Manutenção + evolução contínua</div>}
-          {mn<=4   && <div style={{ padding:"6px 10px", background:S.redBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🔴 <strong>Risco de recaída</strong> — Sessão individual com psicóloga</div>}
-          {be>=10&&be<=13&&met>=17 && <div style={{ padding:"6px 10px", background:S.yelBg, borderRadius:6, marginBottom:4, fontSize:11 }}>🟡 <strong>Bem-estar em alerta</strong> — Nutricionista intervém</div>}
-        </div>
-
-        {/* Rodapé */}
-        <div style={{ textAlign:"center", padding:"12px 0", borderTop:`1px solid ${G[200]}`, fontSize:10, color:"#bbb" }}>
-          Dra. Mariana Wogel — Nutróloga<br/>Praça São Sebastião 119 — Três Rios, RJ<br/>
-          <span style={{ fontSize:9, color:"#ddd" }}>Relatório gerado em {format(new Date(),"dd/MM/yyyy 'às' HH:mm")}</span>
-        </div>
       </div>
     </div>
   );
