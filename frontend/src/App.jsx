@@ -292,26 +292,28 @@ function Dash({  ps, onSel, mob }) {
     getDashboard().then(r => setDashData(r.data)).catch(() => {});
   }, [ps]);
 
-  // ── Filtro de período: filtra pacientes com atividade no período selecionado ──
+  // ── Filtro de período: filtra pacientes com atividade E limita dados ao período ──
   const filteredPs = useMemo(() => {
     if (df === "all") return ps;
     const daysMap = { week: 7, month: 30, quarter: 90, "120d": 120 };
     const days = daysMap[df];
     if (!days) return ps;
     const cutoff = subDays(new Date(), days);
+    const inRange = (d) => d && isAfter(new Date(d), cutoff);
+    // Filtra pacientes que tiveram qualquer atividade no período
     return ps.filter(p => {
-      // Paciente com startDate (sd) dentro do período
-      if (p.sd && isAfter(new Date(p.sd), cutoff)) return true;
-      // Paciente com algum registro de peso (history) dentro do período
-      if ((p.history || []).some(h => h.date && isAfter(new Date(h.date), cutoff))) return true;
-      // Paciente com algum registro de circunferência dentro do período
-      if ((p.circumferenceHistory || []).some(c => c.date && isAfter(new Date(c.date), cutoff))) return true;
-      // Paciente com algum registro de score dentro do período
-      if ((p.scoreHistory || []).some(s => s.date && isAfter(new Date(s.date), cutoff))) return true;
-      // Fallback: se o paciente foi criado recentemente (createdAt)
-      if (p.createdAt && isAfter(new Date(p.createdAt), cutoff)) return true;
+      if ((p.history || []).some(h => inRange(h.date))) return true;
+      if ((p.circumferenceHistory || []).some(c => inRange(c.date))) return true;
+      if ((p.scoreHistory || []).some(s => inRange(s.date))) return true;
+      if (inRange(p.sd)) return true;
       return false;
-    });
+    }).map(p => ({
+      // Clona paciente com históricos filtrados pelo período
+      ...p,
+      history: (p.history || []).filter(h => inRange(h.date)),
+      circumferenceHistory: (p.circumferenceHistory || []).filter(c => inRange(c.date)),
+      scoreHistory: (p.scoreHistory || []).filter(s => inRange(s.date)),
+    }));
   }, [ps, df]);
 
   const SC = genSC(filteredPs);
