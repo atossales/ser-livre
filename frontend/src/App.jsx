@@ -212,6 +212,7 @@ function ProfileModal({ user, avatarSrc, onClose, onUpdate, toast }) {
   const [name, setName] = useState(user.name || '');
   const [email, setEmail] = useState(user.email || '');
   const [phone, setPhone] = useState(user.phone || '');
+  const [birthDate, setBirthDate] = useState(user.birthDate || '');
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -235,13 +236,13 @@ function ProfileModal({ user, avatarSrc, onClose, onUpdate, toast }) {
     setSaving(true);
     try {
       // Update name/phone
-      const profileRes = await updateUserProfile(user.id, { name, phone });
+      await updateUserProfile(user.id, { name, phone });
       // Update email if changed
       if (email !== user.email) {
         await updateUserEmail(user.id, { email });
       }
       // Update localStorage and parent state
-      const updated = { ...user, name, email, phone: phone || user.phone };
+      const updated = { ...user, name, email, phone: phone || user.phone, birthDate };
       localStorage.setItem('serlivre_user', JSON.stringify(updated));
       onUpdate(updated);
       toast('Dados atualizados com sucesso!', 'success');
@@ -319,9 +320,31 @@ function ProfileModal({ user, avatarSrc, onClose, onUpdate, toast }) {
           </div>
 
           {/* Phone */}
-          <div style={{ marginBottom:18 }}>
+          <div style={{ marginBottom:14 }}>
             <label style={labelStyle}>Telefone</label>
             <input value={phone} onChange={e => setPhone(maskPhone(e.target.value))} style={inputStyle} type="tel" placeholder="(00) 00000-0000"/>
+          </div>
+
+          {/* Birth date */}
+          <div style={{ marginBottom:14 }}>
+            <label style={labelStyle}>Data de nascimento</label>
+            <input value={birthDate} onChange={e => setBirthDate(e.target.value)} style={inputStyle} type="date"/>
+          </div>
+
+          {/* Role info (read-only) */}
+          <div style={{ marginBottom:18, padding:"10px 14px", background:G[50], borderRadius:8, border:`1px solid ${G[200]}` }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div>
+                <div style={{ fontSize:10, color:"#aaa", textTransform:"uppercase", fontWeight:600 }}>Cargo</div>
+                <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>
+                  {user.role === 'ADMIN' ? 'Administrador(a)' : user.role === 'MEDICA' ? 'Médico(a)' : user.role === 'ENFERMAGEM' ? 'Enfermagem' : user.role === 'NUTRICIONISTA' ? 'Nutricionista' : user.role === 'PSICOLOGA' ? 'Psicóloga' : user.role || 'Equipe'}
+                </div>
+              </div>
+              <div style={{ textAlign:"right" }}>
+                <div style={{ fontSize:10, color:"#aaa", textTransform:"uppercase", fontWeight:600 }}>Desde</div>
+                <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>{user.createdAt ? new Date(user.createdAt).toLocaleDateString('pt-BR') : '—'}</div>
+              </div>
+            </div>
           </div>
 
           {/* Save profile button */}

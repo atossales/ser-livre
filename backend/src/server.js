@@ -1389,7 +1389,7 @@ app.put('/api/users/:id/profile', authRequired, async (req, res) => {
     if (req.user.role !== 'ADMIN' && req.user.role !== 'MEDICA' && req.user.id !== req.params.id) {
       return res.status(403).json({ error: 'Acesso negado' });
     }
-    const { name, phone, specialty, active } = req.body;
+    const { name, phone, specialty, active, birthDate } = req.body;
     const updated = await prisma.user.update({
       where: { id: req.params.id },
       data: {
@@ -1397,6 +1397,7 @@ app.put('/api/users/:id/profile', authRequired, async (req, res) => {
         ...(phone !== undefined && { phone }),
         ...(specialty !== undefined && { specialty }),
         ...(active !== undefined && { active }),
+        ...(birthDate !== undefined && { birthDate: birthDate ? new Date(birthDate) : null }),
       },
     });
     res.json(updated);
