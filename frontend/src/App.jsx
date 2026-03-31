@@ -1152,53 +1152,104 @@ function RelTab({ p, mob, plan, met, be, mn }) {
             <div className="pdf-page-break" />
             <div style={{ padding:"18px 16px", pageBreakInside:"avoid" }}>
 
-              {/* Silhueta com medidas */}
+              {/* Silhueta adaptativa com medidas */}
               <SectionTitle>Perimetros corporais</SectionTitle>
               <div style={{ display:"flex", gap:16, marginBottom:16, flexWrap:"wrap" }}>
-                {/* SVG Silhouette */}
-                <div style={{ width:180, flexShrink:0, position:"relative", padding:"10px 0" }}>
-                  <svg viewBox="0 0 140 360" width="140" height="360" style={{ display:"block", margin:"0 auto" }}>
-                    <defs>
-                      <linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={G[300]} stopOpacity="0.4"/>
-                        <stop offset="100%" stopColor={G[200]} stopOpacity="0.2"/>
-                      </linearGradient>
-                    </defs>
-                    {/* Female silhouette - minimalist single path */}
-                    <path d="M70 8 C82 8 88 18 88 28 C88 40 82 48 70 48 C58 48 52 40 52 28 C52 18 58 8 70 8 Z M64 50 L76 50 L76 58 L64 58 Z M56 60 C46 64 40 72 38 86 L34 86 Q30 88 30 94 Q30 100 34 102 L38 102 C38 108 40 114 42 118 L42 136 Q43 140 46 140 L46 118 C48 130 52 146 54 160 C56 172 52 178 52 188 L58 188 Q66 168 70 168 Q74 168 82 188 L88 188 C88 178 84 172 86 160 C88 146 92 130 94 118 L94 140 Q97 140 98 136 L98 118 C100 114 102 108 102 102 L106 102 Q110 100 110 94 Q110 88 106 86 L102 86 C100 72 94 64 84 60 Z M52 190 C50 220 50 250 50 270 C50 290 48 310 48 330 Q48 340 54 342 L62 342 Q64 340 62 336 C60 330 58 320 60 300 C62 280 64 260 66 240 L70 240 L74 240 C76 260 78 280 80 300 C82 320 80 330 78 336 Q76 340 78 342 L86 342 Q92 340 92 330 C92 310 90 290 90 270 C90 250 90 220 88 190" fill="url(#bodyGrad)" stroke={G[400]} strokeWidth="1" strokeLinejoin="round"/>
-                    {/* Measurement lines */}
-                    <line x1="18" y1="118" x2="40" y2="118" stroke={G[400]} strokeWidth="0.6" strokeDasharray="2,2"/>
-                    <line x1="100" y1="84" x2="130" y2="84" stroke={G[400]} strokeWidth="0.6" strokeDasharray="2,2"/>
-                    <line x1="100" y1="150" x2="130" y2="150" stroke={G[400]} strokeWidth="0.6" strokeDasharray="2,2"/>
-                    <line x1="100" y1="185" x2="130" y2="185" stroke={G[400]} strokeWidth="0.6" strokeDasharray="2,2"/>
-                    <line x1="18" y1="300" x2="48" y2="300" stroke={G[400]} strokeWidth="0.6" strokeDasharray="2,2"/>
-                  </svg>
-                  {/* Labels on the silhouette */}
-                  {lastC && (
-                    <>
-                      <div style={{ position:"absolute", left:-6, top:120, fontSize:8, color:G[700], fontWeight:600, textAlign:"right", width:32 }}>
-                        {lastC.braco ? `${lastC.braco}` : "--"}
-                        <div style={{ fontSize:7, color:"#aaa" }}>Braço</div>
+                {/* SVG Silhouette — adaptive female body */}
+                {(() => {
+                  // Normalizar medidas para escalar a silhueta (referência feminina saudável)
+                  const refBusto = 88, refCintura = 68, refQuadril = 96, refBraco = 28, refPant = 36;
+                  const cBusto = lastC?.torax || refBusto;
+                  const cCint = lastC?.cintura || refCintura;
+                  const cQuad = lastC?.quadril || refQuadril;
+                  const cBrac = lastC?.braco || refBraco;
+                  const cPant = lastC?.panturrilha || refPant;
+                  // Scale factors (1.0 = ideal, >1.0 = larger than ideal)
+                  const sBusto = Math.max(0.85, Math.min(1.35, cBusto / refBusto));
+                  const sCint  = Math.max(0.85, Math.min(1.35, cCint / refCintura));
+                  const sQuad  = Math.max(0.85, Math.min(1.35, cQuad / refQuadril));
+                  const sBrac  = Math.max(0.85, Math.min(1.3, cBrac / refBraco));
+                  const sPant  = Math.max(0.85, Math.min(1.3, cPant / refPant));
+                  const cx = 100; // center x
+                  // Build actual body path (adapted widths)
+                  const bustoW = 28 * sBusto, cintW = 22 * sCint, quadW = 30 * sQuad, bracW = 8 * sBrac, pantW = 9 * sPant;
+                  // Ideal silhouette (reference proportions)
+                  const iBustoW = 28, iCintW = 22, iQuadW = 30;
+                  const buildBody = (bw, cw, qw, pw, brw) => {
+                    const l = cx, y_neck=58, y_shoulder=65, y_bust=95, y_waist=140, y_hip=175, y_crotch=195, y_knee=270, y_ankle=335, y_foot=345;
+                    return `M${l} 15 C${l+13} 15 ${l+17} 25 ${l+17} 33 C${l+17} 43 ${l+13} 50 ${l} 50 C${l-13} 50 ${l-17} 43 ${l-17} 33 C${l-17} 25 ${l-13} 15 ${l} 15 Z `+
+                    `M${l-5} 52 L${l+5} 52 L${l+5} ${y_neck} L${l-5} ${y_neck} Z `+
+                    `M${l-bw} ${y_shoulder} C${l-bw-4} ${y_shoulder} ${l-bw-10} ${y_shoulder+5} ${l-bw-12} ${y_shoulder+20} L${l-bw-14} ${y_bust-5} Q${l-bw-16} ${y_bust} ${l-bw-14} ${y_bust+5} L${l-bw-12} ${y_bust+10} C${l-bw-8} ${y_bust+18} ${l-bw-4} ${y_bust+12} ${l-bw} ${y_bust+5} `+
+                    `C${l-cw} ${y_waist-10} ${l-cw} ${y_waist} ${l-cw} ${y_waist} C${l-cw-2} ${y_waist+15} ${l-qw+2} ${y_hip-10} ${l-qw} ${y_hip} `+
+                    `C${l-qw+2} ${y_crotch-5} ${l-qw+5} ${y_crotch} ${l-8} ${y_crotch} `+
+                    `Q${l-3} ${y_crotch+20} ${l-pw} ${y_knee} C${l-pw-1} ${y_knee+20} ${l-pw+1} ${y_ankle-10} ${l-pw+2} ${y_ankle} L${l-pw-2} ${y_foot} L${l-2} ${y_foot} `+
+                    `L${l+2} ${y_foot} L${l+pw+2} ${y_foot} L${l+pw-2} ${y_ankle} C${l+pw-1} ${y_ankle-10} ${l+pw+1} ${y_knee+20} ${l+pw} ${y_knee} `+
+                    `Q${l+3} ${y_crotch+20} ${l+8} ${y_crotch} `+
+                    `C${l+qw-5} ${y_crotch} ${l+qw-2} ${y_crotch-5} ${l+qw} ${y_hip} `+
+                    `C${l+qw-2} ${y_hip-10} ${l+cw+2} ${y_waist+15} ${l+cw} ${y_waist} C${l+cw} ${y_waist} ${l+cw} ${y_waist-10} ${l+bw} ${y_bust+5} `+
+                    `C${l+bw+4} ${y_bust+12} ${l+bw+8} ${y_bust+18} ${l+bw+12} ${y_bust+10} L${l+bw+14} ${y_bust+5} Q${l+bw+16} ${y_bust} ${l+bw+14} ${y_bust-5} L${l+bw+12} ${y_shoulder+20} C${l+bw+10} ${y_shoulder+5} ${l+bw+4} ${y_shoulder} ${l+bw} ${y_shoulder} `+
+                    `Q${l+5} ${y_neck+2} ${l+5} ${y_neck} L${l-5} ${y_neck} Q${l-5} ${y_neck+2} ${l-bw} ${y_shoulder} Z`;
+                  };
+                  const actualPath = buildBody(bustoW, cintW, quadW, pantW, bracW);
+                  const idealPath = buildBody(iBustoW, iCintW, iQuadW, 9, 8);
+                  return (
+                    <div style={{ width:200, flexShrink:0, position:"relative", padding:"10px 0" }}>
+                      <svg viewBox="0 0 200 360" width="200" height="360" style={{ display:"block", margin:"0 auto" }}>
+                        <defs>
+                          <linearGradient id="bodyGradA" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={S.grn} stopOpacity="0.12"/>
+                            <stop offset="100%" stopColor={S.grn} stopOpacity="0.04"/>
+                          </linearGradient>
+                          <linearGradient id="bodyGradC" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={G[400]} stopOpacity="0.3"/>
+                            <stop offset="50%" stopColor={G[300]} stopOpacity="0.2"/>
+                            <stop offset="100%" stopColor={G[200]} stopOpacity="0.1"/>
+                          </linearGradient>
+                        </defs>
+                        {/* Ideal silhouette (green outline, transparent) */}
+                        <path d={idealPath} fill="url(#bodyGradA)" stroke={S.grn} strokeWidth="1" strokeDasharray="4,3" strokeLinejoin="round" opacity="0.6"/>
+                        {/* Actual silhouette (filled, solid border) */}
+                        <path d={actualPath} fill="url(#bodyGradC)" stroke={G[500]} strokeWidth="1.2" strokeLinejoin="round"/>
+                        {/* Measurement guide lines */}
+                        <line x1="15" y1="100" x2={cx-bustoW-10} y2="100" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
+                        <line x1={cx+bustoW+15} y1="90" x2="190" y2="90" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
+                        <line x1={cx+cintW+5} y1="140" x2="190" y2="140" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
+                        <line x1={cx+quadW+5} y1="175" x2="190" y2="175" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
+                        <line x1="15" y1="295" x2={cx-pantW-2} y2="295" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
+                      </svg>
+                      {/* Labels */}
+                      {lastC && (
+                        <>
+                          <div style={{ position:"absolute", left:0, top:95, fontSize:9, color:G[700], fontWeight:600, textAlign:"right", width:28 }}>
+                            <span style={{ color:G[800] }}>{lastC.braco||"--"}</span>
+                            <div style={{ fontSize:7, color:"#aaa" }}>Braço</div>
+                          </div>
+                          <div style={{ position:"absolute", right:0, top:82, fontSize:9, color:G[700], fontWeight:600 }}>
+                            <span style={{ color:G[800] }}>{lastC.torax||"--"}</span>
+                            <div style={{ fontSize:7, color:"#aaa" }}>Tórax</div>
+                          </div>
+                          <div style={{ position:"absolute", right:0, top:132, fontSize:9, color:G[700], fontWeight:600 }}>
+                            <span style={{ color:G[800] }}>{lastC.cintura||"--"}</span>
+                            <div style={{ fontSize:7, color:"#aaa" }}>Cintura</div>
+                          </div>
+                          <div style={{ position:"absolute", right:0, top:168, fontSize:9, color:G[700], fontWeight:600 }}>
+                            <span style={{ color:G[800] }}>{lastC.quadril||"--"}</span>
+                            <div style={{ fontSize:7, color:"#aaa" }}>Quadril</div>
+                          </div>
+                          <div style={{ position:"absolute", left:0, top:288, fontSize:9, color:G[700], fontWeight:600, textAlign:"right", width:28 }}>
+                            <span style={{ color:G[800] }}>{lastC.panturrilha||"--"}</span>
+                            <div style={{ fontSize:7, color:"#aaa" }}>Pant.</div>
+                          </div>
+                        </>
+                      )}
+                      {/* Legend */}
+                      <div style={{ display:"flex", gap:10, justifyContent:"center", marginTop:6, fontSize:8, color:"#aaa" }}>
+                        <span><span style={{ display:"inline-block", width:12, height:2, background:G[500], marginRight:3, verticalAlign:"middle" }}/>Atual</span>
+                        <span><span style={{ display:"inline-block", width:12, height:2, background:S.grn, marginRight:3, verticalAlign:"middle", borderTop:`1px dashed ${S.grn}` }}/>Ideal</span>
                       </div>
-                      <div style={{ position:"absolute", right:-8, top:82, fontSize:8, color:G[700], fontWeight:600 }}>
-                        {lastC.torax ? `${lastC.torax}` : "--"}
-                        <div style={{ fontSize:7, color:"#aaa" }}>Tórax</div>
-                      </div>
-                      <div style={{ position:"absolute", right:-8, top:150, fontSize:8, color:G[700], fontWeight:600 }}>
-                        {lastC.cintura ? `${lastC.cintura}` : "--"}
-                        <div style={{ fontSize:7, color:"#aaa" }}>Cintura</div>
-                      </div>
-                      <div style={{ position:"absolute", right:-8, top:186, fontSize:8, color:G[700], fontWeight:600 }}>
-                        {lastC.quadril ? `${lastC.quadril}` : "--"}
-                        <div style={{ fontSize:7, color:"#aaa" }}>Quadril</div>
-                      </div>
-                      <div style={{ position:"absolute", left:-6, top:296, fontSize:8, color:G[700], fontWeight:600, textAlign:"right", width:32 }}>
-                        {lastC.panturrilha ? `${lastC.panturrilha}` : "--"}
-                        <div style={{ fontSize:7, color:"#aaa" }}>Pant.</div>
-                      </div>
-                    </>
-                  )}
-                </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Risk bars */}
                 <div style={{ flex:1, minWidth:200 }}>
@@ -2281,17 +2332,29 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
         const DONUT_COLORS = [G[400], S.grn];
 
         // Female SVG silhouette
-        const FemaleSilhouette = () => (
-          <svg viewBox="0 0 140 360" width="100%" height="100%" style={{ maxHeight:320 }}>
-            <defs>
-              <linearGradient id="relBodyGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={G[300]} stopOpacity="0.35"/>
-                <stop offset="100%" stopColor={G[200]} stopOpacity="0.15"/>
-              </linearGradient>
-            </defs>
-            <path d="M70 8 C82 8 88 18 88 28 C88 40 82 48 70 48 C58 48 52 40 52 28 C52 18 58 8 70 8 Z M64 50 L76 50 L76 58 L64 58 Z M56 60 C46 64 40 72 38 86 L34 86 Q30 88 30 94 Q30 100 34 102 L38 102 C38 108 40 114 42 118 L42 136 Q43 140 46 140 L46 118 C48 130 52 146 54 160 C56 172 52 178 52 188 L58 188 Q66 168 70 168 Q74 168 82 188 L88 188 C88 178 84 172 86 160 C88 146 92 130 94 118 L94 140 Q97 140 98 136 L98 118 C100 114 102 108 102 102 L106 102 Q110 100 110 94 Q110 88 106 86 L102 86 C100 72 94 64 84 60 Z M52 190 C50 220 50 250 50 270 C50 290 48 310 48 330 Q48 340 54 342 L62 342 Q64 340 62 336 C60 330 58 320 60 300 C62 280 64 260 66 240 L70 240 L74 240 C76 260 78 280 80 300 C82 320 80 330 78 336 Q76 340 78 342 L86 342 Q92 340 92 330 C92 310 90 290 90 270 C90 250 90 220 88 190" fill="url(#relBodyGrad)" stroke={G[300]} strokeWidth="1" strokeLinejoin="round"/>
-          </svg>
-        );
+        const FemaleSilhouette = () => {
+          const refB=88, refC=68, refQ=96;
+          const cB=lastCirc?.torax||refB, cC=lastCirc?.cintura||refC, cQ=lastCirc?.quadril||refQ;
+          const sB=Math.max(0.85,Math.min(1.35,cB/refB)), sC=Math.max(0.85,Math.min(1.35,cC/refC)), sQ=Math.max(0.85,Math.min(1.35,cQ/refQ));
+          const cx=100, bw=28*sB, cw=22*sC, qw=30*sQ;
+          const mkPath=(bw,cw,qw)=>{
+            const yn=58,ys=65,yb=95,yw=140,yh=175,yc=195,yk=270,ya=335,yf=345;
+            return `M${cx} 15 C${cx+13} 15 ${cx+17} 25 ${cx+17} 33 C${cx+17} 43 ${cx+13} 50 ${cx} 50 C${cx-13} 50 ${cx-17} 43 ${cx-17} 33 C${cx-17} 25 ${cx-13} 15 ${cx} 15 Z `+
+            `M${cx-5} 52 L${cx+5} 52 L${cx+5} ${yn} L${cx-5} ${yn} Z `+
+            `M${cx-bw} ${ys} C${cx-bw-4} ${ys} ${cx-bw-10} ${ys+5} ${cx-bw-12} ${ys+20} L${cx-bw-14} ${yb-5} Q${cx-bw-16} ${yb} ${cx-bw-14} ${yb+5} L${cx-bw-12} ${yb+10} C${cx-bw-8} ${yb+18} ${cx-bw-4} ${yb+12} ${cx-bw} ${yb+5} `+
+            `C${cx-cw} ${yw-10} ${cx-cw} ${yw} ${cx-cw} ${yw} C${cx-cw-2} ${yw+15} ${cx-qw+2} ${yh-10} ${cx-qw} ${yh} C${cx-qw+2} ${yc-5} ${cx-qw+5} ${yc} ${cx-8} ${yc} Q${cx-3} ${yc+20} ${cx-9} ${yk} C${cx-10} ${yk+20} ${cx-8} ${ya-10} ${cx-7} ${ya} L${cx-11} ${yf} L${cx-2} ${yf} L${cx+2} ${yf} L${cx+11} ${yf} L${cx+7} ${ya} C${cx+8} ${ya-10} ${cx+10} ${yk+20} ${cx+9} ${yk} Q${cx+3} ${yc+20} ${cx+8} ${yc} C${cx+qw-5} ${yc} ${cx+qw-2} ${yc-5} ${cx+qw} ${yh} C${cx+qw-2} ${yh-10} ${cx+cw+2} ${yw+15} ${cx+cw} ${yw} C${cx+cw} ${yw} ${cx+cw} ${yw-10} ${cx+bw} ${yb+5} C${cx+bw+4} ${yb+12} ${cx+bw+8} ${yb+18} ${cx+bw+12} ${yb+10} L${cx+bw+14} ${yb+5} Q${cx+bw+16} ${yb} ${cx+bw+14} ${yb-5} L${cx+bw+12} ${ys+20} C${cx+bw+10} ${ys+5} ${cx+bw+4} ${ys} ${cx+bw} ${ys} Q${cx+5} ${yn+2} ${cx+5} ${yn} L${cx-5} ${yn} Q${cx-5} ${yn+2} ${cx-bw} ${ys} Z`;
+          };
+          return (
+            <svg viewBox="0 0 200 360" width="100%" height="100%" style={{ maxHeight:320 }}>
+              <defs>
+                <linearGradient id="relIdealGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.grn} stopOpacity="0.1"/><stop offset="100%" stopColor={S.grn} stopOpacity="0.03"/></linearGradient>
+                <linearGradient id="relActualGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={G[400]} stopOpacity="0.25"/><stop offset="100%" stopColor={G[200]} stopOpacity="0.1"/></linearGradient>
+              </defs>
+              <path d={mkPath(28,22,30)} fill="url(#relIdealGrad)" stroke={S.grn} strokeWidth="0.8" strokeDasharray="3,3" strokeLinejoin="round" opacity="0.5"/>
+              <path d={mkPath(bw,cw,qw)} fill="url(#relActualGrad)" stroke={G[400]} strokeWidth="1" strokeLinejoin="round"/>
+            </svg>
+          );
+        };
 
         // Measurement labels for silhouette
         const SilLabel = ({ label, val, prev, top, left, right, align }) => (
@@ -5680,7 +5743,7 @@ export default function App() {
     <div style={{ fontFamily:"'Outfit','Inter',system-ui,sans-serif", background:W[50], minHeight:"100vh", color:"#2C2C2A" }}>
       {/* Sidebar */}
       <div style={{ width:220, background:`linear-gradient(180deg,${G[800]},${G[900]})`, color:"#fff", position:"fixed", top:0, left:0, height:"100vh", zIndex:100, display:"flex", flexDirection:"column", transform:so?"none":"translateX(-220px)", transition:"transform 0.3s" }}>
-        <div style={{ padding:"16px 14px", borderBottom:`1px solid ${G[700]}` }}>
+        <div style={{ padding:"16px 14px", borderBottom:`1px solid ${G[700]}`, cursor:"pointer" }} onClick={()=>{ setPage("dash"); setSid(null); }}>
           <div style={{ display:"flex", alignItems:"center", gap:7 }}>
             <Shield size={18} color={G[300]}/>
             <div>
@@ -5716,7 +5779,7 @@ export default function App() {
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 0", borderBottom:`1px solid ${G[200]}`, marginBottom:16 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <Menu size={16} color={G[700]} style={{ cursor:"pointer" }} onClick={()=>setSo(!so)}/>
-            <h1 style={{ fontSize:17, fontWeight:700, color:G[800], margin:0 }}>
+            <h1 onClick={()=>{ setPage("dash"); setSid(null); }} style={{ fontSize:17, fontWeight:700, color:G[800], margin:0, cursor:"pointer" }}>
             {titles[page]}
             {reloading && <span style={{ fontSize:11, color:G[400], marginLeft:8, fontWeight:400 }}>↻ atualizando...</span>}
           </h1>
