@@ -978,7 +978,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
               </div>
 
               {/* Scores clinicos com barras — só mostra se tem score registrado */}
-              {sc ? (
+              {(met > 0 || be > 0 || mn > 0) ? (
               <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:14 }}>
                 {[{l:"Saude metabolica",t:met,m:24,fn:sM,c:"#27AE60"},{l:"Bem-estar",t:be,m:18,fn:sB,c:"#F39C12"},{l:"Blindagem mental",t:mn,m:9,fn:sN,c:"#F39C12"}].map((s,i) => {
                   const st=s.fn(s.t);
