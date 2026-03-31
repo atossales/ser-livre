@@ -1178,97 +1178,81 @@ function RelTab({ p, mob, plan, met, be, mn }) {
               {/* Silhueta adaptativa com medidas */}
               <SectionTitle>Perimetros corporais</SectionTitle>
               <div style={{ display:"flex", gap:16, marginBottom:16, flexWrap:"wrap" }}>
-                {/* SVG Silhouette — adaptive female body */}
+                {/* SVG Silhouette — multi-part female body */}
                 {(() => {
-                  // Normalizar medidas para escalar a silhueta (referência feminina saudável)
-                  const refBusto = 88, refCintura = 68, refQuadril = 96, refBraco = 28, refPant = 36;
-                  const cBusto = lastC?.torax || refBusto;
-                  const cCint = lastC?.cintura || refCintura;
-                  const cQuad = lastC?.quadril || refQuadril;
-                  const cBrac = lastC?.braco || refBraco;
-                  const cPant = lastC?.panturrilha || refPant;
-                  // Scale factors (1.0 = ideal, >1.0 = larger than ideal)
-                  const sBusto = Math.max(0.85, Math.min(1.35, cBusto / refBusto));
-                  const sCint  = Math.max(0.85, Math.min(1.35, cCint / refCintura));
-                  const sQuad  = Math.max(0.85, Math.min(1.35, cQuad / refQuadril));
-                  const sBrac  = Math.max(0.85, Math.min(1.3, cBrac / refBraco));
-                  const sPant  = Math.max(0.85, Math.min(1.3, cPant / refPant));
-                  const cx = 100; // center x
-                  // Build actual body path (adapted widths)
-                  const bustoW = 28 * sBusto, cintW = 22 * sCint, quadW = 30 * sQuad, bracW = 8 * sBrac, pantW = 9 * sPant;
-                  // Ideal silhouette (reference proportions)
-                  const iBustoW = 28, iCintW = 22, iQuadW = 30;
-                  const buildBody = (bw, cw, qw, pw, brw) => {
-                    const l = cx, y_neck=58, y_shoulder=65, y_bust=95, y_waist=140, y_hip=175, y_crotch=195, y_knee=270, y_ankle=335, y_foot=345;
-                    return `M${l} 15 C${l+13} 15 ${l+17} 25 ${l+17} 33 C${l+17} 43 ${l+13} 50 ${l} 50 C${l-13} 50 ${l-17} 43 ${l-17} 33 C${l-17} 25 ${l-13} 15 ${l} 15 Z `+
-                    `M${l-5} 52 L${l+5} 52 L${l+5} ${y_neck} L${l-5} ${y_neck} Z `+
-                    `M${l-bw} ${y_shoulder} C${l-bw-4} ${y_shoulder} ${l-bw-10} ${y_shoulder+5} ${l-bw-12} ${y_shoulder+20} L${l-bw-14} ${y_bust-5} Q${l-bw-16} ${y_bust} ${l-bw-14} ${y_bust+5} L${l-bw-12} ${y_bust+10} C${l-bw-8} ${y_bust+18} ${l-bw-4} ${y_bust+12} ${l-bw} ${y_bust+5} `+
-                    `C${l-cw} ${y_waist-10} ${l-cw} ${y_waist} ${l-cw} ${y_waist} C${l-cw-2} ${y_waist+15} ${l-qw+2} ${y_hip-10} ${l-qw} ${y_hip} `+
-                    `C${l-qw+2} ${y_crotch-5} ${l-qw+5} ${y_crotch} ${l-8} ${y_crotch} `+
-                    `Q${l-3} ${y_crotch+20} ${l-pw} ${y_knee} C${l-pw-1} ${y_knee+20} ${l-pw+1} ${y_ankle-10} ${l-pw+2} ${y_ankle} L${l-pw-2} ${y_foot} L${l-2} ${y_foot} `+
-                    `L${l+2} ${y_foot} L${l+pw+2} ${y_foot} L${l+pw-2} ${y_ankle} C${l+pw-1} ${y_ankle-10} ${l+pw+1} ${y_knee+20} ${l+pw} ${y_knee} `+
-                    `Q${l+3} ${y_crotch+20} ${l+8} ${y_crotch} `+
-                    `C${l+qw-5} ${y_crotch} ${l+qw-2} ${y_crotch-5} ${l+qw} ${y_hip} `+
-                    `C${l+qw-2} ${y_hip-10} ${l+cw+2} ${y_waist+15} ${l+cw} ${y_waist} C${l+cw} ${y_waist} ${l+cw} ${y_waist-10} ${l+bw} ${y_bust+5} `+
-                    `C${l+bw+4} ${y_bust+12} ${l+bw+8} ${y_bust+18} ${l+bw+12} ${y_bust+10} L${l+bw+14} ${y_bust+5} Q${l+bw+16} ${y_bust} ${l+bw+14} ${y_bust-5} L${l+bw+12} ${y_shoulder+20} C${l+bw+10} ${y_shoulder+5} ${l+bw+4} ${y_shoulder} ${l+bw} ${y_shoulder} `+
-                    `Q${l+5} ${y_neck+2} ${l+5} ${y_neck} L${l-5} ${y_neck} Q${l-5} ${y_neck+2} ${l-bw} ${y_shoulder} Z`;
+                  // Referências femininas saudáveis (cm)
+                  const ref = { busto:88, cintura:68, quadril:96, braco:28, pant:36 };
+                  const cur = {
+                    busto: lastC?.torax || ref.busto,
+                    cintura: lastC?.cintura || ref.cintura,
+                    quadril: lastC?.quadril || ref.quadril,
+                    braco: lastC?.braco || ref.braco,
+                    pant: lastC?.panturrilha || ref.pant
                   };
-                  const actualPath = buildBody(bustoW, cintW, quadW, pantW, bracW);
-                  const idealPath = buildBody(iBustoW, iCintW, iQuadW, 9, 8);
+                  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+                  const sc = k => clamp(cur[k] / ref[k], 0.85, 1.35);
+                  const cx = 100;
+                  // Builds separate body parts for a given set of scale factors
+                  const mkParts = (s) => {
+                    const bw = 24*s.busto, cw = 18*s.cintura, qw = 26*s.quadril, aw = 6*s.braco, pw = 7*s.pant;
+                    return {
+                      head: `M${cx} 12 C${cx+12} 12 ${cx+15} 22 ${cx+15} 32 C${cx+15} 42 ${cx+12} 50 ${cx} 50 C${cx-12} 50 ${cx-15} 42 ${cx-15} 32 C${cx-15} 22 ${cx-12} 12 ${cx} 12 Z`,
+                      neck: `M${cx-4} 50 L${cx+4} 50 L${cx+5} 60 L${cx-5} 60 Z`,
+                      torso: `M${cx-bw} 65 C${cx-bw-2} 80 ${cx-bw+2} 90 ${cx-bw+1} 100 C${cx-cw+4} 120 ${cx-cw} 135 ${cx-cw} 140 C${cx-cw-1} 155 ${cx-qw+4} 165 ${cx-qw} 175 L${cx-qw+3} 190 L${cx-6} 192 L${cx+6} 192 L${cx+qw-3} 190 L${cx+qw} 175 C${cx+qw-4} 165 ${cx+cw+1} 155 ${cx+cw} 140 C${cx+cw} 135 ${cx+cw-4} 120 ${cx+bw-1} 100 C${cx+bw-2} 90 ${cx+bw+2} 80 ${cx+bw} 65 Q${cx+5} 62 ${cx+5} 60 L${cx-5} 60 Q${cx-5} 62 ${cx-bw} 65 Z`,
+                      armL: `M${cx-bw} 67 C${cx-bw-6} 70 ${cx-bw-10} 80 ${cx-bw-12} 95 C${cx-bw-13} 105 ${cx-bw-11} 115 ${cx-bw-10} 125 Q${cx-bw-9} 135 ${cx-bw-7} 140 L${cx-bw-7+aw} 140 Q${cx-bw-5+aw} 135 ${cx-bw-4+aw} 125 C${cx-bw-3+aw} 115 ${cx-bw-5+aw} 105 ${cx-bw-4+aw} 95 C${cx-bw-2+aw} 85 ${cx-bw+aw} 75 ${cx-bw+1} 70 Z`,
+                      armR: `M${cx+bw} 67 C${cx+bw+6} 70 ${cx+bw+10} 80 ${cx+bw+12} 95 C${cx+bw+13} 105 ${cx+bw+11} 115 ${cx+bw+10} 125 Q${cx+bw+9} 135 ${cx+bw+7} 140 L${cx+bw+7-aw} 140 Q${cx+bw+5-aw} 135 ${cx+bw+4-aw} 125 C${cx+bw+3-aw} 115 ${cx+bw+5-aw} 105 ${cx+bw+4-aw} 95 C${cx+bw+2-aw} 85 ${cx+bw-aw} 75 ${cx+bw-1} 70 Z`,
+                      legL: `M${cx-6} 192 L${cx-qw+3} 190 C${cx-qw+1} 210 ${cx-pw-4} 250 ${cx-pw-2} 280 C${cx-pw-1} 300 ${cx-pw} 320 ${cx-pw+1} 338 L${cx-pw-3} 348 L${cx-1} 348 L${cx-1} 338 C${cx-2} 310 ${cx-3} 260 ${cx-4} 220 Z`,
+                      legR: `M${cx+6} 192 L${cx+qw-3} 190 C${cx+qw-1} 210 ${cx+pw+4} 250 ${cx+pw+2} 280 C${cx+pw+1} 300 ${cx+pw} 320 ${cx+pw-1} 338 L${cx+pw+3} 348 L${cx+1} 348 L${cx+1} 338 C${cx+2} 310 ${cx+3} 260 ${cx+4} 220 Z`,
+                    };
+                  };
+                  const ideal = mkParts({ busto:1, cintura:1, quadril:1, braco:1, pant:1 });
+                  const actual = mkParts({ busto:sc('busto'), cintura:sc('cintura'), quadril:sc('quadril'), braco:sc('braco'), pant:sc('pant') });
+                  const renderBody = (parts, fill, stroke, sw, dash, op) => (
+                    <>
+                      {Object.values(parts).map((d,i) => (
+                        <path key={i} d={d} fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={dash||"none"} strokeLinejoin="round" opacity={op||1}/>
+                      ))}
+                    </>
+                  );
+                  const bwActual = 24*sc('busto'), cwActual = 18*sc('cintura'), qwActual = 26*sc('quadril');
                   return (
-                    <div style={{ width:200, flexShrink:0, position:"relative", padding:"10px 0" }}>
+                    <div style={{ width:210, flexShrink:0, position:"relative", padding:"10px 0" }}>
                       <svg viewBox="0 0 200 360" width="200" height="360" style={{ display:"block", margin:"0 auto" }}>
                         <defs>
-                          <linearGradient id="bodyGradA" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={S.grn} stopOpacity="0.12"/>
-                            <stop offset="100%" stopColor={S.grn} stopOpacity="0.04"/>
-                          </linearGradient>
-                          <linearGradient id="bodyGradC" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={G[400]} stopOpacity="0.3"/>
-                            <stop offset="50%" stopColor={G[300]} stopOpacity="0.2"/>
-                            <stop offset="100%" stopColor={G[200]} stopOpacity="0.1"/>
-                          </linearGradient>
+                          <linearGradient id="bgIdeal" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.grn} stopOpacity="0.08"/><stop offset="100%" stopColor={S.grn} stopOpacity="0.02"/></linearGradient>
+                          <linearGradient id="bgActual" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={G[400]} stopOpacity="0.25"/><stop offset="50%" stopColor={G[300]} stopOpacity="0.15"/><stop offset="100%" stopColor={G[200]} stopOpacity="0.08"/></linearGradient>
                         </defs>
-                        {/* Ideal silhouette (green outline, transparent) */}
-                        <path d={idealPath} fill="url(#bodyGradA)" stroke={S.grn} strokeWidth="1" strokeDasharray="4,3" strokeLinejoin="round" opacity="0.6"/>
-                        {/* Actual silhouette (filled, solid border) */}
-                        <path d={actualPath} fill="url(#bodyGradC)" stroke={G[500]} strokeWidth="1.2" strokeLinejoin="round"/>
-                        {/* Measurement guide lines */}
-                        <line x1="15" y1="100" x2={cx-bustoW-10} y2="100" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
-                        <line x1={cx+bustoW+15} y1="90" x2="190" y2="90" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
-                        <line x1={cx+cintW+5} y1="140" x2="190" y2="140" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
-                        <line x1={cx+quadW+5} y1="175" x2="190" y2="175" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
-                        <line x1="15" y1="295" x2={cx-pantW-2} y2="295" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
+                        {/* Ideal body (green dashed) */}
+                        {renderBody(ideal, "url(#bgIdeal)", S.grn, "0.8", "3,3", 0.5)}
+                        {/* Actual body (gold filled) */}
+                        {renderBody(actual, "url(#bgActual)", G[500], "1", null, 1)}
+                        {/* Measurement lines */}
+                        <line x1="12" y1="110" x2={cx-bwActual-12} y2="110" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
+                        <line x1={cx+bwActual+14} y1="85" x2="192" y2="85" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
+                        <line x1={cx+cwActual+4} y1="140" x2="192" y2="140" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
+                        <line x1={cx+qwActual+4} y1="178" x2="192" y2="178" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
+                        <line x1="12" y1="305" x2={cx-7*sc('pant')-2} y2="305" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
                       </svg>
                       {/* Labels */}
-                      {lastC && (
-                        <>
-                          <div style={{ position:"absolute", left:0, top:95, fontSize:9, color:G[700], fontWeight:600, textAlign:"right", width:28 }}>
-                            <span style={{ color:G[800] }}>{lastC.braco||"--"}</span>
-                            <div style={{ fontSize:7, color:"#aaa" }}>Braço</div>
-                          </div>
-                          <div style={{ position:"absolute", right:0, top:82, fontSize:9, color:G[700], fontWeight:600 }}>
-                            <span style={{ color:G[800] }}>{lastC.torax||"--"}</span>
-                            <div style={{ fontSize:7, color:"#aaa" }}>Tórax</div>
-                          </div>
-                          <div style={{ position:"absolute", right:0, top:132, fontSize:9, color:G[700], fontWeight:600 }}>
-                            <span style={{ color:G[800] }}>{lastC.cintura||"--"}</span>
-                            <div style={{ fontSize:7, color:"#aaa" }}>Cintura</div>
-                          </div>
-                          <div style={{ position:"absolute", right:0, top:168, fontSize:9, color:G[700], fontWeight:600 }}>
-                            <span style={{ color:G[800] }}>{lastC.quadril||"--"}</span>
-                            <div style={{ fontSize:7, color:"#aaa" }}>Quadril</div>
-                          </div>
-                          <div style={{ position:"absolute", left:0, top:288, fontSize:9, color:G[700], fontWeight:600, textAlign:"right", width:28 }}>
-                            <span style={{ color:G[800] }}>{lastC.panturrilha||"--"}</span>
-                            <div style={{ fontSize:7, color:"#aaa" }}>Pant.</div>
-                          </div>
-                        </>
-                      )}
+                      <div style={{ position:"absolute", left:0, top:103, fontSize:9, color:G[800], fontWeight:700, textAlign:"right", width:30 }}>
+                        {cur.braco}<div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Braço</div>
+                      </div>
+                      <div style={{ position:"absolute", right:0, top:77, fontSize:9, color:G[800], fontWeight:700 }}>
+                        {cur.busto}<div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Tórax</div>
+                      </div>
+                      <div style={{ position:"absolute", right:0, top:132, fontSize:9, color:G[800], fontWeight:700 }}>
+                        {cur.cintura}<div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Cintura</div>
+                      </div>
+                      <div style={{ position:"absolute", right:0, top:170, fontSize:9, color:G[800], fontWeight:700 }}>
+                        {cur.quadril}<div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Quadril</div>
+                      </div>
+                      <div style={{ position:"absolute", left:0, top:298, fontSize:9, color:G[800], fontWeight:700, textAlign:"right", width:30 }}>
+                        {cur.pant}<div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Pant.</div>
+                      </div>
                       {/* Legend */}
-                      <div style={{ display:"flex", gap:10, justifyContent:"center", marginTop:6, fontSize:8, color:"#aaa" }}>
-                        <span><span style={{ display:"inline-block", width:12, height:2, background:G[500], marginRight:3, verticalAlign:"middle" }}/>Atual</span>
-                        <span><span style={{ display:"inline-block", width:12, height:2, background:S.grn, marginRight:3, verticalAlign:"middle", borderTop:`1px dashed ${S.grn}` }}/>Ideal</span>
+                      <div style={{ display:"flex", gap:12, justifyContent:"center", marginTop:8, fontSize:8, color:"#aaa" }}>
+                        <span style={{ display:"flex", alignItems:"center", gap:3 }}><span style={{ width:14, height:2, background:G[500], display:"inline-block" }}/>Atual</span>
+                        <span style={{ display:"flex", alignItems:"center", gap:3 }}><span style={{ width:14, height:0, borderTop:`1.5px dashed ${S.grn}`, display:"inline-block" }}/>Ideal</span>
                       </div>
                     </div>
                   );
