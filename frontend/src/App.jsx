@@ -1209,7 +1209,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
           {/* Header com botão novo score */}
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Histórico de scores</div>
-            <button onClick={()=>{ setEs(JSON.parse(JSON.stringify(DEFAULT_SCORE))); setScoreRef(defaultWeekValue); setScoreFormOpen(true); }} style={{ padding:"7px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>+ Novo score</button>
+            <button onClick={()=>{ setEs(JSON.parse(JSON.stringify(DEFAULT_SCORE))); setScoreRef(buildScoreRef(todayStr, todayStr)); setScoreFormOpen(true); }} style={{ padding:"7px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>+ Novo score</button>
           </div>
 
           {/* Lista de scores históricos */}
