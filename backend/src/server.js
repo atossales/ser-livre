@@ -454,6 +454,19 @@ app.post('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA', 'ENFERMAG
       await sendWelcomePatientEmail(email, name, linkData.properties.action_link);
     }
 
+    // Auto-send WhatsApp welcome if patient has phone
+    if (phone) {
+      try {
+        const welcomeMsg = `Olá ${name}, seu cadastro no Programa Ser Livre foi realizado.\n\n- Plano: ${plan || 'Essential'}\n- Início: ${new Date().toLocaleDateString('pt-BR')}\n- Acesso ao app em breve\n\nQualquer dúvida, fale com a equipe.\n\nInstituto Dra. Mariana Wogel`;
+        await sendWhatsApp(phone, welcomeMsg);
+        await prisma.messageLog.create({
+          data: { patientId: result.patient.id, sentById: req.user.id, phone, body: welcomeMsg, channel: 'whatsapp', status: 'sent' }
+        });
+      } catch (waErr) {
+        console.warn('[PATIENT-CREATE] WhatsApp welcome failed:', waErr.message);
+      }
+    }
+
     res.status(201).json({
       patientId: result.patient.id,
       userId: authData.user.id,

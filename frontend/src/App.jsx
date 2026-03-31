@@ -291,40 +291,63 @@ function Dash({  ps, onSel, mob }) {
   useEffect(() => {
     getDashboard().then(r => setDashData(r.data)).catch(() => {});
   }, [ps]);
-  const SC = genSC(ps);
+
+  // ── Filtro de período: filtra pacientes com atividade no período selecionado ──
+  const filteredPs = useMemo(() => {
+    if (df === "all") return ps;
+    const daysMap = { week: 7, month: 30, quarter: 90, "120d": 120 };
+    const days = daysMap[df];
+    if (!days) return ps;
+    const cutoff = subDays(new Date(), days);
+    return ps.filter(p => {
+      // Paciente com startDate (sd) dentro do período
+      if (p.sd && isAfter(new Date(p.sd), cutoff)) return true;
+      // Paciente com algum registro de peso (history) dentro do período
+      if ((p.history || []).some(h => h.date && isAfter(new Date(h.date), cutoff))) return true;
+      // Paciente com algum registro de circunferência dentro do período
+      if ((p.circumferenceHistory || []).some(c => c.date && isAfter(new Date(c.date), cutoff))) return true;
+      // Paciente com algum registro de score dentro do período
+      if ((p.scoreHistory || []).some(s => s.date && isAfter(new Date(s.date), cutoff))) return true;
+      // Fallback: se o paciente foi criado recentemente (createdAt)
+      if (p.createdAt && isAfter(new Date(p.createdAt), cutoff)) return true;
+      return false;
+    });
+  }, [ps, df]);
+
+  const SC = genSC(filteredPs);
 
   // Composição corporal média atual
-  const avgMM = ps.length ? +(ps.reduce((a,p)=>{ const h=p.history||[]; const last=h[h.length-1]; return a+(last?.massaMagra||0); },0)/ps.length).toFixed(1) : 0;
-  const avgMG = ps.length ? +(ps.reduce((a,p)=>{ const h=p.history||[]; const last=h[h.length-1]; return a+(last?.massaGordura||0); },0)/ps.length).toFixed(1) : 0;
-  const avgPctMM = ps.length ? +(ps.reduce((a,p)=>{ const h=p.history||[]; const last=h[h.length-1]; const tot=(last?.massaMagra||0)+(last?.massaGordura||0); return a+(tot>0?((last?.massaMagra||0)/tot*100):0); },0)/ps.length).toFixed(1) : 0;
-  const avgPctMG = ps.length ? +(100-avgPctMM).toFixed(1) : 0;
+  const avgMM = filteredPs.length ? +(filteredPs.reduce((a,p)=>{ const h=p.history||[]; const last=h[h.length-1]; return a+(last?.massaMagra||0); },0)/filteredPs.length).toFixed(1) : 0;
+  const avgMG = filteredPs.length ? +(filteredPs.reduce((a,p)=>{ const h=p.history||[]; const last=h[h.length-1]; return a+(last?.massaGordura||0); },0)/filteredPs.length).toFixed(1) : 0;
+  const avgPctMM = filteredPs.length ? +(filteredPs.reduce((a,p)=>{ const h=p.history||[]; const last=h[h.length-1]; const tot=(last?.massaMagra||0)+(last?.massaGordura||0); return a+(tot>0?((last?.massaMagra||0)/tot*100):0); },0)/filteredPs.length).toFixed(1) : 0;
+  const avgPctMG = filteredPs.length ? +(100-avgPctMM).toFixed(1) : 0;
 
   // Histórico de composição (para gráfico)
   const compHist = (() => {
     const weeks = {};
-    ps.forEach(p => { (p.history||[]).forEach((h,i) => { const k=`S${i+1}`; if(!weeks[k]) weeks[k]={s:k,mm:0,mg:0,n:0}; weeks[k].mm+=(h.massaMagra||0); weeks[k].mg+=(h.massaGordura||0); weeks[k].n++; }); });
+    filteredPs.forEach(p => { (p.history||[]).forEach((h,i) => { const k=`S${i+1}`; if(!weeks[k]) weeks[k]={s:k,mm:0,mg:0,n:0}; weeks[k].mm+=(h.massaMagra||0); weeks[k].mg+=(h.massaGordura||0); weeks[k].n++; }); });
     return Object.values(weeks).map(w=>({s:w.s, mm:w.n?+(w.mm/w.n).toFixed(1):0, mg:w.n?+(w.mg/w.n).toFixed(1):0}));
   })();
 
-  const tl   = ps.reduce((a,p) => a+(p.iw-p.cw), 0);
-  const ae   = ps.length ? Math.round(ps.reduce((a,p) => a+p.eng, 0)/ps.length) : 0;
-  const cr   = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); });
-  const el   = ps.filter(p => { const sc=SC[p.id]; return sc&&cM(sc.m)>=21; });
-  const rTod = ps.filter(p => p.nr && fmt(p.nr)===fmt(TODAY));
-  const rWk  = ps.filter(p => { if(!p.nr)return false; const d=new Date(p.nr).getTime(); return d>=TODAY.getTime()&&d<=addD(TODAY,7).getTime(); }).sort((a,b)=>new Date(a.nr)-new Date(b.nr));
-  const top  = useMemo(() => ps.map(p=>({...p,pct:(p.iw>0?((p.iw-p.cw)/p.iw*100):0)})).sort((a,b)=>b.pct-a.pct).slice(0,3), [ps]);
+  const tl   = filteredPs.reduce((a,p) => a+(p.iw-p.cw), 0);
+  const ae   = filteredPs.length ? Math.round(filteredPs.reduce((a,p) => a+p.eng, 0)/filteredPs.length) : 0;
+  const cr   = filteredPs.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); });
+  const el   = filteredPs.filter(p => { const sc=SC[p.id]; return sc&&cM(sc.m)>=21; });
+  const rTod = filteredPs.filter(p => p.nr && fmt(p.nr)===fmt(TODAY));
+  const rWk  = filteredPs.filter(p => { if(!p.nr)return false; const d=new Date(p.nr).getTime(); return d>=TODAY.getTime()&&d<=addD(TODAY,7).getTime(); }).sort((a,b)=>new Date(a.nr)-new Date(b.nr));
+  const top  = useMemo(() => filteredPs.map(p=>({...p,pct:(p.iw>0?((p.iw-p.cw)/p.iw*100):0)})).sort((a,b)=>b.pct-a.pct).slice(0,3), [filteredPs]);
   const pavg = useMemo(() => {
     const s={c:0,i:0,g:0,v:0,n:0};
-    ps.forEach(p => { const sc=SC[p.id]; if(!sc)return; const pm=pM(sc.m); s.c+=pm.comp; s.i+=pm.infl; s.g+=pm.glic; s.v+=pm.card; s.n++; });
+    filteredPs.forEach(p => { const sc=SC[p.id]; if(!sc)return; const pm=pM(sc.m); s.c+=pm.comp; s.i+=pm.infl; s.g+=pm.glic; s.v+=pm.card; s.n++; });
     const n=s.n||1;
     return [{p:"Composição",v:+(s.c/n).toFixed(1)},{p:"Inflamação",v:+(s.i/n).toFixed(1)},{p:"Glicêmico",v:+(s.g/n).toFixed(1)},{p:"Cardiovascular",v:+(s.v/n).toFixed(1)}];
-  }, [ps]);
-  const engD = useMemo(() => ps.map(p=>({n:p.name.split(" ")[0],e:p.eng})).sort((a,b)=>b.e-a.e), [ps]);
+  }, [filteredPs]);
+  const engD = useMemo(() => filteredPs.map(p=>({n:p.name.split(" ")[0],e:p.eng})).sort((a,b)=>b.e-a.e), [filteredPs]);
   const wbw  = useMemo(() => {
     const w=[];
-    for(let i=1;i<=16;i++){let s=0,n=0; ps.forEach(p=>{const h=p.history||[];if(h[i-1]!==undefined){s+=p.iw-(h[i-1]?.weight||0);n++;}}); w.push({s:`S${i}`,v:n?+(s/n).toFixed(1):0});}
+    for(let i=1;i<=16;i++){let s=0,n=0; filteredPs.forEach(p=>{const h=p.history||[];if(h[i-1]!==undefined){s+=p.iw-(h[i-1]?.weight||0);n++;}}); w.push({s:`S${i}`,v:n?+(s/n).toFixed(1):0});}
     return w;
-  }, [ps]);
+  }, [filteredPs]);
 
   const achievements = [
     {i:Trophy,    l:"Fernanda completou 15 semanas",        c:S.pur},
@@ -351,7 +374,7 @@ function Dash({  ps, onSel, mob }) {
 
       {/* KPIs linha 1 */}
       <div style={{ display:"grid", gridTemplateColumns:gc, gap:8 }}>
-        <Mt value={dashData?.activePatients ?? ps.length} label="Pacientes ativos"   icon={Users}        trend={12}/>
+        <Mt value={dashData?.activePatients ?? filteredPs.length} label="Pacientes ativos"   icon={Users}        trend={12}/>
         <Mt value={cr.length}          label="Críticos"            icon={AlertTriangle} color={cr.length?S.red:S.grn} sub={cr.length?cr.map(p=>p.name.split(" ")[0]).join(", "):"Nenhum"}/>
         <Mt value={`${(dashData?.totalWeightLost ?? tl).toFixed(1)}kg`} label="Peso total perdido" icon={TrendingUp}   color={S.grn} trend={8}/>
         <Mt value={`${dashData?.avgEngagement ?? ae}%`}  label="Engajamento médio"  icon={Flame}         color={(dashData?.avgEngagement??ae)>=80?S.grn:(dashData?.avgEngagement??ae)>=60?S.yel:S.red}/>
@@ -359,7 +382,7 @@ function Dash({  ps, onSel, mob }) {
 
       {/* KPIs linha 2 */}
       <div style={{ display:"grid", gridTemplateColumns:gc, gap:8 }}>
-        <Mt value={`${(dashData?.totalPatients??ps.length)>0?((dashData?.totalWeightLost??tl)/(dashData?.totalPatients??ps.length)).toFixed(1):"0.0"}kg`} label="Média por paciente"  icon={Weight}/>
+        <Mt value={`${(dashData?.totalPatients??filteredPs.length)>0?((dashData?.totalWeightLost??tl)/(dashData?.totalPatients??filteredPs.length)).toFixed(1):"0.0"}kg`} label="Média por paciente"  icon={Weight}/>
         <Mt value={el.length}          label="Score elite"         icon={Trophy}        color={S.pur} sub={el.map(p=>p.name.split(" ")[0]).join(", ")||"—"}/>
         <Mt value={rTod.length}        label="Retornos hoje"       icon={CalendarDays}  color={S.blue} sub={rTod.map(p=>p.name.split(" ")[0]).join(", ")||"Nenhum"}/>
         <Mt value={`${dashData?.alerts?.red ?? cr.length}`} label="Alertas vermelhos" icon={AlertTriangle} color={S.red}/>
@@ -511,7 +534,7 @@ function Dash({  ps, onSel, mob }) {
           <thead><tr>{["Paciente","Plano","Sem","Met","Bem","Ment","Eng%","Evol"].map(h =>
             <th key={h} style={{ textAlign:"left", padding:"6px 8px", borderBottom:`2px solid ${G[300]}`, color:G[700], fontWeight:600, fontSize:9, textTransform:"uppercase", letterSpacing:"0.04em" }}>{h}</th>
           )}</tr></thead>
-          <tbody>{ps.map(p => {
+          <tbody>{filteredPs.map(p => {
             const sc=SC[p.id]; const m=cM(sc?.m); const b=cB(sc?.b); const n=cN(sc?.n);
             const ms=sM(m); const bs=sB(b); const ns=sN(n);
             return (
@@ -4269,18 +4292,60 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
     </div>
   );
 
+  // ── Historico sub-filter state ──
+  const [histFilter, setHistFilter] = useState('todas'); // 'todas' | 'sent' | 'failed'
+  const [resendingId, setResendingId] = useState(null);
+
+  const handleResend = async (msg) => {
+    const patient = ps.find(p => p.id === msg.patientId);
+    if (!patient?.phone) return;
+    setResendingId(msg.id);
+    try {
+      await sendWhatsAppMsg({ phone: patient.phone, message: msg.body, patientId: msg.patientId });
+      // Reload history to reflect updated status
+      await loadHistory();
+    } catch (e) {
+      console.error('Resend failed:', e);
+    } finally {
+      setResendingId(null);
+    }
+  };
+
+  const filteredHistory = useMemo(() => {
+    if (histFilter === 'todas') return historyMsgs;
+    if (histFilter === 'sent') return historyMsgs.filter(m => m.status === 'sent' || !m.status);
+    if (histFilter === 'failed') return historyMsgs.filter(m => m.status === 'failed' || m.status === 'error');
+    return historyMsgs;
+  }, [historyMsgs, histFilter]);
+
   // ══════════════════════════════════════════
   //  RENDER: Historico list
   // ══════════════════════════════════════════
   const historicoList = (
     <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:16 }}>
+      {/* Sub-filter pills */}
+      <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
+        {[['todas','Todas'],['sent','Enviadas'],['failed','Falhas']].map(([k,l]) => (
+          <button key={k} onClick={() => setHistFilter(k)}
+            style={{ ...pillActive,
+              background: histFilter === k ? G[600] : '#fff',
+              color: histFilter === k ? '#fff' : G[700],
+              border: histFilter === k ? `1.5px solid ${G[600]}` : `1.5px solid ${G[200]}` }}>
+            {l}
+          </button>
+        ))}
+        <span style={{ fontSize:11, color:'#aaa', marginLeft:4 }}>
+          {filteredHistory.length} mensagem{filteredHistory.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
       {loadingHistory ? (
         <div style={{ padding:40, textAlign:'center', color:'#aaa', fontSize:12 }}>Carregando historico...</div>
-      ) : historyMsgs.length === 0 ? (
+      ) : filteredHistory.length === 0 ? (
         <div style={{ padding:40, textAlign:'center', color:'#ccc', fontSize:12 }}>
-          Nenhuma mensagem enviada ainda.
+          {histFilter === 'todas' ? 'Nenhuma mensagem enviada ainda.' : `Nenhuma mensagem com status "${histFilter === 'sent' ? 'enviada' : 'falha'}".`}
         </div>
-      ) : historyMsgs.map(m => {
+      ) : filteredHistory.map(m => {
         const patient = ps.find(p => p.id === m.patientId);
         const patientName = patient?.user?.name || patient?.name || 'Paciente';
         const senderName = m.sentBy?.name || '—';
@@ -4288,15 +4353,29 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
         const tplName = m.templateName || null;
         const tplCat = m.templateCategory ? (TPL_CATEGORIES[m.templateCategory] || TPL_CATEGORIES.custom) : null;
         const isWA = m.channel === 'whatsapp';
+        const isFailed = m.status === 'failed' || m.status === 'error';
+        const statusColor = isFailed ? S.red : S.grn;
+        const statusLabel = isFailed ? 'Falhou' : 'Enviado';
+        const statusBg = isFailed ? S.redBg : S.grnBg;
         return (
-          <div key={m.id} style={{ background:'#fff', borderRadius:10, border:`1px solid ${G[100]}`,
+          <div key={m.id} style={{ background:'#fff', borderRadius:10, border:`1px solid ${isFailed ? `${S.red}30` : G[100]}`,
             padding:'14px 16px', display:'flex', flexDirection:'column', gap:6 }}>
             {/* Top row */}
             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <div style={{ width:8, height:8, borderRadius:'50%', background: isWA ? '#25D366' : '#22c55e', flexShrink:0 }}/>
-              <span style={{ fontSize:13, fontWeight:700, color:G[800], flex:1 }}>{patientName}</span>
+              <Av name={patientName} size={28}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <span style={{ fontSize:13, fontWeight:700, color:G[800] }}>{patientName}</span>
+                {phone && <span style={{ fontSize:10, color:'#bbb', marginLeft:6 }}>{phone}</span>}
+              </div>
+              {/* Channel badge */}
+              <span style={{ fontSize:9, fontWeight:700, padding:'2px 8px', borderRadius:10,
+                color: isWA ? '#25D366' : G[600],
+                background: isWA ? '#25D36615' : G[50] }}>
+                {isWA ? 'WhatsApp' : 'Interno'}
+              </span>
               {tplName && tplCat && (
-                <span style={{ fontSize:10, fontWeight:600, color:tplCat.color }}>{tplName}</span>
+                <span style={{ fontSize:9, fontWeight:600, padding:'2px 8px', borderRadius:10,
+                  color:tplCat.color, background:tplCat.bg }}>{tplName}</span>
               )}
               <span style={{ fontSize:10, color:'#aaa', flexShrink:0 }}>
                 {safeFmt(m.createdAt, 'dd/MM HH:mm')}
@@ -4305,14 +4384,26 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
             {/* Body preview */}
             <div style={{ fontSize:11, color:'#999', lineHeight:1.4,
               overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box',
-              WebkitLineClamp:2, WebkitBoxOrient:'vertical', paddingLeft:16 }}>
+              WebkitLineClamp:2, WebkitBoxOrient:'vertical', paddingLeft:36 }}>
               {m.body || ''}
             </div>
             {/* Bottom row */}
-            <div style={{ display:'flex', alignItems:'center', gap:8, paddingLeft:16 }}>
-              <span style={{ fontSize:10, fontWeight:600, color:'#22c55e' }}>Enviado</span>
+            <div style={{ display:'flex', alignItems:'center', gap:8, paddingLeft:36 }}>
+              {/* Status badge */}
+              <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:10,
+                color: statusColor, background: statusBg }}>
+                {statusLabel}
+              </span>
               <span style={{ fontSize:10, color:'#bbb' }}>por {senderName}</span>
-              {phone && <span style={{ fontSize:10, color:'#bbb' }}>{phone}</span>}
+              {/* Resend button for failed messages */}
+              {isFailed && isWA && patient?.phone && (
+                <button onClick={() => handleResend(m)} disabled={resendingId === m.id}
+                  style={{ marginLeft:'auto', padding:'4px 10px', borderRadius:6, fontSize:10, fontWeight:600,
+                    border:`1px solid ${G[400]}`, background:'#fff', color:G[700], cursor:'pointer', fontFamily:'inherit',
+                    opacity: resendingId === m.id ? 0.5 : 1 }}>
+                  {resendingId === m.id ? 'Reenviando...' : 'Reenviar'}
+                </button>
+              )}
             </div>
           </div>
         );
