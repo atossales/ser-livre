@@ -2369,6 +2369,11 @@ function applyTemplateVars(body, patient) {
   const diff = patient.initialWeight && patient.currentWeight
     ? (patient.initialWeight - patient.currentWeight).toFixed(1) : '—';
   const startDate = patient.startDate ? new Date(patient.startDate).toLocaleDateString('pt-BR') : '—';
+  const leanMass = patient.leanMass || '—';
+  const fatMass = patient.fatMass || '—';
+  const cycle = patient.cycles?.[0]?.cycleNumber || patient.cycle || '—';
+  const eventDate = patient.eventDate ? new Date(patient.eventDate).toLocaleDateString('pt-BR') : '—';
+  const professional = patient.professional || '—';
   return body
     .replace(/\{\{nome\}\}/g, name)
     .replace(/\{\{plano\}\}/g, plan)
@@ -2376,7 +2381,13 @@ function applyTemplateVars(body, patient) {
     .replace(/\{\{peso_inicial\}\}/g, initialW)
     .replace(/\{\{peso_atual\}\}/g, currentW)
     .replace(/\{\{variacao_peso\}\}/g, diff)
-    .replace(/\{\{data_inicio\}\}/g, startDate);
+    .replace(/\{\{peso_perdido\}\}/g, diff)
+    .replace(/\{\{data_inicio\}\}/g, startDate)
+    .replace(/\{\{massa_magra\}\}/g, leanMass)
+    .replace(/\{\{massa_gorda\}\}/g, fatMass)
+    .replace(/\{\{ciclo\}\}/g, cycle)
+    .replace(/\{\{data_evento\}\}/g, eventDate)
+    .replace(/\{\{profissional\}\}/g, professional);
 }
 
 const TPL_CATEGORIES = {
@@ -2389,62 +2400,36 @@ const TPL_CATEGORIES = {
 };
 
 function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) {
-  const [selConv,      setSelConv]      = useState(patientMode ? `p_${patientPid}` : null);
-  const [draft,        setDraft]        = useState("");
-  const [loading,      setLoading]      = useState(false);
-  const [localMsgs,    setLocalMsgs]    = useState([]);
-  const [showTemplates,setShowTemplates]= useState(false);
-  const [templates,    setTemplates]    = useState([]);
-  const [loadingTpls,  setLoadingTpls]  = useState(false);
-  const [sendingWA,    setSendingWA]    = useState(false);
-  const [waMode,       setWaMode]       = useState(false);
-  const [generating,   setGenerating]   = useState(false);
-  const [genType,      setGenType]      = useState('week_start');
-  // Template CRUD
-  const [tplModal,     setTplModal]     = useState(null);  // null | 'new' | {id, name, category, body, isSystem}
-  const [tplForm,      setTplForm]      = useState({ name:'', category:'boas_vindas', body:'' });
-  const [savingTpl,    setSavingTpl]    = useState(false);
-  const [deletingTpl,  setDeletingTpl]  = useState(null);
-  // WhatsApp status
-  const [waStatus,     setWaStatus]     = useState(null);
-  const bottomRef = useRef(null);
-  const inputRef  = useRef(null);
+  // ── Main tab state ──
+  const [activeTab, setActiveTab] = useState('templates'); // 'templates' | 'historico'
+  const [templates, setTemplates] = useState([]);
+  const [loadingTpls, setLoadingTpls] = useState(true);
+  const [historyMsgs, setHistoryMsgs] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
-  const GEN_TYPES = [
-    { id:'welcome',          label:'Boas-vindas' },
-    { id:'week_start',       label:'Início de semana' },
-    { id:'weighin_report',   label:'Resultado de pesagem' },
-    { id:'consulta_reminder',label:'Lembrete de consulta' },
-    { id:'exam_reminder',    label:'Lembrete de exames' },
-    { id:'completion',       label:'Conclusão do programa' },
-  ];
+  // ── Template CRUD modal ──
+  const [tplModal, setTplModal] = useState(null); // null | 'new' | {id,...}
+  const [tplForm, setTplForm] = useState({ name:'', category:'boas_vindas', body:'' });
+  const [savingTpl, setSavingTpl] = useState(false);
+  const tplBodyRef = useRef(null);
 
-  // Paciente selecionado na conversa ativa
-  const selPid = selConv?.startsWith('p_') ? parseInt(selConv.replace('p_',''),10) : null;
-  const selPatient = selPid ? ps.find(p => p.id === selPid) : null;
+  // ── Broadcast wizard ──
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizStep, setWizStep] = useState(1); // 1=template, 2=patients, 3=preview
+  const [wizCatFilter, setWizCatFilter] = useState('todos');
+  const [wizSelTpl, setWizSelTpl] = useState(null);
+  const [wizCustomMsg, setWizCustomMsg] = useState(false);
+  const [wizCustomBody, setWizCustomBody] = useState('');
+  const [wizSelPatients, setWizSelPatients] = useState([]);
+  const [wizOverrides, setWizOverrides] = useState({});
+  const [wizSending, setWizSending] = useState(false);
+  const [wizSearchPat, setWizSearchPat] = useState('');
 
-  const dbToLocal = (m) => {
-    const pid = m.patientId ? `p_${m.patientId}` : "team";
-    return { id:m.id, date:m.createdAt, senderName:m.sentBy?.name||"", role:(m.sentBy?.role==="PACIENTE")?"paciente":"admin",
-      text:m.body||"", conv:pid, read:true, channel:m.channel||"interno" };
-  };
+  // ── Available template variables ──
+  const ALL_VARS = ['nome','plano','peso_inicial','peso_atual','peso_perdido','variacao_peso','massa_magra','massa_gorda','semana','ciclo','data_inicio','data_evento','profissional'];
 
-  const loadMessages = useCallback(async () => {
-    try {
-      setLoading(true);
-      const pid = selConv && selConv.startsWith("p_")
-        ? parseInt(selConv.replace("p_",""),10)
-        : (patientMode && patientPid ? patientPid : null);
-      const res = await getMessages(pid);
-      setLocalMsgs((res.data||[]).map(dbToLocal));
-    } catch(e) { console.error("Erro ao carregar mensagens:",e); }
-    finally { setLoading(false); }
-  }, [selConv, patientMode, patientPid]);
-
-  useEffect(() => { loadMessages(); }, [loadMessages]);
-
+  // ── Load templates on mount ──
   const loadTemplates = useCallback(async () => {
-    if (loadingTpls) return;
     setLoadingTpls(true);
     try {
       const r = await getMessageTemplates();
@@ -2453,78 +2438,47 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
     finally { setLoadingTpls(false); }
   }, []);
 
-  useEffect(() => { if (showTemplates) loadTemplates(); }, [showTemplates, loadTemplates]);
+  useEffect(() => { loadTemplates(); }, [loadTemplates]);
 
-  const convs = patientMode ? [] : [
-    { id:"team", name:"Canal da Equipe", sub:"Comunicação interna" },
-    ...ps.map(p => ({ id:`p_${p.id}`, name:p.user?.name||p.name, sub:PLANS.find(x=>x.id===p.plan)?.name||"—", pid:p.id }))
-  ];
-
-  const getThread = useCallback((cid) =>
-    [...localMsgs.filter(m => m.conv===cid)].sort((a,b)=>new Date(a.date)-new Date(b.date)),
-  [localMsgs]);
-
-  const unread = (cid) => localMsgs.filter(m=>m.conv===cid&&!m.read&&m.role!=="admin").length;
-
-  const send = async () => {
-    const txt = draft.trim();
-    if (!txt || !selConv) return;
-    const pid = selConv.startsWith("p_") ? parseInt(selConv.replace("p_",""),10)
-      : (patientMode && patientPid ? patientPid : null);
-    setDraft("");
+  // ── Load history when tab switches ──
+  const loadHistory = useCallback(async () => {
+    setLoadingHistory(true);
     try {
-      if (waMode && selPatient?.phone) {
-        // Enviar via WhatsApp
-        setSendingWA(true);
-        await sendWhatsAppMsg({ phone: selPatient.phone, message: txt, patientId: pid });
-        setSendingWA(false);
-        // Salva no log interno também
-        await sendMessage({ patientId: pid, body: txt, channel: 'whatsapp' });
-      } else {
-        await sendMessage({ patientId: pid, body: txt, channel: 'interno' });
-      }
-      await loadMessages();
-      setTimeout(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); inputRef.current?.focus(); },50);
-    } catch(e) {
-      setDraft(txt);
-      setSendingWA(false);
-      console.error("Erro ao enviar mensagem:",e);
-    }
+      const r = await getMessages();
+      setHistoryMsgs(Array.isArray(r.data) ? r.data : []);
+    } catch { setHistoryMsgs([]); }
+    finally { setLoadingHistory(false); }
+  }, []);
+
+  useEffect(() => { if (activeTab === 'historico') loadHistory(); }, [activeTab, loadHistory]);
+
+  // ── Extract variables from body ──
+  const extractVars = (body) => {
+    if (!body) return [];
+    const matches = body.match(/\{\{(\w+)\}\}/g);
+    if (!matches) return [];
+    return [...new Set(matches.map(m => m.replace(/\{|\}/g, '')))];
   };
 
-  const applyTemplate = (tpl) => {
-    const text = applyTemplateVars(tpl.body, selPatient);
-    setDraft(text);
-    setShowTemplates(false);
-    inputRef.current?.focus();
-  };
-
-  const handleGenerate = async () => {
-    setGenerating(true);
-    try {
-      const r = await generateMessage({ type: genType, patientId: selPid });
-      setDraft(r.data?.text || '');
-    } catch { /* silently ignore */ }
-    finally { setGenerating(false); }
-  };
-
-  // ── WhatsApp status — carrega ao montar (só para equipe)
-  useEffect(() => {
-    if (patientMode) return;
-    getWhatsAppStatus()
-      .then(r => setWaStatus(r.data))
-      .catch(() => setWaStatus(null));
-  }, [patientMode]);
-
-  // ── Template CRUD handlers ──────────────────────────────
+  // ── Template CRUD ──
   const openNewTpl = () => {
     setTplForm({ name:'', category:'boas_vindas', body:'' });
     setTplModal('new');
   };
 
-  const openEditTpl = (tpl) => {
-    setTplForm({ name: tpl.name, category: tpl.category, body: tpl.body });
-    setTplModal(tpl);
+  const insertVarAtCursor = (varName) => {
+    const ta = tplBodyRef.current;
+    const tag = `{{${varName}}}`;
+    if (ta) {
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const text = tplForm.body;
+      const newBody = text.substring(0, start) + tag + text.substring(end);
+      setTplForm(p => ({ ...p, body: newBody }));
+      setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = start + tag.length; }, 0);
+    } else {
+      setTplForm(p => ({ ...p, body: p.body + tag }));
+    }
   };
 
   const handleSaveTpl = async () => {
@@ -2537,333 +2491,159 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
         await updateMessageTemplate(tplModal.id, { name: tplForm.name.trim(), category: tplForm.category, body: tplForm.body.trim() });
       }
       setTplModal(null);
-      // Recarrega lista forçando novo fetch
-      setLoadingTpls(false);
-      setTemplates([]);
-      const r = await getMessageTemplates();
-      setTemplates(Array.isArray(r.data) ? r.data : []);
+      await loadTemplates();
     } catch(e) { console.error('Erro ao salvar template:', e); }
     finally { setSavingTpl(false); }
   };
 
-  const handleDeleteTpl = async (tpl) => {
-    if (tpl.isSystem) return;
-    setDeletingTpl(tpl.id);
+  const handleDuplicate = async (tpl) => {
     try {
-      await deleteMessageTemplate(tpl.id);
-      setTemplates(prev => prev.filter(t => t.id !== tpl.id));
-    } catch(e) { console.error('Erro ao excluir template:', e); }
-    finally { setDeletingTpl(null); }
+      await createMessageTemplate({ name: `${tpl.name} (copia)`, category: tpl.category, body: tpl.body });
+      await loadTemplates();
+    } catch(e) { console.error('Erro ao duplicar template:', e); }
   };
 
-  const thread      = selConv ? getThread(selConv) : [];
-  const selConvInfo = convs.find(c => c.id===selConv);
-  const showList    = !mob || selConv === null;
-  const showThread  = mob ? selConv !== null : true;
+  // ── Wizard send logic ──
+  const wizBody = wizCustomMsg ? wizCustomBody : (wizSelTpl?.body || '');
+  const wizVars = extractVars(wizBody);
+  const wizFirstPatient = wizSelPatients.length > 0 ? ps.find(p => p.id === wizSelPatients[0]) : null;
 
-  const listPanel = !patientMode && showList && (
-    <div style={{ width:mob?"100%":260, flexShrink:0, background:"#fff", borderRadius:12,
-      border:`1px solid ${G[200]}`, overflow:"hidden", display:"flex", flexDirection:"column" }}>
-      <div style={{ padding:"12px 14px", borderBottom:`1px solid ${G[100]}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Mensagens</div>
-        {/* Badge de status do WhatsApp */}
-        {waStatus !== null && (
-          <div style={{ display:"flex", alignItems:"center", gap:5, padding:"3px 8px", borderRadius:10,
-            background: waStatus.connected ? "#f0fdf4" : "#fef2f2",
-            border:`1px solid ${waStatus.connected ? "#bbf7d0" : "#fecaca"}` }}>
-            <div style={{ width:6, height:6, borderRadius:"50%",
-              background: waStatus.connected ? "#22c55e" : "#ef4444" }}/>
-            <span style={{ fontSize:9, fontWeight:600,
-              color: waStatus.connected ? "#16a34a" : "#dc2626" }}>
-              {waStatus.connected ? "WA Online" : "WA Offline"}
-            </span>
-          </div>
-        )}
-      </div>
-      <div style={{ flex:1, overflowY:"auto" }}>
-        {convs.map((c) => {
-          const th=getThread(c.id), last=th[th.length-1], unr=unread(c.id), active=selConv===c.id;
-          return (
-            <div key={c.id} onClick={()=>setSelConv(c.id)}
-              style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
-                cursor:"pointer", background:active?G[50]:"transparent",
-                borderBottom:`1px solid ${G[50]}`, transition:"background 0.1s" }}>
-              <Av name={c.name} size={36}/>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:12, fontWeight:600, color:G[900] }}>{c.name}</div>
-                <div style={{ fontSize:10, color:"#bbb", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {last ? last.text : c.sub}
-                </div>
-              </div>
-              {unr > 0 && (
-                <div style={{ minWidth:16, height:16, borderRadius:8, background:G[600], color:"#fff",
-                  fontSize:9, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, padding:"0 4px" }}>{unr}</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  const renderPreview = () => {
+    let text = wizBody;
+    // Apply overrides first
+    Object.entries(wizOverrides).forEach(([k, v]) => {
+      if (v.trim()) text = text.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v.trim());
+    });
+    // Then apply patient vars for remaining
+    text = applyTemplateVars(text, wizFirstPatient);
+    return text;
+  };
 
-  // Painel de Templates (com CRUD)
-  const templatesPanel = showTemplates && !patientMode && (
-    <div style={{ position:"absolute", bottom:"100%", left:0, right:0, background:"#fff", borderRadius:12,
-      border:`1px solid ${G[200]}`, boxShadow:"0 -4px 20px rgba(0,0,0,0.1)", zIndex:20, maxHeight:360, overflow:"hidden",
-      display:"flex", flexDirection:"column" }}>
-      {/* Header do painel */}
-      <div style={{ padding:"10px 14px", borderBottom:`1px solid ${G[100]}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
-        <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>📋 Templates de Mensagem</div>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <button onClick={openNewTpl}
-            style={{ padding:"4px 10px", borderRadius:7, border:`1px solid ${G[400]}`, background:G[50],
-              fontSize:10, fontWeight:600, color:G[700], cursor:"pointer", fontFamily:"inherit",
-              display:"flex", alignItems:"center", gap:3 }}>
-            ＋ Novo
-          </button>
-          <div onClick={()=>setShowTemplates(false)} style={{ cursor:"pointer", fontSize:16, color:"#aaa", lineHeight:1 }}>✕</div>
-        </div>
-      </div>
-      {/* Lista */}
-      {loadingTpls ? (
-        <div style={{ padding:"20px", textAlign:"center", color:"#aaa", fontSize:12 }}>Carregando templates...</div>
-      ) : templates.length === 0 ? (
-        <div style={{ padding:"24px", textAlign:"center", color:"#ccc", fontSize:12 }}>
-          Nenhum template. Clique em <strong>+ Novo</strong> para criar.
-        </div>
-      ) : (
-        <div style={{ overflowY:"auto", flex:1 }}>
-          {templates.map(tpl => {
-            const cat     = TPL_CATEGORIES[tpl.category] || TPL_CATEGORIES.custom;
-            const preview = applyTemplateVars(tpl.body, selPatient);
-            const isDel   = deletingTpl === tpl.id;
-            return (
-              <div key={tpl.id}
-                style={{ padding:"10px 14px", borderBottom:`1px solid ${G[50]}`,
-                  display:"flex", flexDirection:"column", gap:4 }}>
-                {/* Linha superior: badge + nome + ações */}
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ fontSize:9, fontWeight:600, padding:"2px 7px", borderRadius:10,
-                    color:cat.color, background:cat.bg, flexShrink:0 }}>{cat.label}</span>
-                  <span style={{ fontSize:12, fontWeight:600, color:G[800], flex:1, cursor:"pointer" }}
-                    onClick={()=>applyTemplate(tpl)}>{tpl.name}</span>
-                  {/* Botão Editar */}
-                  <div onClick={()=>openEditTpl(tpl)}
-                    title="Editar template"
-                    style={{ cursor:"pointer", padding:"2px 5px", borderRadius:5, background:G[50],
-                      fontSize:11, color:G[600], flexShrink:0, border:`1px solid ${G[200]}` }}>✏️</div>
-                  {/* Botão Excluir (oculto para templates do sistema) */}
-                  {!tpl.isSystem && (
-                    <div onClick={()=>handleDeleteTpl(tpl)}
-                      title="Excluir template"
-                      style={{ cursor: isDel?"not-allowed":"pointer", padding:"2px 5px", borderRadius:5,
-                        background:"#fef2f2", fontSize:11, color:"#dc2626", flexShrink:0,
-                        border:"1px solid #fecaca", opacity: isDel ? 0.5 : 1 }}>
-                      {isDel ? "..." : "🗑️"}
-                    </div>
-                  )}
-                </div>
-                {/* Preview do corpo clicável */}
-                <div onClick={()=>applyTemplate(tpl)} style={{ fontSize:11, color:"#999", lineHeight:1.4,
-                  cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis",
-                  display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
-                  {preview.substring(0,120)}{preview.length>120?"...":""}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+  const handleWizardSend = async () => {
+    setWizSending(true);
+    try {
+      for (const pid of wizSelPatients) {
+        const patient = ps.find(p => p.id === pid);
+        if (!patient) continue;
+        let text = wizBody;
+        Object.entries(wizOverrides).forEach(([k, v]) => {
+          if (v.trim()) text = text.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v.trim());
+        });
+        text = applyTemplateVars(text, patient);
+        const hasPhone = !!patient.phone;
+        await sendMessage({ patientId: pid, body: text, channel: hasPhone ? 'whatsapp' : 'interno' });
+        if (hasPhone) {
+          try { await sendWhatsAppMsg({ phone: patient.phone, message: text, patientId: pid }); } catch {}
+        }
+      }
+      setWizardOpen(false);
+      setWizStep(1);
+      setWizSelTpl(null);
+      setWizSelPatients([]);
+      setWizOverrides({});
+      setWizCustomMsg(false);
+      setWizCustomBody('');
+    } catch(e) { console.error('Erro ao enviar mensagens:', e); }
+    finally { setWizSending(false); }
+  };
 
-  const threadPanel = showThread && (
-    <div style={{ flex:1, background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`,
-      display:"flex", flexDirection:"column", minHeight:mob?380:"auto", overflow:"hidden", position:"relative" }}>
-      {selConv ? (
-        <>
-          {/* Header */}
-          <div style={{ padding:"10px 14px", borderBottom:`1px solid ${G[100]}`, display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
-            {mob && !patientMode && (
-              <div onClick={()=>setSelConv(null)} style={{ cursor:"pointer", marginRight:2 }}>
-                <ArrowLeft size={16} color={G[700]}/>
-              </div>
-            )}
-            {selConvInfo && <Av name={selConvInfo.name} size={30}/>}
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>
-                {patientMode ? "Equipe Clínica" : selConvInfo?.name}
-              </div>
-              <div style={{ fontSize:9, color:"#aaa" }}>
-                {patientMode ? "Instituto Dra. Mariana Wogel" : selConvInfo?.sub}
-              </div>
-            </div>
-            {/* Botão WhatsApp no header — só para conversas de paciente com telefone */}
-            {!patientMode && selPatient?.phone && (
-              <div onClick={()=>setWaMode(m=>!m)}
-                style={{ padding:"5px 10px", borderRadius:7, border:`1.5px solid ${waMode?"#25D366":G[200]}`,
-                  background:waMode?"#f0fdf4":"#fff", cursor:"pointer", fontSize:11, fontWeight:600,
-                  color:waMode?"#25D366":G[600], display:"flex", alignItems:"center", gap:4 }}>
-                📱 {waMode?"WhatsApp":"Interno"}
-              </div>
-            )}
-          </div>
-          {/* Mensagens */}
-          <div style={{ flex:1, overflowY:"auto", padding:"14px", display:"flex", flexDirection:"column", gap:8 }}>
-            {loading ? (
-              <div style={{ textAlign:"center", color:"#ccc", fontSize:12, marginTop:40 }}>Carregando...</div>
-            ) : thread.length === 0 ? (
-              <div style={{ textAlign:"center", color:"#ccc", fontSize:12, marginTop:40, display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
-                <MessageCircle size={36} color={G[200]}/>
-                <span>Nenhuma mensagem ainda.<br/>Seja o primeiro a escrever!</span>
-              </div>
-            ) : thread.map((m) => {
-              const mine = patientMode ? m.role==="paciente" : m.role==="admin";
-              const isWA  = m.channel === "whatsapp";
-              return (
-                <div key={m.id} style={{ display:"flex", justifyContent:mine?"flex-end":"flex-start" }}>
-                  <div style={{ maxWidth:"78%", padding:"9px 13px",
-                    borderRadius:mine?"14px 14px 3px 14px":"14px 14px 14px 3px",
-                    background:mine?(isWA?"#25D366":G[600]):"#F1F1EF", color:mine?"#fff":"#333" }}>
-                    {!mine && (
-                      <div style={{ fontSize:9, fontWeight:700, color:G[600], marginBottom:3 }}>{m.senderName}</div>
-                    )}
-                    <div style={{ fontSize:12, lineHeight:1.4, whiteSpace:"pre-line" }}>{m.text}</div>
-                    <div style={{ fontSize:9, opacity:0.55, marginTop:4, textAlign:"right", display:"flex", gap:4, justifyContent:"flex-end", alignItems:"center" }}>
-                      {isWA && <span>📱</span>}
-                      {safeFmt(m.date,"dd/MM HH:mm")}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            <div ref={bottomRef}/>
-          </div>
+  // ── Filtered patients for wizard step 2 ──
+  const filteredPatients = useMemo(() => {
+    if (!wizSearchPat.trim()) return ps;
+    const q = wizSearchPat.toLowerCase();
+    return ps.filter(p => {
+      const name = (p.user?.name || p.name || '').toLowerCase();
+      return name.includes(q);
+    });
+  }, [ps, wizSearchPat]);
 
-          {/* Barra de ações (templates + AI) + Input */}
-          {!patientMode && (
-            <div style={{ padding:"8px 12px 4px", borderTop:`1px solid ${G[100]}`, display:"flex", gap:6, flexShrink:0 }}>
-              {/* Botão Templates */}
-              <button onClick={()=>setShowTemplates(s=>!s)}
-                style={{ padding:"5px 10px", borderRadius:7, border:`1px solid ${showTemplates?G[600]:G[200]}`,
-                  background:showTemplates?G[50]:"#fff", fontSize:11, fontWeight:600, cursor:"pointer",
-                  color:showTemplates?G[700]:G[600], fontFamily:"inherit", display:"flex", alignItems:"center", gap:4 }}>
-                📋 Templates
-              </button>
-              {/* Botão Gerar com IA */}
-              {selPid && (
-                <div style={{ display:"flex", gap:4, alignItems:"center" }}>
-                  <select value={genType} onChange={e=>setGenType(e.target.value)}
-                    style={{ padding:"5px 8px", borderRadius:7, border:`1px solid ${G[200]}`, fontSize:10, fontFamily:"inherit", background:"#fff", color:G[700] }}>
-                    {GEN_TYPES.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}
-                  </select>
-                  <button onClick={handleGenerate} disabled={generating}
-                    style={{ padding:"5px 10px", borderRadius:7, border:"none", background:generating?"#e5e7eb":G[600],
-                      color:"#fff", fontSize:11, fontWeight:600, cursor:generating?"default":"pointer", fontFamily:"inherit" }}>
-                    {generating?"Gerando...":"✨ IA"}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+  const patientsWithWA = wizSelPatients.filter(pid => {
+    const p = ps.find(x => x.id === pid);
+    return p?.phone;
+  }).length;
 
-          {/* Painel de templates flutuante */}
-          <div style={{ position:"relative" }}>
-            {templatesPanel}
-          </div>
+  // ── Shared styles ──
+  const pillActive = { padding:'6px 16px', borderRadius:20, fontSize:12, fontWeight:600, cursor:'pointer', border:'none', fontFamily:'inherit' };
+  const btnOutline = { padding:'8px 16px', borderRadius:10, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit',
+    border:`1.5px solid ${G[400]}`, background:'#fff', color:G[700], display:'inline-flex', alignItems:'center', gap:6 };
+  const btnGold = { padding:'8px 16px', borderRadius:10, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit',
+    border:'none', background:G[600], color:'#fff', display:'inline-flex', alignItems:'center', gap:6 };
 
-          {/* Input de mensagem */}
-          <div style={{ padding:"8px 12px 10px", display:"flex", gap:8, flexShrink:0 }}>
-            <div style={{ flex:1, position:"relative" }}>
-              <textarea
-                ref={inputRef}
-                value={draft}
-                onChange={e=>setDraft(e.target.value)}
-                onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&(e.preventDefault(),send())}
-                placeholder={waMode?"Mensagem para WhatsApp... (Enter envia)":"Mensagem interna... (Enter envia)"}
-                rows={draft.includes('\n') ? 3 : 1}
-                style={{ width:"100%", padding:"9px 14px", borderRadius:14, resize:"none",
-                  border:`1.5px solid ${waMode?"#25D366":G[300]}`, fontSize:12, fontFamily:"inherit",
-                  outline:"none", background:"#FAFAF8", boxSizing:"border-box", lineHeight:1.4 }}
-              />
-            </div>
-            <div onClick={send}
-              style={{ width:36,height:36,borderRadius:"50%",background:draft.trim()?(waMode?"#25D366":G[600]):G[200],
-                display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,
-                transition:"background 0.15s", alignSelf:"flex-end" }}>
-              {sendingWA ? <span style={{fontSize:12,color:"#fff"}}>...</span> : <Send size={14} color="#fff"/>}
-            </div>
-          </div>
-        </>
-      ) : (
-        <div style={{ display:"flex",alignItems:"center",justifyContent:"center",flex:1,
-          color:"#ccc",fontSize:12,flexDirection:"column",gap:10 }}>
-          <MessageCircle size={44} color={G[200]}/>
-          <span style={{ textAlign:"center" }}>Selecione uma conversa<br/>para começar</span>
-        </div>
-      )}
-    </div>
-  );
-
-  // ── Modal de criação / edição de template ───────────────
+  // ══════════════════════════════════════════
+  //  RENDER: Novo Template Modal
+  // ══════════════════════════════════════════
   const tplModalEl = tplModal !== null && (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000,
-      display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"#fff", borderRadius:14, padding:24, width:"100%", maxWidth:480,
-        boxShadow:"0 20px 60px rgba(0,0,0,0.25)", maxHeight:"90vh", overflowY:"auto" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
-          <div style={{ fontSize:15, fontWeight:700, color:G[800] }}>
-            {tplModal === 'new' ? '➕ Novo Template' : '✏️ Editar Template'}
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000,
+      display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+      onClick={(e) => { if (e.target === e.currentTarget) setTplModal(null); }}>
+      <div style={{ background:'#fff', borderRadius:16, padding:28, width:'100%', maxWidth:540,
+        boxShadow:'0 20px 60px rgba(0,0,0,0.25)', maxHeight:'90vh', overflowY:'auto' }}>
+        {/* Header */}
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+          <div style={{ fontSize:16, fontWeight:700, color:G[800] }}>
+            {tplModal === 'new' ? 'Novo template' : 'Editar template'}
           </div>
-          <div onClick={()=>setTplModal(null)} style={{ cursor:"pointer", color:"#aaa", fontSize:18 }}>✕</div>
+          <div onClick={() => setTplModal(null)} style={{ cursor:'pointer', width:28, height:28, borderRadius:'50%',
+            background:G[50], display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <Lucide.X size={14} color={G[600]}/>
+          </div>
         </div>
 
-        {/* Nome */}
-        <div style={{ marginBottom:12 }}>
-          <label style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:4, display:"block" }}>Nome do template *</label>
-          <input value={tplForm.name} onChange={e=>setTplForm(p=>({...p,name:e.target.value}))}
-            placeholder="Ex: Lembrete de consulta semanal"
-            style={{ width:"100%", padding:"9px 11px", borderRadius:8, border:`1px solid ${G[300]}`,
-              fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+        {/* Name + Category row */}
+        <div style={{ display:'flex', gap:12, marginBottom:16, flexWrap: mob?'wrap':'nowrap' }}>
+          <div style={{ flex:1, minWidth: mob?'100%':200 }}>
+            <label style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:4, display:'block' }}>Nome do template</label>
+            <input value={tplForm.name} onChange={e => setTplForm(p => ({ ...p, name:e.target.value }))}
+              placeholder="Ex: Lembrete de consulta"
+              style={{ width:'100%', padding:'9px 12px', borderRadius:8, border:`1px solid ${G[300]}`,
+                fontSize:12, fontFamily:'inherit', outline:'none', boxSizing:'border-box' }}/>
+          </div>
+          <div style={{ minWidth:160 }}>
+            <label style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:4, display:'block' }}>Categoria</label>
+            <select value={tplForm.category} onChange={e => setTplForm(p => ({ ...p, category:e.target.value }))}
+              style={{ width:'100%', padding:'9px 12px', borderRadius:8, border:`1px solid ${G[300]}`,
+                fontSize:12, fontFamily:'inherit', background:'#fff', outline:'none', boxSizing:'border-box' }}>
+              {Object.entries(TPL_CATEGORIES).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* Categoria */}
-        <div style={{ marginBottom:12 }}>
-          <label style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:4, display:"block" }}>Categoria</label>
-          <select value={tplForm.category} onChange={e=>setTplForm(p=>({...p,category:e.target.value}))}
-            style={{ width:"100%", padding:"9px 11px", borderRadius:8, border:`1px solid ${G[300]}`,
-              fontSize:12, fontFamily:"inherit", background:"#fff", outline:"none", boxSizing:"border-box" }}>
-            {Object.entries(TPL_CATEGORIES).map(([k,v])=>(
-              <option key={k} value={k}>{v.label}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Corpo */}
+        {/* Variable insertion row */}
         <div style={{ marginBottom:8 }}>
-          <label style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:4, display:"block" }}>Mensagem *</label>
-          <textarea value={tplForm.body} onChange={e=>setTplForm(p=>({...p,body:e.target.value}))}
-            placeholder="Olá {{nome}}, ..."
-            rows={6}
-            style={{ width:"100%", padding:"9px 11px", borderRadius:8, border:`1px solid ${G[300]}`,
-              fontSize:12, fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box", lineHeight:1.5 }}/>
+          <label style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:6, display:'block' }}>Inserir variavel no cursor:</label>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
+            {ALL_VARS.map(v => (
+              <span key={v} onClick={() => insertVarAtCursor(v)}
+                style={{ padding:'3px 8px', borderRadius:12, border:`1px solid ${G[300]}`, fontSize:10, fontWeight:500,
+                  color:G[700], background:G[50], cursor:'pointer', fontFamily:'inherit' }}>
+                {`{{${v}}}`}
+              </span>
+            ))}
+          </div>
         </div>
 
-        {/* Dica de variáveis */}
-        <div style={{ background:G[50], borderRadius:8, padding:"8px 12px", marginBottom:16, fontSize:10, color:G[600], lineHeight:1.7 }}>
-          <strong>Variáveis disponíveis:</strong><br/>
-          <code>{"{{nome}}"}</code> · <code>{"{{plano}}"}</code> · <code>{"{{semana}}"}</code> · <code>{"{{peso_inicial}}"}</code> · <code>{"{{peso_atual}}"}</code> · <code>{"{{variacao_peso}}"}</code> · <code>{"{{data_inicio}}"}</code>
+        {/* Body textarea */}
+        <div style={{ marginBottom:8 }}>
+          <label style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:4, display:'block' }}>Texto da mensagem</label>
+          <textarea ref={tplBodyRef} value={tplForm.body} onChange={e => setTplForm(p => ({ ...p, body:e.target.value }))}
+            placeholder={'Ola {{nome}},\n\nSua mensagem aqui...'}
+            rows={8}
+            style={{ width:'100%', padding:'10px 12px', borderRadius:8, border:`1px solid ${G[300]}`,
+              fontSize:12, fontFamily:'inherit', outline:'none', resize:'vertical', boxSizing:'border-box', lineHeight:1.6 }}/>
+          <div style={{ fontSize:10, color:'#aaa', textAlign:'right', marginTop:2 }}>{tplForm.body.length} caracteres</div>
         </div>
 
-        <div style={{ display:"flex", gap:8 }}>
+        {/* Actions */}
+        <div style={{ display:'flex', gap:10, marginTop:12 }}>
           <button onClick={handleSaveTpl} disabled={savingTpl || !tplForm.name.trim() || !tplForm.body.trim()}
-            style={{ flex:1, padding:"10px", borderRadius:8, background: (!tplForm.name.trim() || !tplForm.body.trim()) ? G[300] : G[600],
-              color:"#fff", border:"none", fontSize:13, fontWeight:600, cursor: savingTpl?"not-allowed":"pointer", fontFamily:"inherit" }}>
-            {savingTpl ? "Salvando..." : "💾 Salvar"}
+            style={{ ...btnGold, flex:1, justifyContent:'center', padding:'11px 16px', fontSize:13,
+              opacity: (!tplForm.name.trim() || !tplForm.body.trim()) ? 0.5 : 1 }}>
+            {savingTpl ? 'Salvando...' : 'Salvar template'}
           </button>
-          <button onClick={()=>setTplModal(null)}
-            style={{ flex:1, padding:"10px", borderRadius:8, background:G[100], color:G[800],
-              border:"none", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+          <button onClick={() => setTplModal(null)}
+            style={{ ...btnOutline, flex:1, justifyContent:'center', padding:'11px 16px', fontSize:13 }}>
             Cancelar
           </button>
         </div>
@@ -2871,12 +2651,396 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
     </div>
   );
 
+  // ══════════════════════════════════════════
+  //  RENDER: Broadcast Wizard Modal
+  // ══════════════════════════════════════════
+  const wizardModal = wizardOpen && (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000,
+      display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+      onClick={(e) => { if (e.target === e.currentTarget) setWizardOpen(false); }}>
+      <div style={{ background:'#fff', borderRadius:16, width:'100%', maxWidth:560,
+        boxShadow:'0 20px 60px rgba(0,0,0,0.25)', maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
+
+        {/* Wizard header with step indicators */}
+        <div style={{ padding:'20px 24px 16px', borderBottom:`1px solid ${G[100]}`, flexShrink:0 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+            <div style={{ fontSize:16, fontWeight:700, color:G[800] }}>Disparar mensagem</div>
+            <div onClick={() => setWizardOpen(false)} style={{ cursor:'pointer', width:28, height:28, borderRadius:'50%',
+              background:G[50], display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <Lucide.X size={14} color={G[600]}/>
+            </div>
+          </div>
+          {/* Step indicators */}
+          <div style={{ display:'flex', alignItems:'center', gap:8, justifyContent:'center' }}>
+            {[{n:1,label:'Template'},{n:2,label:'Pacientes'},{n:3,label:'Preview'}].map((s, i) => (
+              <div key={s.n} style={{ display:'flex', alignItems:'center', gap:4 }}>
+                {i > 0 && <div style={{ width:24, height:1, background:G[200] }}/>}
+                <div style={{ width:24, height:24, borderRadius:'50%', fontSize:11, fontWeight:700,
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  background: wizStep >= s.n ? G[600] : G[100],
+                  color: wizStep >= s.n ? '#fff' : G[400] }}>
+                  {s.n}
+                </div>
+                <span style={{ fontSize:11, fontWeight: wizStep === s.n ? 700 : 400,
+                  color: wizStep === s.n ? G[800] : '#aaa' }}>{s.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Step content */}
+        <div style={{ flex:1, overflowY:'auto', padding:'16px 24px' }}>
+
+          {/* ── Step 1: Template selection ── */}
+          {wizStep === 1 && (
+            <div>
+              {/* Category filter pills */}
+              <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:16 }}>
+                {[{id:'todos', label:'Todos'}, ...Object.entries(TPL_CATEGORIES).map(([k,v]) => ({id:k, label:v.label}))].map(c => (
+                  <button key={c.id} onClick={() => setWizCatFilter(c.id)}
+                    style={{ ...pillActive,
+                      background: wizCatFilter === c.id ? G[600] : '#fff',
+                      color: wizCatFilter === c.id ? '#fff' : G[700],
+                      border: wizCatFilter === c.id ? `1.5px solid ${G[600]}` : `1.5px solid ${G[200]}` }}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom message checkbox */}
+              <label style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16, cursor:'pointer' }}>
+                <input type="checkbox" checked={wizCustomMsg} onChange={e => setWizCustomMsg(e.target.checked)}
+                  style={{ width:16, height:16, accentColor:G[600] }}/>
+                <span style={{ fontSize:12, color:G[800], fontWeight:500 }}>Escrever mensagem personalizada</span>
+              </label>
+
+              {wizCustomMsg ? (
+                <textarea value={wizCustomBody} onChange={e => setWizCustomBody(e.target.value)}
+                  placeholder={'Ola {{nome}},\n\nSua mensagem aqui...'}
+                  rows={6}
+                  style={{ width:'100%', padding:'10px 12px', borderRadius:8, border:`1px solid ${G[300]}`,
+                    fontSize:12, fontFamily:'inherit', outline:'none', resize:'vertical', boxSizing:'border-box', lineHeight:1.6 }}/>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                  {templates
+                    .filter(t => wizCatFilter === 'todos' || t.category === wizCatFilter)
+                    .map(tpl => {
+                      const cat = TPL_CATEGORIES[tpl.category] || TPL_CATEGORIES.custom;
+                      const isSelected = wizSelTpl?.id === tpl.id;
+                      return (
+                        <div key={tpl.id} onClick={() => setWizSelTpl(tpl)}
+                          style={{ padding:'12px 14px', borderRadius:10, cursor:'pointer',
+                            border: isSelected ? `2px solid ${G[600]}` : `1px solid ${G[100]}`,
+                            background: isSelected ? G[50] : '#fff', transition:'all 0.15s' }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                            <div style={{ width:18, height:18, borderRadius:'50%',
+                              border: isSelected ? `5px solid ${G[600]}` : `2px solid ${G[300]}`,
+                              background: isSelected ? '#fff' : '#fff', flexShrink:0, boxSizing:'border-box' }}/>
+                            <span style={{ fontSize:13, fontWeight:600, color:G[800], flex:1 }}>{tpl.name}</span>
+                            <span style={{ fontSize:9, fontWeight:600, padding:'2px 8px', borderRadius:10,
+                              color:cat.color, background:cat.bg }}>{cat.label}</span>
+                          </div>
+                          <div style={{ fontSize:11, color:'#999', marginTop:6, marginLeft:26, lineHeight:1.4,
+                            overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box',
+                            WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
+                            {tpl.body.substring(0, 150)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  {templates.filter(t => wizCatFilter === 'todos' || t.category === wizCatFilter).length === 0 && (
+                    <div style={{ padding:24, textAlign:'center', color:'#ccc', fontSize:12 }}>
+                      Nenhum template nesta categoria.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Step 2: Patient selection ── */}
+          {wizStep === 2 && (
+            <div>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>
+                  {wizSelPatients.length} selecionado{wizSelPatients.length !== 1 ? 's' : ''}
+                </div>
+                <div style={{ display:'flex', gap:12 }}>
+                  <span onClick={() => setWizSelPatients(ps.map(p => p.id))}
+                    style={{ fontSize:11, color:G[600], cursor:'pointer', fontWeight:600 }}>Todos</span>
+                  <span onClick={() => setWizSelPatients([])}
+                    style={{ fontSize:11, color:S.red, cursor:'pointer', fontWeight:600 }}>Limpar</span>
+                </div>
+              </div>
+              {/* Search */}
+              <div style={{ position:'relative', marginBottom:12 }}>
+                <Search size={14} color="#aaa" style={{ position:'absolute', left:10, top:9 }}/>
+                <input value={wizSearchPat} onChange={e => setWizSearchPat(e.target.value)}
+                  placeholder="Buscar paciente..."
+                  style={{ width:'100%', padding:'8px 12px 8px 30px', borderRadius:8, border:`1px solid ${G[200]}`,
+                    fontSize:12, fontFamily:'inherit', outline:'none', boxSizing:'border-box' }}/>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                {filteredPatients.map(p => {
+                  const name = p.user?.name || p.name || '—';
+                  const phone = p.phone ? maskPhone(p.phone) : null;
+                  const checked = wizSelPatients.includes(p.id);
+                  return (
+                    <div key={p.id} onClick={() => {
+                      setWizSelPatients(prev => checked ? prev.filter(x => x !== p.id) : [...prev, p.id]);
+                    }}
+                      style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:8,
+                        cursor:'pointer', background: checked ? G[50] : '#fff',
+                        border: checked ? `1px solid ${G[300]}` : `1px solid ${G[50]}`, transition:'all 0.12s' }}>
+                      <input type="checkbox" checked={checked} readOnly
+                        style={{ width:16, height:16, accentColor:G[600], flexShrink:0, pointerEvents:'none' }}/>
+                      <Av name={name} size={32}/>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{name}</div>
+                        {phone && <div style={{ fontSize:10, color:'#aaa' }}>{phone}</div>}
+                      </div>
+                      {p.phone && (
+                        <div style={{ width:8, height:8, borderRadius:'50%', background:'#25D366', flexShrink:0 }}
+                          title="Tem WhatsApp"/>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3: Preview ── */}
+          {wizStep === 3 && (
+            <div>
+              {wizFirstPatient && (
+                <div style={{ fontSize:11, color:'#999', textAlign:'center', marginBottom:12, fontStyle:'italic' }}>
+                  -- dados do primeiro paciente selecionado --
+                </div>
+              )}
+
+              {/* Preview box */}
+              <div style={{ background:G[50], borderRadius:10, padding:'14px 16px', marginBottom:16,
+                border:`1px solid ${G[200]}`, whiteSpace:'pre-line', fontSize:12, color:G[800], lineHeight:1.6 }}>
+                {renderPreview()}
+              </div>
+
+              {/* Variable overrides */}
+              {wizVars.length > 0 && (
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:8 }}>
+                    Sobrescrever variaveis (opcional):
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {wizVars.map(v => (
+                      <div key={v} style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <label style={{ fontSize:11, color:G[600], fontWeight:600, minWidth:100 }}>{`{{${v}}}`}</label>
+                        <input value={wizOverrides[v] || ''} onChange={e => setWizOverrides(p => ({ ...p, [v]:e.target.value }))}
+                          placeholder={`Valor para ${v}`}
+                          style={{ flex:1, padding:'7px 10px', borderRadius:6, border:`1px solid ${G[200]}`,
+                            fontSize:11, fontFamily:'inherit', outline:'none', boxSizing:'border-box' }}/>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Send info bar */}
+              <div style={{ background:'#f0fdf4', borderRadius:8, padding:'10px 14px', display:'flex',
+                justifyContent:'space-between', alignItems:'center', border:'1px solid #bbf7d0' }}>
+                <span style={{ fontSize:12, color:G[800] }}>
+                  Enviar para <strong>{wizSelPatients.length}</strong> paciente{wizSelPatients.length !== 1 ? 's' : ''}
+                </span>
+                <span style={{ fontSize:12, color:'#16a34a', fontWeight:600 }}>
+                  {patientsWithWA} com WhatsApp
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Wizard footer */}
+        <div style={{ padding:'16px 24px', borderTop:`1px solid ${G[100]}`, display:'flex', gap:10, flexShrink:0 }}>
+          {wizStep > 1 && (
+            <button onClick={() => setWizStep(s => s - 1)}
+              style={{ ...btnOutline, flex:1, justifyContent:'center' }}>
+              <ChevronLeft size={14}/> Voltar
+            </button>
+          )}
+          {wizStep < 3 && (
+            <button onClick={() => setWizStep(s => s + 1)}
+              disabled={(wizStep === 1 && !wizCustomMsg && !wizSelTpl) || (wizStep === 2 && wizSelPatients.length === 0)}
+              style={{ ...btnGold, flex:1, justifyContent:'center',
+                opacity: ((wizStep === 1 && !wizCustomMsg && !wizSelTpl) || (wizStep === 2 && wizSelPatients.length === 0)) ? 0.5 : 1 }}>
+              Proximo <ChevronRightIcon size={14}/>
+            </button>
+          )}
+          {wizStep === 3 && (
+            <button onClick={handleWizardSend} disabled={wizSending}
+              style={{ ...btnGold, flex:1, justifyContent:'center', background: wizSending ? G[300] : '#16a34a' }}>
+              {wizSending ? 'Enviando...' : (
+                <><Send size={14}/> Enviar mensagens</>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ══════════════════════════════════════════
+  //  RENDER: Templates grid
+  // ══════════════════════════════════════════
+  const templatesGrid = (
+    <div style={{ display:'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap:12, marginTop:16 }}>
+      {loadingTpls ? (
+        <div style={{ gridColumn:'1/-1', padding:40, textAlign:'center', color:'#aaa', fontSize:12 }}>Carregando templates...</div>
+      ) : templates.length === 0 ? (
+        <div style={{ gridColumn:'1/-1', padding:40, textAlign:'center', color:'#ccc', fontSize:12 }}>
+          Nenhum template. Crie o primeiro clicando em "+ Novo template".
+        </div>
+      ) : templates.map(tpl => {
+        const cat = TPL_CATEGORIES[tpl.category] || TPL_CATEGORIES.custom;
+        const preview = applyTemplateVars(tpl.body, ps[0]);
+        const vars = extractVars(tpl.body);
+        return (
+          <div key={tpl.id} style={{ background:'#fff', borderRadius:12, border:`1px solid ${G[200]}`,
+            padding:'16px 18px', display:'flex', flexDirection:'column', gap:8 }}>
+            {/* Top row: name + duplicate */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
+              <span style={{ fontSize:13, fontWeight:700, color:G[800], flex:1, overflow:'hidden',
+                textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{tpl.name}</span>
+              <button onClick={() => handleDuplicate(tpl)}
+                style={{ padding:'4px 10px', borderRadius:6, border:`1px solid ${G[300]}`, background:'#fff',
+                  fontSize:10, fontWeight:600, color:G[700], cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
+                Duplicar
+              </button>
+            </div>
+            {/* Category badge */}
+            <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+              <span style={{ fontSize:9, fontWeight:600, padding:'2px 8px', borderRadius:10,
+                color:cat.color, background:cat.bg }}>{cat.label}</span>
+              {tpl.isSystem && (
+                <span style={{ fontSize:9, fontWeight:600, padding:'2px 8px', borderRadius:10,
+                  color:'#6b7280', background:'#f3f4f6' }}>sistema</span>
+              )}
+            </div>
+            {/* Preview */}
+            <div style={{ fontSize:11, color:'#999', lineHeight:1.4,
+              overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box',
+              WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
+              {preview.substring(0, 160)}
+            </div>
+            {/* Variable tags */}
+            {vars.length > 0 && (
+              <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginTop:2 }}>
+                {vars.map(v => (
+                  <span key={v} style={{ fontSize:9, padding:'2px 6px', borderRadius:10,
+                    border:`1px solid ${G[200]}`, color:G[600], background:'#fff' }}>
+                    {`{{${v}}}`}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // ══════════════════════════════════════════
+  //  RENDER: Historico list
+  // ══════════════════════════════════════════
+  const historicoList = (
+    <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:16 }}>
+      {loadingHistory ? (
+        <div style={{ padding:40, textAlign:'center', color:'#aaa', fontSize:12 }}>Carregando historico...</div>
+      ) : historyMsgs.length === 0 ? (
+        <div style={{ padding:40, textAlign:'center', color:'#ccc', fontSize:12 }}>
+          Nenhuma mensagem enviada ainda.
+        </div>
+      ) : historyMsgs.map(m => {
+        const patient = ps.find(p => p.id === m.patientId);
+        const patientName = patient?.user?.name || patient?.name || 'Paciente';
+        const senderName = m.sentBy?.name || '—';
+        const phone = patient?.phone ? maskPhone(patient.phone) : null;
+        const tplName = m.templateName || null;
+        const tplCat = m.templateCategory ? (TPL_CATEGORIES[m.templateCategory] || TPL_CATEGORIES.custom) : null;
+        const isWA = m.channel === 'whatsapp';
+        return (
+          <div key={m.id} style={{ background:'#fff', borderRadius:10, border:`1px solid ${G[100]}`,
+            padding:'14px 16px', display:'flex', flexDirection:'column', gap:6 }}>
+            {/* Top row */}
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <div style={{ width:8, height:8, borderRadius:'50%', background: isWA ? '#25D366' : '#22c55e', flexShrink:0 }}/>
+              <span style={{ fontSize:13, fontWeight:700, color:G[800], flex:1 }}>{patientName}</span>
+              {tplName && tplCat && (
+                <span style={{ fontSize:10, fontWeight:600, color:tplCat.color }}>{tplName}</span>
+              )}
+              <span style={{ fontSize:10, color:'#aaa', flexShrink:0 }}>
+                {safeFmt(m.createdAt, 'dd/MM HH:mm')}
+              </span>
+            </div>
+            {/* Body preview */}
+            <div style={{ fontSize:11, color:'#999', lineHeight:1.4,
+              overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box',
+              WebkitLineClamp:2, WebkitBoxOrient:'vertical', paddingLeft:16 }}>
+              {m.body || ''}
+            </div>
+            {/* Bottom row */}
+            <div style={{ display:'flex', alignItems:'center', gap:8, paddingLeft:16 }}>
+              <span style={{ fontSize:10, fontWeight:600, color:'#22c55e' }}>Enviado</span>
+              <span style={{ fontSize:10, color:'#bbb' }}>por {senderName}</span>
+              {phone && <span style={{ fontSize:10, color:'#bbb' }}>{phone}</span>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // ══════════════════════════════════════════
+  //  MAIN RETURN
+  // ══════════════════════════════════════════
   return (
     <>
       {tplModalEl}
-      <div style={{ display:"flex", gap:12, height:mob?"auto":undefined }}>
-        {listPanel}
-        {threadPanel}
+      {wizardModal}
+      <div>
+        {/* Header row: title + actions */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+          flexWrap:'wrap', gap:10, marginBottom:16 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <h2 style={{ fontSize:18, fontWeight:700, color:G[800], margin:0 }}>Comunicacao</h2>
+            {/* Toggle pills */}
+            <div style={{ display:'flex', gap:4, background:G[50], borderRadius:22, padding:3 }}>
+              <button onClick={() => setActiveTab('templates')}
+                style={{ ...pillActive,
+                  background: activeTab === 'templates' ? G[600] : 'transparent',
+                  color: activeTab === 'templates' ? '#fff' : G[700] }}>
+                Templates
+              </button>
+              <button onClick={() => setActiveTab('historico')}
+                style={{ ...pillActive,
+                  background: activeTab === 'historico' ? G[600] : 'transparent',
+                  color: activeTab === 'historico' ? '#fff' : G[700] }}>
+                Historico
+              </button>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={openNewTpl} style={btnOutline}>
+              <Plus size={14}/> Novo template
+            </button>
+            <button onClick={() => { setWizardOpen(true); setWizStep(1); setWizSelTpl(null); setWizSelPatients([]); setWizOverrides({}); setWizCustomMsg(false); setWizCustomBody(''); }}
+              style={btnGold}>
+              <Zap size={14}/> Disparar mensagem
+            </button>
+          </div>
+        </div>
+
+        {/* Tab content */}
+        {activeTab === 'templates' ? templatesGrid : historicoList}
       </div>
     </>
   );
