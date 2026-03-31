@@ -2734,6 +2734,18 @@ function MiniChat({ p, messages, setMessages, onLog }) {
     setSending(true);
 
     setSendError(null);
+    // Mostra imediatamente na UI (optimistic)
+    const tempMsg = {
+      id: 'pending_'+Date.now(),
+      date: new Date().toISOString(),
+      senderName: userName,
+      role: 'admin',
+      text: finalText,
+      channel,
+      patientId: p.id,
+    };
+    setApiMsgs(prev => [...prev, tempMsg]);
+
     try {
       // Salva no log de mensagens (sempre — é o histórico)
       await sendMessage({ patientId: p.id, body: finalText, channel });
@@ -2741,13 +2753,14 @@ function MiniChat({ p, messages, setMessages, onLog }) {
       if (channel === 'whatsapp' && p.phone) {
         sendWhatsAppMsg({ phone: p.phone, message: finalText, patientId: p.id }).catch(() => {});
       }
-      // Recarrega mensagens
-      setTimeout(() => loadMessages(), 300);
+      // Recarrega mensagens reais da API (substitui o optimistic)
+      setTimeout(() => loadMessages(), 500);
     } catch (err) {
       console.error('MiniChat send error:', err);
       const errMsg = err?.response?.data?.error || err?.message || 'Erro ao enviar';
       setSendError(errMsg);
-      // Restaura texto para o usuário tentar novamente
+      // Remove msg optimistic e restaura texto
+      setApiMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
       setText(t);
     } finally {
       setSending(false);
