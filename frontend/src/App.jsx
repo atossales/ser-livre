@@ -137,12 +137,7 @@ const sN = t => t>=8  ? {l:"Elite",      c:S.pur, bg:S.purBg, e:"🟣", d:"Alta"
 const ini     = n => n.split(" ").filter((_,i,a) => i===0||i===a.length-1).map(w=>w[0]).join("").toUpperCase();
 const calcAge = bd => { try { return differenceInYears(new Date(), parseISO(bd)); } catch { return "?"; } };
 
-const HIST = id => [1,2,3,4].map((m,i) => ({
-  mo:`Mês ${m}`,
-  met: Math.min(24, Math.max(8,  10 + id%5*2 + i*2)),
-  be:  Math.min(18, Math.max(6,   8 + id%4*2 + i*2)),
-  mn:  Math.min(9,  Math.max(3,   4 + id%2   + i  )),
-}));
+
 
 // Gera estrutura de checklist com base em weekChecks reais do banco.
 // Semanas passadas (i < currentWeek): marcadas como concluídas.
@@ -982,7 +977,8 @@ function RelTab({ p, mob, plan, met, be, mn }) {
                 <span>Ciclo: <strong>{p.cycle}</strong></span>
               </div>
 
-              {/* Scores clinicos com barras */}
+              {/* Scores clinicos com barras — só mostra se tem score registrado */}
+              {sc ? (
               <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:14 }}>
                 {[{l:"Saude metabolica",t:met,m:24,fn:sM,c:"#27AE60"},{l:"Bem-estar",t:be,m:18,fn:sB,c:"#F39C12"},{l:"Blindagem mental",t:mn,m:9,fn:sN,c:"#F39C12"}].map((s,i) => {
                   const st=s.fn(s.t);
@@ -1001,6 +997,12 @@ function RelTab({ p, mob, plan, met, be, mn }) {
                   );
                 })}
               </div>
+              ) : (
+              <div style={{ padding:"12px 14px", background:"#fff", borderRadius:8, border:`1px solid ${G[200]}`, marginBottom:14, textAlign:"center" }}>
+                <div style={{ fontSize:12, color:"#aaa" }}>Scores clínicos ainda não registrados</div>
+                <div style={{ fontSize:10, color:"#ccc", marginTop:2 }}>Registre na aba Scores para visualizar aqui</div>
+              </div>
+              )}
 
               {/* Composicao corporal */}
               {(mmLast > 0 || mgLast > 0) && (
@@ -1515,7 +1517,11 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
   const sc   = SC[p.id];
   const met  = cM(sc?.m); const be = cB(sc?.b); const mn = cN(sc?.n);
   const pm   = sc ? pM(sc.m) : {comp:0,infl:0,glic:0,card:0};
-  const hist = HIST(p.id);
+  // Histórico de evolução de scores (dados REAIS, não mock)
+  const hist = (p.scoreHistory || []).map(s => ({
+    mo: s.month || safeFmt(s.date, 'MMM/yy'),
+    met: cM(s.m), be: cB(s.b), mn: cN(s.n),
+  }));
   const [cl, setCl]   = useState(() => genCL(p, tier, p._activeCycle?.weekChecks || []));
   const [savingWeek, setSavingWeek] = useState(false);
   // Estado para edição de scores — inicializa com o último score ou valores padrão (2 = moderado)
