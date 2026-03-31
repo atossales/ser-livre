@@ -15,38 +15,68 @@ Contém instruções obrigatórias de workflow para este projeto.
 
 ---
 
-## 🤖 Ferramentas Obrigatórias
+## 🎯 Hierarquia de Orquestração
 
-### 1. AIOX-Core (Orquestrador principal)
-Repositório: https://github.com/SynkraAI/aiox-core
+```
+GSD (orquestrador de Sprints)
+  ↓ usa especialistas
+  AIOX agents (@dev, @qa, @sm, @architect, @pm)
+  ↓ para tarefas ad-hoc rápidas
+  OMC — oh-my-claudecode (autopilot, /team)
+```
 
-Instalar: `npx aiox-core install`
+**Regra:** superpowers está instalado mas é REDUNDANTE — usar GSD no lugar.
 
-Usar os agentes AIOX para tarefas complexas:
-- `@pm` → definição de produto / PRD
-- `@architect` → arquitetura e design
-- `@dev` → implementação de stories
-- `@qa` → revisão e testes
-- `@sm` → criação de stories detalhadas
+---
 
-### 2. oh-my-claudecode (Orquestração multi-agente)
-Repositório: https://github.com/Yeachan-Heo/oh-my-claudecode
+## 1. GSD — Orquestrador Principal de Sprints
 
-Instalar: `/plugin marketplace add https://github.com/Yeachan-Heo/oh-my-claudecode`
+**Comandos do fluxo completo:**
 
-Usar palavras-chave:
-- `autopilot: <tarefa>` → execução autônoma
-- `ralph: <tarefa>` → modo persistência com loops de verificação
-- `deepsearch` → busca focada no codebase
+```
+/gsd:new-project          → cria roadmap inicial do projeto (1x)
+/gsd:discuss-phase        → trava decisões antes de planejar
+/gsd:plan-phase           → gera PLAN.md com tasks em waves paralelas
+/gsd:execute-phase        → executa atomicamente com commit por task
+/gsd:verify-work          → verifica se o objetivo foi atingido
+/gsd:debug                → investiga bug com método científico
+/gsd:map-codebase         → documenta estrutura do código antes de refatorar
+```
 
-### 3. Claude Code Best Practices
-Repositório: https://github.com/shanraisshan/claude-code-best-practice
+**Quando usar cada um:**
+- Nova feature → `/gsd:discuss-phase` → `/gsd:plan-phase` → `/gsd:execute-phase` → `/gsd:verify-work`
+- Bug crítico → `/gsd:debug`
+- Antes de refatorar App.jsx → `/gsd:map-codebase`
+- Início de Sprint → `/gsd:discuss-phase` para travar escopo
 
-Referência de boas práticas. Principais regras aplicadas neste projeto:
-- CLAUDE.md máximo 200 linhas
-- PRs pequenos e focados
-- Usar subagentes para tarefas complexas
-- Verificar sempre antes de committar
+---
+
+## 2. AIOX Agents — Especialistas (chamados pelo GSD ou diretamente)
+
+```
+@aiox-pm        → PRD, roadmap, decisões de produto
+@aiox-architect → arquitetura, banco, decisões técnicas
+@aiox-dev       → implementação autônoma de stories (YOLO mode)
+@aiox-sm        → criação de stories com critérios de aceite
+@aiox-qa        → revisão, testes, análise de bugs
+@aiox-ux        → frontend, componentes, acessibilidade
+@aiox-devops    → CI/CD, git, deploy, PR automation
+```
+
+**Regra:** Para qualquer funcionalidade clínica nova, criar story com `@aiox-sm` antes de implementar.
+
+---
+
+## 3. OMC — oh-my-claudecode (tarefas ad-hoc)
+
+**Quando usar:** tarefas rápidas que não justificam abrir um Sprint GSD completo.
+
+```
+autopilot: <tarefa>    → execução autônoma com loop de verificação
+ralph: <tarefa>        → modo persistência com checkpoints
+/team 3:executor       → 3 workers em paralelo para a mesma tarefa
+deepsearch             → busca profunda no codebase
+```
 
 ---
 
@@ -54,44 +84,36 @@ Referência de boas práticas. Principais regras aplicadas neste projeto:
 
 ### Antes de qualquer mudança
 1. Leia os arquivos relevantes antes de editar
-2. Para bugs: identifique a causa raiz ANTES de propor solução
-3. Para features: leia o contexto do módulo inteiro
+2. Bugs: identifique a causa raiz ANTES de propor solução
+3. Features com >2 arquivos → `/gsd:discuss-phase` antes de começar
+4. Não adicionar features além do que foi pedido
 
 ### Commits e Deploy
 - Todo push no `main` dispara deploy automático via GitHub Actions
-- Backend: `clawdbot/backend` no EasyPanel (`xy1pmp.easypanel.host`)
-- Frontend: `clawdbot/frontend` no EasyPanel
-- **NÃO É NECESSÁRIO** clicar em "Implantar" manualmente — o GitHub Action cuida disso
+- **OBRIGATÓRIO:** `cd frontend && npm run build` antes de commitar
+- **OBRIGATÓRIO:** `git add -f frontend/dist/` — dist é commitado e servido pelo EasyPanel
+- EasyPanel "restart" é suficiente após push (não precisa rebuild Docker)
 
-### Debug de Erros 500
-Usar o endpoint de diagnóstico (sem auth):
-```
-GET https://clawdbot-frontend.xy1pmp.easypanel.host/api/healthz
-```
-Retorna status de cada tabela do banco individualmente.
-
-### Banco de Dados
-- **Local (EasyPanel):** `postgres:5432/serlivre` — dados clínicos
-- **Supabase Auth:** `kajebqadlpxufgdhchxy.supabase.co` — autenticação
-- `prisma db push` roda automaticamente no startup do backend
-- Schema: `backend/prisma/schema.prisma`
+### Multi-conta Claude Code
+- Conta Danilo: `claude` (padrão, `~/.claude/`)
+- Conta Mariana: `CLAUDE_CONFIG_DIR=~/.claude-serlivre claude`
+- Ambas compartilham skills/agents/commands via symlinks
 
 ---
 
 ## 🔴 Problemas Conhecidos e Soluções
 
+### WhatsApp desconectado dentro do Docker
+→ Fix: definir `EVOLUTION_API_INTERNAL_URL=http://evolution-evolution-api:8080` no .env
+
+### selPatient sem phone (botão WhatsApp não aparece)
+→ Fix: sempre usar `selPatient?.phone` (sem `.user`)
+
+### EasyPanel não atualiza após push
+→ Fix: `cd frontend && npm run build && cd .. && git add -f frontend/dist/ && git commit && git push`
+
 ### 500 em todas as rotas após deploy
-→ Causa: tabelas não criadas pelo `prisma db push`
-→ Diagnóstico: `GET /api/healthz` para ver qual tabela falha
-→ Fix: checar logs do container no EasyPanel
-
-### Unique constraint em POST /api/patients
-→ Causa: User com mesmo email mas id diferente já existe
-→ Fix: `DELETE FROM "User" WHERE email=$1 AND id!=$2` antes do upsert
-
-### Módulo de Mensagens sem templates
-→ Causa: `GET /api/messages/templates` retornando 500 (tabela MessageTemplate)
-→ Fix: garantir que `prisma db push` criou a tabela
+→ Diagnóstico: `GET /api/healthz` → checar logs do container no EasyPanel
 
 ---
 
@@ -99,16 +121,19 @@ Retorna status de cada tabela do banco individualmente.
 
 ```
 backend/
-  src/server.js          ← API principal (~1600 linhas)
+  src/server.js          ← API principal
   src/middleware/auth.js ← autenticação Supabase
   src/utils/whatsapp.js  ← Evolution API + Gemini
-  src/lib/prisma.js      ← singleton do Prisma client
   prisma/schema.prisma   ← definição das tabelas
 
 frontend/
-  src/App.jsx            ← app React (~3500 linhas)
+  src/App.jsx            ← app React (arquivo único)
   src/utils/api.js       ← chamadas ao backend
+  dist/                  ← build commitado — SEMPRE rebuildar antes de push
 
-.github/workflows/
-  deploy.yml             ← auto-deploy no push para main
+~/.claude/
+  commands/gsd/   ← 50+ subcomandos GSD
+  commands/AIOX/  ← comandos AIOX
+  agents/         ← 77 agentes (gsd-*, aiox-*, architect, etc.)
+  skills/         ← 200+ skills
 ```

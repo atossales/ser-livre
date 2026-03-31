@@ -19,24 +19,30 @@ jobs:
     steps:
       - name: Trigger EasyPanel deploy (backend)
         run: |
-          response=$(curl -s -w "\n%{http_code}" -X POST \
-            "https://xy1pmp.easypanel.host/api/trpc/services.app.deployService" \
-            -H "Authorization: Bearer ${{ secrets.EASYPANEL_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{"json":{"projectName":"clawdbot","serviceName":"backend"}}')
+          for attempt in 1 2 3; do
+            echo "Tentativa $attempt/3..."
+            response=$(curl -s -w "\n%{http_code}" -X POST \
+              "https://xy1pmp.easypanel.host/api/trpc/services.app.deployService" \
+              -H "Authorization: Bearer ${{ secrets.EASYPANEL_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d '{"json":{"projectName":"clawdbot","serviceName":"backend"}}')
 
-          http_code=$(echo "$response" | tail -1)
-          body=$(echo "$response" | head -1)
+            http_code=$(echo "$response" | tail -1)
+            body=$(echo "$response" | head -1)
 
-          echo "Status: $http_code"
-          echo "Response: $body"
+            echo "Status: $http_code"
+            echo "Response: $body"
 
-          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
-            echo "✅ Backend deploy acionado com sucesso!"
-          else
-            echo "❌ Falha ao acionar deploy do backend (HTTP $http_code)"
-            exit 1
-          fi
+            if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+              echo "✅ Backend deploy acionado com sucesso!"
+              exit 0
+            fi
+
+            echo "⚠️ Tentativa $attempt falhou (HTTP $http_code) — aguardando 10s..."
+            sleep 10
+          done
+          echo "❌ Todas as tentativas falharam"
+          exit 1
 
   # ── Deploy do Frontend ────────────────────────────────────────
   deploy-frontend:
@@ -46,21 +52,27 @@ jobs:
     steps:
       - name: Trigger EasyPanel deploy (frontend)
         run: |
-          response=$(curl -s -w "\n%{http_code}" -X POST \
-            "https://xy1pmp.easypanel.host/api/trpc/services.app.deployService" \
-            -H "Authorization: Bearer ${{ secrets.EASYPANEL_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{"json":{"projectName":"clawdbot","serviceName":"frontend"}}')
+          for attempt in 1 2 3; do
+            echo "Tentativa $attempt/3..."
+            response=$(curl -s -w "\n%{http_code}" -X POST \
+              "https://xy1pmp.easypanel.host/api/trpc/services.app.deployService" \
+              -H "Authorization: Bearer ${{ secrets.EASYPANEL_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d '{"json":{"projectName":"clawdbot","serviceName":"frontend"}}')
 
-          http_code=$(echo "$response" | tail -1)
-          body=$(echo "$response" | head -1)
+            http_code=$(echo "$response" | tail -1)
+            body=$(echo "$response" | head -1)
 
-          echo "Status: $http_code"
-          echo "Response: $body"
+            echo "Status: $http_code"
+            echo "Response: $body"
 
-          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
-            echo "✅ Frontend deploy acionado com sucesso!"
-          else
-            echo "❌ Falha ao acionar deploy do frontend (HTTP $http_code)"
-            exit 1
-          fi
+            if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+              echo "✅ Frontend deploy acionado com sucesso!"
+              exit 0
+            fi
+
+            echo "⚠️ Tentativa $attempt falhou (HTTP $http_code) — aguardando 10s..."
+            sleep 10
+          done
+          echo "❌ Todas as tentativas falharam"
+          exit 1
