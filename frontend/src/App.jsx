@@ -2493,22 +2493,9 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
       {tab==="msgs" && (
         <MiniChat
           p={p}
-          messages={(messages||[]).filter(m => m.conv === `p_${p.id}` || m.patientId === p.id)}
-          onSend={(text) => {
-            const userRaw = (() => { try { return JSON.parse(localStorage.getItem('serlivre_user')||'{}'); } catch { return {}; } })();
-            const msg = {
-              id: crypto.randomUUID(),
-              date: new Date().toISOString(),
-              senderName: userRaw.name || 'Equipe',
-              role: 'admin',
-              text,
-              conv: `p_${p.id}`,
-              patientId: p.id,
-              read: false,
-            };
-            setMessages && setMessages(prev => [...prev, msg]);
-            onSendMsg && onSendMsg(msg);
-          }}
+          messages={messages}
+          setMessages={setMessages}
+          onLog={onLog}
         />
       )}
 
@@ -2521,49 +2508,195 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
 /* ════════════════════════════════════════════
    MINI CHAT — Mensagens dentro da ficha do paciente
 ═══════════════════════════════════════════════ */
-function MiniChat({ p, messages, onSend }) {
+function MiniChat({ p, messages, setMessages, onLog }) {
   const [text, setText] = useState('');
+  const [apiMsgs, setApiMsgs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [whatsappMode, setWhatsappMode] = useState(false);
+  const [autoSignature, setAutoSignature] = useState(true);
+  const [templates, setTemplates] = useState([]);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showAI, setShowAI] = useState(false);
+  const [generatingAI, setGeneratingAI] = useState(false);
   const bottomRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const userRaw = useMemo(() => { try { return JSON.parse(localStorage.getItem('serlivre_user')||'{}'); } catch { return {}; } }, []);
+  const userName = userRaw.name || 'Equipe';
+
+  // Load messages from API on mount
+  const loadMessages = useCallback(async () => {
+    try {
+      const r = await getMessages(p.id);
+      const list = r.data || r || [];
+      setApiMsgs(Array.isArray(list) ? list : []);
+    } catch { setApiMsgs([]); }
+    finally { setLoading(false); }
+  }, [p.id]);
+
+  useEffect(() => { loadMessages(); }, [loadMessages]);
+
+  // Load templates on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await getMessageTemplates();
+        setTemplates(Array.isArray(r.data||r) ? (r.data||r) : []);
+      } catch { setTemplates([]); }
+    })();
+  }, []);
+
+  // Merge API messages + local messages, deduplicate by id
+  const allMessages = useMemo(() => {
+    const local = (messages||[]).filter(m => m.conv === `p_${p.id}` || m.patientId === p.id);
+    const map = new Map();
+    [...apiMsgs, ...local].forEach(m => map.set(m.id, m));
+    return [...map.values()].sort((a,b) => new Date(a.date||a.createdAt) - new Date(b.date||b.createdAt));
+  }, [apiMsgs, messages, p.id]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [allMessages]);
 
-  const handleSend = () => {
+  // Insert text at cursor position
+  const insertAtCursor = useCallback((val) => {
+    const el = inputRef.current;
+    if (!el) { setText(prev => prev + val); return; }
+    const start = el.selectionStart || 0;
+    const end = el.selectionEnd || 0;
+    const before = text.substring(0, start);
+    const after = text.substring(end);
+    const newText = before + val + after;
+    setText(newText);
+    requestAnimationFrame(() => { el.focus(); el.selectionStart = el.selectionEnd = start + val.length; });
+  }, [text]);
+
+  // Send handler
+  const handleSend = async () => {
     const t = text.trim();
-    if (!t) return;
-    onSend(t);
+    if (!t || sending) return;
+
+    const channel = whatsappMode && p.phone ? 'whatsapp' : 'interno';
+    const finalText = autoSignature ? `${t}\n\n\u2014 ${userName}, Instituto Dra. Mariana Wogel` : t;
+
+    const optimisticMsg = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      senderName: userName,
+      role: 'admin',
+      text: finalText,
+      conv: `p_${p.id}`,
+      patientId: p.id,
+      channel,
+      read: false,
+    };
+
+    // Optimistic update
+    setMessages && setMessages(prev => [...prev, optimisticMsg]);
     setText('');
+    setSending(true);
+
+    try {
+      await sendMessage({ patientId: p.id, body: finalText, channel });
+      if (whatsappMode && p.phone) {
+        try { await sendWhatsAppMsg({ phone: p.phone, message: finalText, patientId: p.id }); } catch {}
+      }
+      await loadMessages();
+    } catch (err) {
+      console.error('MiniChat send error:', err);
+    } finally {
+      setSending(false);
+    }
   };
 
-  const sorted = [...(messages||[])].sort((a,b) => new Date(a.date) - new Date(b.date));
+  // AI generation types
+  const AI_TYPES = [
+    { id:'boas_vindas',    label:'Boas-vindas' },
+    { id:'inicio_semana',  label:'Inicio de semana' },
+    { id:'resultado_pesagem', label:'Resultado de pesagem' },
+    { id:'lembrete_consulta', label:'Lembrete de consulta' },
+    { id:'lembrete_exames',   label:'Lembrete de exames' },
+    { id:'conclusao',         label:'Conclusao do programa' },
+  ];
+
+  const handleAIGenerate = async (type) => {
+    setShowAI(false);
+    setGeneratingAI(true);
+    try {
+      const r = await generateMessage({ type, patientId: p.id });
+      const body = r.data?.message || r.data?.body || r.message || r.body || '';
+      if (body) setText(body);
+    } catch (err) { console.error('AI generate error:', err); }
+    finally { setGeneratingAI(false); }
+  };
+
+  // Shortcuts data
+  const plan = PLANS.find(x => x.id === p.plan);
+  const heightM = (p.height || 165) / 100;
+  const imc = p.cw ? (p.cw / (heightM * heightM)).toFixed(1) : null;
+  const lastScore = (p.scoreHistory || []).slice(-1)[0];
+  const shortcuts = [
+    { label:'Nome',           value: p.name },
+    { label:'Telefone',       value: p.phone || '(sem telefone)' },
+    { label:'Peso atual',     value: `${p.cw}kg` },
+    { label:'Peso inicial',   value: `${p.iw}kg` },
+    { label:'Perda total',    value: `${(p.iw - p.cw).toFixed(1)}kg` },
+    { label:'Semana',         value: `S${p.week}/16` },
+    { label:'Ciclo',          value: `C${p.cycle}` },
+    { label:'Plano',          value: plan?.name || p.plan || '-' },
+    ...(imc ? [{ label:'IMC', value: `${imc}` }] : []),
+    ...(lastScore ? [
+      { label:'Score Met',    value: `${lastScore.m || lastScore.metabolico || '-'}` },
+      { label:'Score BE',     value: `${lastScore.b || lastScore.bemEstar || '-'}` },
+      { label:'Score Mental', value: `${lastScore.n || lastScore.mental || '-'}` },
+    ] : []),
+    ...(p.startDate ? [{ label:'Data inicio', value: safeFmt(p.startDate, 'dd/MM/yyyy') }] : []),
+    ...(p.nextAppointment ? [{ label:'Proximo retorno', value: safeFmt(p.nextAppointment, 'dd/MM/yyyy') }] : []),
+  ];
+
+  const WA_GREEN = '#25D366';
+  const isWA = whatsappMode && p.phone;
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 280px)', minHeight:300, background:'#fff', borderRadius:10, border:`1px solid ${G[200]}`, overflow:'hidden' }}>
+    <div style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 280px)', minHeight:300, background:'#fff', borderRadius:10, border:`1px solid ${isWA ? WA_GREEN : G[200]}`, overflow:'hidden', position:'relative' }}>
       {/* Header */}
-      <div style={{ padding:'10px 14px', borderBottom:`1px solid ${G[200]}`, background:G[50], display:'flex', alignItems:'center', gap:8 }}>
-        <MessageCircle size={14} color={G[600]}/>
-        <span style={{ fontSize:12, fontWeight:600, color:G[800] }}>Conversa com {p.name.split(' ')[0]}</span>
-        <span style={{ fontSize:10, color:'#aaa', marginLeft:'auto' }}>{sorted.length} mensagem{sorted.length!==1?'s':''}</span>
+      <div style={{ padding:'10px 14px', borderBottom:`1px solid ${isWA ? WA_GREEN+'44' : G[200]}`, background: isWA ? '#dcf8c6' : G[50], display:'flex', alignItems:'center', gap:8 }}>
+        <MessageCircle size={14} color={isWA ? WA_GREEN : G[600]}/>
+        <span style={{ fontSize:12, fontWeight:600, color: isWA ? '#075e54' : G[800] }}>Conversa com {p.name.split(' ')[0]}</span>
+        <span style={{ fontSize:10, color:'#aaa', marginLeft:4 }}>{allMessages.length} mensagem{allMessages.length!==1?'s':''}</span>
+        <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:6 }}>
+          {p.phone && (
+            <button onClick={() => setWhatsappMode(!whatsappMode)}
+              style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:6, fontSize:10, fontWeight:600, border:`1px solid ${whatsappMode ? WA_GREEN : G[300]}`, background: whatsappMode ? WA_GREEN : 'transparent', color: whatsappMode ? '#fff' : G[600], cursor:'pointer', fontFamily:'inherit' }}>
+              {whatsappMode ? '\uD83D\uDCF1 WhatsApp' : '\uD83D\uDCAC Interno'}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Mensagens */}
+      {/* Messages area */}
       <div style={{ flex:1, overflowY:'auto', padding:12, display:'flex', flexDirection:'column', gap:8 }}>
-        {sorted.length === 0 ? (
+        {loading ? (
+          <div style={{ textAlign:'center', color:'#aaa', fontSize:12, marginTop:40 }}>Carregando mensagens...</div>
+        ) : allMessages.length === 0 ? (
           <div style={{ textAlign:'center', color:'#ccc', fontSize:12, marginTop:40 }}>
             <MessageCircle size={32} color="#ddd" style={{ marginBottom:8 }}/>
             <div>Nenhuma mensagem ainda</div>
             <div style={{ fontSize:10, marginTop:4 }}>Envie a primeira mensagem para {p.name.split(' ')[0]}</div>
           </div>
-        ) : sorted.map((m, i) => {
+        ) : allMessages.map((m, i) => {
           const isAdmin = m.role === 'admin' || m.role !== 'paciente';
+          const isWhatsApp = m.channel === 'whatsapp';
           return (
             <div key={m.id||i} style={{ display:'flex', flexDirection:'column', alignItems:isAdmin?'flex-end':'flex-start' }}>
-              <div style={{ maxWidth:'80%', background:isAdmin?G[600]:'#f0f0f0', color:isAdmin?'#fff':G[800], borderRadius:isAdmin?'12px 12px 2px 12px':'12px 12px 12px 2px', padding:'8px 12px', fontSize:12, lineHeight:1.5, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
-                {m.text}
+              <div style={{ maxWidth:'80%', background: isAdmin ? (isWhatsApp ? '#dcf8c6' : G[600]) : '#f0f0f0', color: isAdmin ? (isWhatsApp ? '#075e54' : '#fff') : G[800], borderRadius:isAdmin?'12px 12px 2px 12px':'12px 12px 12px 2px', padding:'8px 12px', fontSize:12, lineHeight:1.5, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
+                {m.text || m.body}
               </div>
-              <div style={{ fontSize:9, color:'#aaa', marginTop:2, paddingInline:4 }}>
-                {m.senderName} · {safeFmt(m.date,'dd/MM HH:mm')}
+              <div style={{ fontSize:9, color:'#aaa', marginTop:2, paddingInline:4, display:'flex', gap:4, alignItems:'center' }}>
+                {m.senderName || userName} {'\u00B7'} {safeFmt(m.date || m.createdAt,'dd/MM HH:mm')}
+                {isWhatsApp && <span style={{ color: WA_GREEN, fontWeight:600 }}>WA</span>}
               </div>
             </div>
           );
@@ -2571,19 +2704,93 @@ function MiniChat({ p, messages, onSend }) {
         <div ref={bottomRef}/>
       </div>
 
-      {/* Input */}
+      {/* Action bar */}
+      <div style={{ padding:'4px 12px', borderTop:`1px solid ${G[100]}`, display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', background:G[50] }}>
+        <button onClick={() => { setShowTemplates(!showTemplates); setShowShortcuts(false); setShowAI(false); }}
+          style={{ padding:'3px 8px', borderRadius:5, fontSize:10, fontWeight:500, border:`1px solid ${showTemplates ? G[500] : G[200]}`, background: showTemplates ? G[100] : '#fff', color:G[700], cursor:'pointer', fontFamily:'inherit' }}>
+          {'\uD83D\uDCCB'} Templates
+        </button>
+        <button onClick={() => { setShowShortcuts(!showShortcuts); setShowTemplates(false); setShowAI(false); }}
+          style={{ padding:'3px 8px', borderRadius:5, fontSize:10, fontWeight:500, border:`1px solid ${showShortcuts ? G[500] : G[200]}`, background: showShortcuts ? G[100] : '#fff', color:G[700], cursor:'pointer', fontFamily:'inherit' }}>
+          {'\u26A1'} Atalhos
+        </button>
+        <button onClick={() => { setShowAI(!showAI); setShowTemplates(false); setShowShortcuts(false); }}
+          disabled={generatingAI}
+          style={{ padding:'3px 8px', borderRadius:5, fontSize:10, fontWeight:500, border:`1px solid ${showAI ? S.pur : G[200]}`, background: showAI ? S.purBg : '#fff', color: generatingAI ? '#aaa' : S.pur, cursor: generatingAI ? 'wait' : 'pointer', fontFamily:'inherit' }}>
+          {generatingAI ? '\u23F3 Gerando...' : '\u2728 IA'}
+        </button>
+        <label style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:4, fontSize:10, color:G[600], cursor:'pointer', userSelect:'none' }}>
+          <input type="checkbox" checked={autoSignature} onChange={e => setAutoSignature(e.target.checked)} style={{ width:12, height:12, accentColor:G[600] }}/>
+          Auto-assinatura
+        </label>
+      </div>
+
+      {/* Floating panels */}
+      {showTemplates && (
+        <div style={{ position:'absolute', bottom:110, left:12, right:12, background:'#fff', border:`1px solid ${G[200]}`, borderRadius:10, boxShadow:'0 4px 20px rgba(0,0,0,0.12)', maxHeight:200, overflowY:'auto', zIndex:10, padding:8 }}>
+          <div style={{ fontSize:10, fontWeight:600, color:G[600], marginBottom:6, paddingInline:4 }}>Selecione um template</div>
+          {templates.length === 0 ? (
+            <div style={{ fontSize:11, color:'#aaa', textAlign:'center', padding:12 }}>Nenhum template cadastrado</div>
+          ) : templates.map(tpl => {
+            const cat = TPL_CATEGORIES[tpl.category] || TPL_CATEGORIES.custom;
+            return (
+              <div key={tpl.id} onClick={() => { setText(applyTemplateVars(tpl.body, p)); setShowTemplates(false); inputRef.current?.focus(); }}
+                style={{ padding:'6px 8px', borderRadius:6, cursor:'pointer', display:'flex', alignItems:'center', gap:8, marginBottom:2 }}
+                onMouseEnter={e => e.currentTarget.style.background = G[50]}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <span style={{ fontSize:9, padding:'1px 6px', borderRadius:4, background:cat.bg, color:cat.color, fontWeight:600, whiteSpace:'nowrap' }}>{cat.label}</span>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:11, fontWeight:600, color:G[800] }}>{tpl.name}</div>
+                  <div style={{ fontSize:10, color:'#aaa', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{applyTemplateVars(tpl.body, p).substring(0, 60)}...</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {showShortcuts && (
+        <div style={{ position:'absolute', bottom:110, left:12, right:12, background:'#fff', border:`1px solid ${G[200]}`, borderRadius:10, boxShadow:'0 4px 20px rgba(0,0,0,0.12)', maxHeight:200, overflowY:'auto', zIndex:10, padding:10 }}>
+          <div style={{ fontSize:10, fontWeight:600, color:G[600], marginBottom:6 }}>Clique para inserir no texto</div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
+            {shortcuts.map((s, i) => (
+              <button key={i} onClick={() => { insertAtCursor(s.value); setShowShortcuts(false); }}
+                style={{ padding:'3px 8px', borderRadius:12, fontSize:10, border:`1px solid ${G[200]}`, background:'#fff', color:G[700], cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:3 }}>
+                <span style={{ color:G[400], fontWeight:600 }}>{s.label}:</span> {s.value}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showAI && (
+        <div style={{ position:'absolute', bottom:110, left:12, right:200, background:'#fff', border:`1px solid ${S.pur}33`, borderRadius:10, boxShadow:'0 4px 20px rgba(0,0,0,0.12)', zIndex:10, padding:8 }}>
+          <div style={{ fontSize:10, fontWeight:600, color:S.pur, marginBottom:6, paddingInline:4 }}>Gerar mensagem com IA</div>
+          {AI_TYPES.map(t => (
+            <div key={t.id} onClick={() => handleAIGenerate(t.id)}
+              style={{ padding:'6px 10px', borderRadius:6, cursor:'pointer', fontSize:11, color:G[800] }}
+              onMouseEnter={e => e.currentTarget.style.background = S.purBg}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              {t.label}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Input area */}
       <div style={{ padding:'8px 12px', borderTop:`1px solid ${G[200]}`, display:'flex', gap:8, alignItems:'flex-end' }}>
         <textarea
+          ref={inputRef}
           value={text}
-          onChange={e=>setText(e.target.value)}
-          onKeyDown={e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); } }}
-          placeholder="Digite uma mensagem... (Enter para enviar)"
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+          placeholder={isWA ? 'Mensagem via WhatsApp... (Enter para enviar)' : 'Digite uma mensagem... (Enter para enviar)'}
           rows={2}
-          style={{ flex:1, padding:'8px 10px', borderRadius:8, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:'inherit', resize:'none', outline:'none', lineHeight:1.5 }}
+          style={{ flex:1, padding:'8px 10px', borderRadius:8, border:`1px solid ${isWA ? WA_GREEN : G[300]}`, fontSize:12, fontFamily:'inherit', resize:'none', outline:'none', lineHeight:1.5 }}
         />
-        <button onClick={handleSend} disabled={!text.trim()}
-          style={{ padding:'8px 14px', background:text.trim()?G[600]:'#e0e0e0', color:text.trim()?'#fff':'#aaa', border:'none', borderRadius:8, cursor:text.trim()?'pointer':'default', fontFamily:'inherit', display:'flex', alignItems:'center', gap:5, fontSize:12, fontWeight:600, height:38 }}>
-          <Send size={13}/>
+        <button onClick={handleSend} disabled={!text.trim() || sending}
+          style={{ padding:'8px 14px', background: sending ? '#ccc' : (text.trim() ? (isWA ? WA_GREEN : G[600]) : '#e0e0e0'), color: text.trim() && !sending ? '#fff' : '#aaa', border:'none', borderRadius:8, cursor: text.trim() && !sending ? 'pointer' : 'default', fontFamily:'inherit', display:'flex', alignItems:'center', gap:5, fontSize:12, fontWeight:600, height:38 }}>
+          <Send size={13}/>{sending ? '...' : ''}
         </button>
       </div>
     </div>
