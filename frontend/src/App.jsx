@@ -389,12 +389,18 @@ function ProfileModal({ user, avatarSrc, onClose, onUpdate, toast }) {
     setCropSrc(null);
     setLocalAvatar(croppedDataUrl);
     try {
-      const res = await fetch(croppedDataUrl);
-      const blob = await res.blob();
-      const file = new File([blob], 'avatar.jpg', { type: blob.type });
+      // Convert base64 to blob without fetch (CSP-safe)
+      const byteString = atob(croppedDataUrl.split(',')[1]);
+      const mimeType = croppedDataUrl.split(',')[0].split(':')[1].split(';')[0];
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+      const blob = new Blob([ab], { type: mimeType });
+      const file = new File([blob], 'avatar.jpg', { type: mimeType });
       await updateAvatar(user.id, file);
       toast('Foto atualizada!', 'success');
     } catch (err) {
+      console.error('Avatar upload error:', err);
       toast('Erro ao atualizar foto.', 'error');
     }
   };
