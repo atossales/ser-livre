@@ -2655,6 +2655,7 @@ function MiniChat({ p, messages, setMessages, onLog }) {
   const [apiMsgs, setApiMsgs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState(null);
   const [whatsappMode, setWhatsappMode] = useState(false);
   const [autoSignature, setAutoSignature] = useState(true);
   const [templates, setTemplates] = useState([]);
@@ -2729,32 +2730,25 @@ function MiniChat({ p, messages, setMessages, onLog }) {
     const channel = whatsappMode && p.phone ? 'whatsapp' : 'interno';
     const finalText = autoSignature ? `${t}\n\n\u2014 ${userName}, Instituto Dra. Mariana Wogel` : t;
 
-    const optimisticMsg = {
-      id: crypto.randomUUID(),
-      date: new Date().toISOString(),
-      senderName: userName,
-      role: 'admin',
-      text: finalText,
-      conv: `p_${p.id}`,
-      patientId: p.id,
-      channel,
-      read: false,
-    };
-
     setText('');
     setSending(true);
 
+    setSendError(null);
     try {
+      // Salva no log de mensagens (sempre — é o histórico)
+      await sendMessage({ patientId: p.id, body: finalText, channel });
+      // Se WhatsApp, também dispara pelo endpoint de WA
       if (channel === 'whatsapp' && p.phone) {
-        // WhatsApp: envia via endpoint dedicado (que já salva no log)
-        await sendWhatsAppMsg({ phone: p.phone, message: finalText, patientId: p.id });
-      } else {
-        // Interno: salva no banco via mensagens
-        await sendMessage({ patientId: p.id, body: finalText, channel: 'interno' });
+        sendWhatsAppMsg({ phone: p.phone, message: finalText, patientId: p.id }).catch(() => {});
       }
-      await loadMessages();
+      // Recarrega mensagens
+      setTimeout(() => loadMessages(), 300);
     } catch (err) {
       console.error('MiniChat send error:', err);
+      const errMsg = err?.response?.data?.error || err?.message || 'Erro ao enviar';
+      setSendError(errMsg);
+      // Restaura texto para o usuário tentar novamente
+      setText(t);
     } finally {
       setSending(false);
     }
@@ -2932,6 +2926,13 @@ function MiniChat({ p, messages, setMessages, onLog }) {
         </div>
       )}
 
+      {/* Error message */}
+      {sendError && (
+        <div style={{ padding:'6px 12px', background:'#fef2f2', borderTop:'1px solid #fecaca', fontSize:11, color:'#dc2626', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <span>Erro: {sendError}</span>
+          <span onClick={()=>setSendError(null)} style={{ cursor:'pointer', fontWeight:600, padding:'0 4px' }}>✕</span>
+        </div>
+      )}
       {/* Input area */}
       <div style={{ padding:'8px 12px', borderTop:`1px solid ${G[200]}`, display:'flex', gap:8, alignItems:'flex-end' }}>
         <textarea
