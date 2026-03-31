@@ -1075,51 +1075,42 @@ function RelTab({ p, mob, plan, met, be, mn }) {
               <div style={{ display:"flex", gap:16, marginBottom:16, flexWrap:"wrap" }}>
                 {/* SVG Silhouette */}
                 <div style={{ width:180, flexShrink:0, position:"relative", padding:"10px 0" }}>
-                  <svg viewBox="0 0 160 340" width="160" height="340" style={{ display:"block", margin:"0 auto" }}>
-                    {/* Simplified female silhouette */}
-                    <ellipse cx="80" cy="30" rx="18" ry="22" fill={G[200]} stroke={G[400]} strokeWidth="1"/>
-                    {/* Neck */}
-                    <rect x="74" y="52" width="12" height="12" rx="3" fill={G[200]} stroke={G[400]} strokeWidth="1"/>
-                    {/* Torso */}
-                    <path d="M55 64 Q50 100 48 140 Q46 170 52 200 L60 200 Q65 180 72 200 L88 200 Q95 180 100 200 L108 200 Q114 170 112 140 Q110 100 105 64 Z" fill={G[100]} stroke={G[400]} strokeWidth="1"/>
-                    {/* Arms */}
-                    <path d="M55 68 Q38 80 30 120 Q28 130 32 140 L38 138 Q40 125 44 110 Q48 95 52 80" fill={G[100]} stroke={G[400]} strokeWidth="1"/>
-                    <path d="M105 68 Q122 80 130 120 Q132 130 128 140 L122 138 Q120 125 116 110 Q112 95 108 80" fill={G[100]} stroke={G[400]} strokeWidth="1"/>
-                    {/* Legs */}
-                    <path d="M60 200 Q58 240 56 280 Q54 300 58 320 L72 320 Q74 300 72 280 Q73 240 72 200" fill={G[100]} stroke={G[400]} strokeWidth="1"/>
-                    <path d="M88 200 Q87 240 88 280 Q86 300 88 320 L102 320 Q106 300 104 280 Q102 240 100 200" fill={G[100]} stroke={G[400]} strokeWidth="1"/>
+                  <svg viewBox="0 0 140 360" width="140" height="360" style={{ display:"block", margin:"0 auto" }}>
+                    <defs>
+                      <linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={G[300]} stopOpacity="0.4"/>
+                        <stop offset="100%" stopColor={G[200]} stopOpacity="0.2"/>
+                      </linearGradient>
+                    </defs>
+                    {/* Female silhouette - minimalist single path */}
+                    <path d="M70 8 C82 8 88 18 88 28 C88 40 82 48 70 48 C58 48 52 40 52 28 C52 18 58 8 70 8 Z M64 50 L76 50 L76 58 L64 58 Z M56 60 C46 64 40 72 38 86 L34 86 Q30 88 30 94 Q30 100 34 102 L38 102 C38 108 40 114 42 118 L42 136 Q43 140 46 140 L46 118 C48 130 52 146 54 160 C56 172 52 178 52 188 L58 188 Q66 168 70 168 Q74 168 82 188 L88 188 C88 178 84 172 86 160 C88 146 92 130 94 118 L94 140 Q97 140 98 136 L98 118 C100 114 102 108 102 102 L106 102 Q110 100 110 94 Q110 88 106 86 L102 86 C100 72 94 64 84 60 Z M52 190 C50 220 50 250 50 270 C50 290 48 310 48 330 Q48 340 54 342 L62 342 Q64 340 62 336 C60 330 58 320 60 300 C62 280 64 260 66 240 L70 240 L74 240 C76 260 78 280 80 300 C82 320 80 330 78 336 Q76 340 78 342 L86 342 Q92 340 92 330 C92 310 90 290 90 270 C90 250 90 220 88 190" fill="url(#bodyGrad)" stroke={G[400]} strokeWidth="1" strokeLinejoin="round"/>
                     {/* Measurement lines */}
-                    {/* Braco */}
-                    <line x1="20" y1="120" x2="42" y2="120" stroke={G[500]} strokeWidth="0.8" strokeDasharray="2,2"/>
-                    {/* Torax */}
-                    <line x1="118" y1="85" x2="148" y2="85" stroke={G[500]} strokeWidth="0.8" strokeDasharray="2,2"/>
-                    {/* Cintura */}
-                    <line x1="118" y1="140" x2="148" y2="140" stroke={G[500]} strokeWidth="0.8" strokeDasharray="2,2"/>
-                    {/* Quadril */}
-                    <line x1="118" y1="195" x2="148" y2="195" stroke={G[500]} strokeWidth="0.8" strokeDasharray="2,2"/>
-                    {/* Panturrilha */}
-                    <line x1="40" y1="290" x2="20" y2="290" stroke={G[500]} strokeWidth="0.8" strokeDasharray="2,2"/>
+                    <line x1="18" y1="118" x2="40" y2="118" stroke={G[400]} strokeWidth="0.6" strokeDasharray="2,2"/>
+                    <line x1="100" y1="84" x2="130" y2="84" stroke={G[400]} strokeWidth="0.6" strokeDasharray="2,2"/>
+                    <line x1="100" y1="150" x2="130" y2="150" stroke={G[400]} strokeWidth="0.6" strokeDasharray="2,2"/>
+                    <line x1="100" y1="185" x2="130" y2="185" stroke={G[400]} strokeWidth="0.6" strokeDasharray="2,2"/>
+                    <line x1="18" y1="300" x2="48" y2="300" stroke={G[400]} strokeWidth="0.6" strokeDasharray="2,2"/>
                   </svg>
                   {/* Labels on the silhouette */}
                   {lastC && (
                     <>
-                      <div style={{ position:"absolute", left:0, top:115, fontSize:8, color:G[700], fontWeight:600, textAlign:"right", width:28 }}>
+                      <div style={{ position:"absolute", left:-6, top:120, fontSize:8, color:G[700], fontWeight:600, textAlign:"right", width:32 }}>
                         {lastC.braco ? `${lastC.braco}` : "--"}
-                        <div style={{ fontSize:7, color:"#aaa" }}>Braco</div>
+                        <div style={{ fontSize:7, color:"#aaa" }}>Braço</div>
                       </div>
-                      <div style={{ position:"absolute", right:0, top:78, fontSize:8, color:G[700], fontWeight:600 }}>
+                      <div style={{ position:"absolute", right:-8, top:82, fontSize:8, color:G[700], fontWeight:600 }}>
                         {lastC.torax ? `${lastC.torax}` : "--"}
-                        <div style={{ fontSize:7, color:"#aaa" }}>Torax</div>
+                        <div style={{ fontSize:7, color:"#aaa" }}>Tórax</div>
                       </div>
-                      <div style={{ position:"absolute", right:0, top:133, fontSize:8, color:G[700], fontWeight:600 }}>
+                      <div style={{ position:"absolute", right:-8, top:150, fontSize:8, color:G[700], fontWeight:600 }}>
                         {lastC.cintura ? `${lastC.cintura}` : "--"}
                         <div style={{ fontSize:7, color:"#aaa" }}>Cintura</div>
                       </div>
-                      <div style={{ position:"absolute", right:0, top:188, fontSize:8, color:G[700], fontWeight:600 }}>
+                      <div style={{ position:"absolute", right:-8, top:186, fontSize:8, color:G[700], fontWeight:600 }}>
                         {lastC.quadril ? `${lastC.quadril}` : "--"}
                         <div style={{ fontSize:7, color:"#aaa" }}>Quadril</div>
                       </div>
-                      <div style={{ position:"absolute", left:0, top:280, fontSize:8, color:G[700], fontWeight:600, textAlign:"right", width:28 }}>
+                      <div style={{ position:"absolute", left:-6, top:296, fontSize:8, color:G[700], fontWeight:600, textAlign:"right", width:32 }}>
                         {lastC.panturrilha ? `${lastC.panturrilha}` : "--"}
                         <div style={{ fontSize:7, color:"#aaa" }}>Pant.</div>
                       </div>
@@ -2146,8 +2137,14 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
 
         // Female SVG silhouette
         const FemaleSilhouette = () => (
-          <svg viewBox="0 0 200 480" width="100%" height="100%" style={{ maxHeight:360 }}>
-            <path d="M100,12 C88,12 80,22 80,35 C80,48 88,58 100,58 C112,58 120,48 120,35 C120,22 112,12 100,12 Z M85,60 C72,62 62,72 58,90 L52,130 C50,142 55,148 62,148 L65,148 L60,195 C58,215 60,235 65,255 L70,280 L55,360 C53,375 55,390 60,400 L65,430 C66,440 70,450 75,455 L80,460 C82,463 88,465 95,465 L100,465 L105,465 C112,465 118,463 120,460 L125,455 C130,450 134,440 135,430 L140,400 C145,390 147,375 145,360 L130,280 L135,255 C140,235 142,215 140,195 L135,148 L138,148 C145,148 150,142 148,130 L142,90 C138,72 128,62 115,60 Z" fill="none" stroke={G[300]} strokeWidth="1.5" />
+          <svg viewBox="0 0 140 360" width="100%" height="100%" style={{ maxHeight:320 }}>
+            <defs>
+              <linearGradient id="relBodyGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={G[300]} stopOpacity="0.35"/>
+                <stop offset="100%" stopColor={G[200]} stopOpacity="0.15"/>
+              </linearGradient>
+            </defs>
+            <path d="M70 8 C82 8 88 18 88 28 C88 40 82 48 70 48 C58 48 52 40 52 28 C52 18 58 8 70 8 Z M64 50 L76 50 L76 58 L64 58 Z M56 60 C46 64 40 72 38 86 L34 86 Q30 88 30 94 Q30 100 34 102 L38 102 C38 108 40 114 42 118 L42 136 Q43 140 46 140 L46 118 C48 130 52 146 54 160 C56 172 52 178 52 188 L58 188 Q66 168 70 168 Q74 168 82 188 L88 188 C88 178 84 172 86 160 C88 146 92 130 94 118 L94 140 Q97 140 98 136 L98 118 C100 114 102 108 102 102 L106 102 Q110 100 110 94 Q110 88 106 86 L102 86 C100 72 94 64 84 60 Z M52 190 C50 220 50 250 50 270 C50 290 48 310 48 330 Q48 340 54 342 L62 342 Q64 340 62 336 C60 330 58 320 60 300 C62 280 64 260 66 240 L70 240 L74 240 C76 260 78 280 80 300 C82 320 80 330 78 336 Q76 340 78 342 L86 342 Q92 340 92 330 C92 310 90 290 90 270 C90 250 90 220 88 190" fill="url(#relBodyGrad)" stroke={G[300]} strokeWidth="1" strokeLinejoin="round"/>
           </svg>
         );
 
@@ -2526,12 +2523,21 @@ function MiniChat({ p, messages, setMessages, onLog }) {
   const userRaw = useMemo(() => { try { return JSON.parse(localStorage.getItem('serlivre_user')||'{}'); } catch { return {}; } }, []);
   const userName = userRaw.name || 'Equipe';
 
-  // Load messages from API on mount
+  // Load messages from API on mount — normalize to { id, date, senderName, role, text, channel }
   const loadMessages = useCallback(async () => {
     try {
       const r = await getMessages(p.id);
-      const list = r.data || r || [];
-      setApiMsgs(Array.isArray(list) ? list : []);
+      const raw = Array.isArray(r.data) ? r.data : Array.isArray(r) ? r : [];
+      const normalized = raw.map(m => ({
+        id: m.id,
+        date: m.createdAt || m.date,
+        senderName: m.sentBy?.name || m.senderName || '',
+        role: (m.sentBy?.role === 'PACIENTE') ? 'paciente' : 'admin',
+        text: m.body || m.text || '',
+        channel: m.channel || 'interno',
+        patientId: m.patientId,
+      }));
+      setApiMsgs(normalized);
     } catch { setApiMsgs([]); }
     finally { setLoading(false); }
   }, [p.id]);
@@ -2548,13 +2554,10 @@ function MiniChat({ p, messages, setMessages, onLog }) {
     })();
   }, []);
 
-  // Merge API messages + local messages, deduplicate by id
+  // Use API messages as single source of truth (no optimistic updates = no duplicates)
   const allMessages = useMemo(() => {
-    const local = (messages||[]).filter(m => m.conv === `p_${p.id}` || m.patientId === p.id);
-    const map = new Map();
-    [...apiMsgs, ...local].forEach(m => map.set(m.id, m));
-    return [...map.values()].sort((a,b) => new Date(a.date||a.createdAt) - new Date(b.date||b.createdAt));
-  }, [apiMsgs, messages, p.id]);
+    return [...apiMsgs].sort((a,b) => new Date(a.date||a.createdAt) - new Date(b.date||b.createdAt));
+  }, [apiMsgs]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -2593,15 +2596,16 @@ function MiniChat({ p, messages, setMessages, onLog }) {
       read: false,
     };
 
-    // Optimistic update
-    setMessages && setMessages(prev => [...prev, optimisticMsg]);
     setText('');
     setSending(true);
 
     try {
-      await sendMessage({ patientId: p.id, body: finalText, channel });
-      if (whatsappMode && p.phone) {
-        try { await sendWhatsAppMsg({ phone: p.phone, message: finalText, patientId: p.id }); } catch {}
+      if (channel === 'whatsapp' && p.phone) {
+        // WhatsApp: envia via endpoint dedicado (que já salva no log)
+        await sendWhatsAppMsg({ phone: p.phone, message: finalText, patientId: p.id });
+      } else {
+        // Interno: salva no banco via mensagens
+        await sendMessage({ patientId: p.id, body: finalText, channel: 'interno' });
       }
       await loadMessages();
     } catch (err) {
@@ -2632,28 +2636,30 @@ function MiniChat({ p, messages, setMessages, onLog }) {
     finally { setGeneratingAI(false); }
   };
 
-  // Shortcuts data
-  const plan = PLANS.find(x => x.id === p.plan);
-  const heightM = (p.height || 165) / 100;
-  const imc = p.cw ? (p.cw / (heightM * heightM)).toFixed(1) : null;
-  const lastScore = (p.scoreHistory || []).slice(-1)[0];
+  // Smart shortcuts — insert contextual paragraphs, not raw values
+  const sPlan = PLANS.find(x => x.id === p.plan);
+  const sHeightM = (p.height || 165) / 100;
+  const sImc = p.cw ? (p.cw / (sHeightM * sHeightM)).toFixed(1) : null;
+  const sLastScore = (p.scoreHistory || []).slice(-1)[0];
+  const sLastCirc = (p.circumferenceHistory || []).slice(-1)[0];
+  const sPerda = (p.iw - p.cw).toFixed(1);
+  const sMet = sLastScore ? cM(sLastScore.m) : null;
+  const sBe = sLastScore ? cB(sLastScore.b) : null;
+  const sMn = sLastScore ? cN(sLastScore.n) : null;
   const shortcuts = [
-    { label:'Nome',           value: p.name },
-    { label:'Telefone',       value: p.phone || '(sem telefone)' },
-    { label:'Peso atual',     value: `${p.cw}kg` },
-    { label:'Peso inicial',   value: `${p.iw}kg` },
-    { label:'Perda total',    value: `${(p.iw - p.cw).toFixed(1)}kg` },
-    { label:'Semana',         value: `S${p.week}/16` },
-    { label:'Ciclo',          value: `C${p.cycle}` },
-    { label:'Plano',          value: plan?.name || p.plan || '-' },
-    ...(imc ? [{ label:'IMC', value: `${imc}` }] : []),
-    ...(lastScore ? [
-      { label:'Score Met',    value: `${lastScore.m || lastScore.metabolico || '-'}` },
-      { label:'Score BE',     value: `${lastScore.b || lastScore.bemEstar || '-'}` },
-      { label:'Score Mental', value: `${lastScore.n || lastScore.mental || '-'}` },
-    ] : []),
-    ...(p.startDate ? [{ label:'Data inicio', value: safeFmt(p.startDate, 'dd/MM/yyyy') }] : []),
-    ...(p.nextAppointment ? [{ label:'Proximo retorno', value: safeFmt(p.nextAppointment, 'dd/MM/yyyy') }] : []),
+    { label:'Resultado da pesagem', icon:'⚖️', value: `Peso atual: ${p.cw}kg\nPeso inicial: ${p.iw}kg\nPerda total: ${sPerda}kg${sImc ? `\nIMC: ${sImc}` : ''}` },
+    { label:'Composição corporal', icon:'🧬', value: (() => {
+      const h = (p.history||[]).slice(-1)[0];
+      if (!h || (!h.massaMagra && !h.massaGordura)) return 'Sem dados de composição corporal registrados.';
+      const t = (h.massaMagra||0)+(h.massaGordura||0)||1;
+      return `Massa magra: ${(h.massaMagra||0).toFixed(1)}kg (${(h.massaMagra/t*100).toFixed(0)}%)\nMassa gorda: ${(h.massaGordura||0).toFixed(1)}kg (${(h.massaGordura/t*100).toFixed(0)}%)`;
+    })() },
+    { label:'Scores clínicos', icon:'📊', value: sMet != null ? `Saúde metabólica: ${sMet}/24 — ${sM(sMet).l}\nBem-estar: ${sBe}/18 — ${sB(sBe).l}\nBlindagem mental: ${sMn}/9 — ${sN(sMn).l}` : 'Sem scores registrados.' },
+    { label:'Medidas corporais', icon:'📏', value: sLastCirc ? `Medição de ${safeFmt(sLastCirc.date,'dd/MM/yy')}:\n${CIRC_FIELDS.map(f => sLastCirc[f.key] != null ? `${f.label}: ${sLastCirc[f.key]}cm` : null).filter(Boolean).join('\n')}` : 'Sem medições registradas.' },
+    { label:'Dados do programa', icon:'📋', value: `Plano: ${sPlan?.name || p.plan}\nCiclo: C${p.cycle} — Semana: S${p.week}/16\nInício: ${safeFmt(p.sd,'dd/MM/yyyy')}` },
+    { label:'Saudação', icon:'👋', value: `Olá ${p.name.split(' ')[0]}, tudo bem?` },
+    { label:'Parabéns pela perda', icon:'🎉', value: `Parabéns ${p.name.split(' ')[0]}! Você já perdeu ${sPerda}kg desde o início do programa. Continue firme!` },
+    { label:'Lembrete de pesagem', icon:'🔔', value: `Olá ${p.name.split(' ')[0]}, lembre-se de registrar sua pesagem desta semana. Estamos na semana ${p.week} do ciclo ${p.cycle}.` },
   ];
 
   const WA_GREEN = '#25D366';
@@ -2750,16 +2756,20 @@ function MiniChat({ p, messages, setMessages, onLog }) {
       )}
 
       {showShortcuts && (
-        <div style={{ position:'absolute', bottom:110, left:12, right:12, background:'#fff', border:`1px solid ${G[200]}`, borderRadius:10, boxShadow:'0 4px 20px rgba(0,0,0,0.12)', maxHeight:200, overflowY:'auto', zIndex:10, padding:10 }}>
-          <div style={{ fontSize:10, fontWeight:600, color:G[600], marginBottom:6 }}>Clique para inserir no texto</div>
-          <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
-            {shortcuts.map((s, i) => (
-              <button key={i} onClick={() => { insertAtCursor(s.value); setShowShortcuts(false); }}
-                style={{ padding:'3px 8px', borderRadius:12, fontSize:10, border:`1px solid ${G[200]}`, background:'#fff', color:G[700], cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:3 }}>
-                <span style={{ color:G[400], fontWeight:600 }}>{s.label}:</span> {s.value}
-              </button>
-            ))}
-          </div>
+        <div style={{ position:'absolute', bottom:110, left:12, right:12, background:'#fff', border:`1px solid ${G[200]}`, borderRadius:10, boxShadow:'0 4px 20px rgba(0,0,0,0.12)', maxHeight:240, overflowY:'auto', zIndex:10, padding:8 }}>
+          <div style={{ fontSize:10, fontWeight:600, color:G[600], marginBottom:6, paddingInline:4 }}>Clique para inserir no texto</div>
+          {shortcuts.map((s, i) => (
+            <div key={i} onClick={() => { insertAtCursor(s.value); setShowShortcuts(false); }}
+              style={{ padding:'6px 8px', borderRadius:6, cursor:'pointer', display:'flex', alignItems:'flex-start', gap:8, marginBottom:2 }}
+              onMouseEnter={e => e.currentTarget.style.background = G[50]}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <span style={{ fontSize:14, flexShrink:0 }}>{s.icon}</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:11, fontWeight:600, color:G[800] }}>{s.label}</div>
+                <div style={{ fontSize:10, color:'#aaa', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.value.split('\n')[0]}</div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
