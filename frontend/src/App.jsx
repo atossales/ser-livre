@@ -3577,7 +3577,7 @@ function TeamP({ team, setTeam, ta, setTa, activityLog, onToast, currentUser }) 
   const [confirmDelMember, setConfirmDelMember] = useState(null); // { id, name }
   const [deleting, setDeleting] = useState(false);
 
-  const canManage = currentUser?.role === 'ADMIN' || currentUser?.role === 'MEDICA';
+  const canManage = ['ADMIN','MEDICA','admin','medica'].includes(currentUser?.role);
 
   const handleDeleteMember = async () => {
     if (!confirmDelMember) return;
