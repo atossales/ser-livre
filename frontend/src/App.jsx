@@ -165,7 +165,9 @@ const genCL = (p, tier, weekChecks = []) => {
       bio:  wc ? !!wc.bioimpedancia  : past,
       tr:   Array.from({length:f.tr}, (_, ti) => wc ? !!(wc[`tr${ti}`] ?? wc.treino) : past),
       nu:   i%4===1 ? { av: wc ? !!wc.nutriAvaliacao : past, pl: wc ? !!wc.nutriPlano : past, sc: wc ? !!wc.nutriScore : past } : null,
-      dose: (i<=4?"2.5mg":i<=8?"5mg":i<=12?"7.5mg":"10mg"),
+      dose: wc?.tirzepatidaDose || (i<=4?"2.5mg":i<=8?"5mg":i<=12?"7.5mg":"10mg"),
+      concluida: wc ? true : past,
+      weekDate: wc?.weekDate || null,
     };
   }
   return r;
@@ -1375,6 +1377,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
   const pm   = sc ? pM(sc.m) : {comp:0,infl:0,glic:0,card:0};
   const hist = HIST(p.id);
   const [cl, setCl]   = useState(() => genCL(p, tier, p._activeCycle?.weekChecks || []));
+  const [savingWeek, setSavingWeek] = useState(false);
   // Estado para edição de scores — inicializa com o último score ou valores padrão (2 = moderado)
   const DEFAULT_SCORE = { m:{gv:2,mm:2,pcr:2,fer:2,hb:2,au:2,th:2,ca:2}, b:{gi:2,lib:2,dor:2,au:2,en:2,so:2}, n:{co:2,ge:2,mv:2} };
   const [es, setEs]          = useState(JSON.parse(JSON.stringify(DEFAULT_SCORE)));
@@ -1615,8 +1618,12 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
         <div>
           <div style={{ display:"flex", gap:5, marginBottom:12, flexWrap:"wrap" }}>
             {Array.from({length:16},(_,i)=>i+1).map(w => {
-              const sp=w===8||w===16; const cur=w===p.week; const dn=w<p.week;
-              return <div key={w} onClick={()=>setSw(w)} style={{ width:30, height:30, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", fontSize:11, fontWeight:cur?700:500, background:sw===w?G[600]:dn?S.grnBg:cur?G[100]:"#fff", color:sw===w?"#fff":dn?S.grn:G[800], border:sp?`2px solid ${G[500]}`:`1px solid ${G[200]}` }}>{w}</div>;
+              const sp=w===8||w===16; const cur=w===p.week; const done=cl[w]?.concluida;
+              const isSel = sw===w;
+              return <div key={w} onClick={()=>setSw(w)} style={{ width:30, height:30, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", fontSize:11, fontWeight:cur||isSel?700:500, background:isSel?G[600]:done?S.grnBg:cur?G[100]:"#fff", color:isSel?"#fff":done?S.grn:G[800], border:sp?`2px solid ${G[500]}`:`1px solid ${done?S.grn:G[200]}`, position:"relative" }}>
+                {w}
+                {done && !isSel && <div style={{ position:"absolute", top:-3, right:-3, width:8, height:8, borderRadius:"50%", background:S.grn, border:"1.5px solid #fff" }}/>}
+              </div>;
             })}
           </div>
           {cl[sw] && (
@@ -1693,6 +1700,64 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                     <CI checked={cl[sw].nu.sc} label="Preencher scores" onToggle={()=>setCl(pr=>({...pr,[sw]:{...pr[sw],nu:{...pr[sw].nu,sc:!pr[sw].nu.sc}}}))}/>
                   </>}
                 </div>
+              </div>
+              {/* Botão Concluir / Reabrir semana */}
+              <div style={{ marginTop:14, paddingTop:12, borderTop:`1px solid ${G[200]}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+                {cl[sw].concluida ? (
+                  <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:8, background:S.grnBg, border:`1px solid ${S.grn}`, flex:1 }}>
+                      <Check size={14} color={S.grn}/>
+                      <span style={{ fontSize:12, fontWeight:600, color:S.grn }}>Semana {sw} concluída</span>
+                    </div>
+                    <button
+                      disabled={savingWeek}
+                      onClick={async () => {
+                        setSavingWeek(true);
+                        setCl(pr => ({ ...pr, [sw]: { ...pr[sw], concluida: false } }));
+                        setSavingWeek(false);
+                      }}
+                      style={{ padding:"8px 14px", borderRadius:8, background:"#fff", border:`1px solid ${G[300]}`, color:G[600], fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+                      Reabrir
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    disabled={savingWeek}
+                    onClick={async () => {
+                      const cycleId = p._activeCycle?.id;
+                      if (!cycleId) return;
+                      setSavingWeek(true);
+                      try {
+                        const w = cl[sw];
+                        await apiSaveWeekCheck({
+                          cycleId,
+                          weekNumber: sw,
+                          tirzepatida: !!w.tirz,
+                          tirzepatidaDose: w.dose || "2.5mg",
+                          terapiaInjetavel: w.ter != null ? !!w.ter : undefined,
+                          pesagem: !!w.peso,
+                          sessaoPsicologia: w.psi != null ? !!w.psi : undefined,
+                          bioimpedancia: !!w.bio,
+                          treino1: w.tr?.[0] || false,
+                          treino2: w.tr?.[1] || false,
+                          treino3: w.tr?.[2] != null ? w.tr[2] : undefined,
+                          nutriAvaliacaoCompleta: w.nu ? !!w.nu.av : undefined,
+                          nutriPlanoAlimentar: w.nu ? !!w.nu.pl : undefined,
+                          nutriScoresClinicos: w.nu ? !!w.nu.sc : undefined,
+                          weekDate: w.weekDate || new Date().toISOString(),
+                        });
+                        setCl(pr => ({ ...pr, [sw]: { ...pr[sw], concluida: true } }));
+                        onLog && onLog({ action:"checklist", patientId:p.id, patientName:p.name, detail:`Semana ${sw} concluída` });
+                      } catch (err) {
+                        console.error('Erro ao salvar semana:', err);
+                      } finally {
+                        setSavingWeek(false);
+                      }
+                    }}
+                    style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 16px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:savingWeek?"wait":"pointer", fontFamily:"inherit", opacity:savingWeek?0.7:1 }}>
+                    <Check size={14}/>{savingWeek ? "Salvando..." : `Concluir semana ${sw}`}
+                  </button>
+                )}
               </div>
             </div>
             </div>
