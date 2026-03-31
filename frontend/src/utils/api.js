@@ -157,6 +157,8 @@ export const getCircumferences = (cycleId) => api.get(`/circumferences/${cycleId
 // ── Staff / Equipe ──
 export const getStaff = () => api.get('/staff');
 export const updateUserProfile = (id, data) => api.put(`/users/${id}/profile`, data);
+export const updateUserEmail = (id, data) => api.put(`/users/${id}/email`, data);
+export const updateUserPassword = (id, data) => api.put(`/users/${id}/password`, data);
 export const updateStaffRole = (id, role) => api.put(`/users/${id}/role`, { role });
 export const deleteStaff = (id) => api.delete(`/users/${id}`);
 

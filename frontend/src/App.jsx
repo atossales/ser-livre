@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, updateStaffRole, deleteStaff, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getWhatsAppStatus, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage, saveCircumference as apiSaveCircumference, getCircumferences as apiGetCircumferences } from './utils/api';
+import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, updateUserEmail, updateUserPassword, updateStaffRole, deleteStaff, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getWhatsAppStatus, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage, saveCircumference as apiSaveCircumference, getCircumferences as apiGetCircumferences, updateAvatar } from './utils/api';
 import { supabase } from './utils/supabase';
 import { ResetPassword } from './components/ResetPassword';
 import { Toast } from './components/Toast';
@@ -37,7 +37,8 @@ import {
   Activity, Shield, User, Lock, Menu, Check, Download,
   ArrowLeft, Camera, Star, Award, Flame, Target, Zap, BarChart3,
   Trophy, CalendarDays, Weight, Home, Heart, Brain, RefreshCw, Plus, Settings, UserPlus, Cake, FileSignature, Save,
-  MessageCircle, Send, ChevronLeft, ChevronRight as ChevronRightIcon
+  MessageCircle, Send, ChevronLeft, ChevronRight as ChevronRightIcon,
+  Eye, EyeOff, X, Mail
 } from "lucide-react";
 
 /* ════════════════════════════════════════════
@@ -200,6 +201,167 @@ function Av({ name, size=40, src, onEdit }) {
           <Camera size={Math.max(9,size*0.17)} color="#fff"/>
         </div>
       </>}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
+   COMPONENTE — PROFILE MODAL
+═══════════════════════════════════════════════ */
+function ProfileModal({ user, avatarSrc, onClose, onUpdate, toast }) {
+  const [name, setName] = useState(user.name || '');
+  const [email, setEmail] = useState(user.email || '');
+  const [phone, setPhone] = useState(user.phone || '');
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savingPw, setSavingPw] = useState(false);
+  const [localAvatar, setLocalAvatar] = useState(avatarSrc || null);
+
+  const inputStyle = {
+    width:"100%", padding:"9px 12px", borderRadius:8, border:`1px solid ${G[200]}`,
+    fontSize:13, fontFamily:"inherit", color:G[800], background:"#fff",
+    outline:"none", boxSizing:"border-box"
+  };
+  const labelStyle = { fontSize:11, fontWeight:600, color:G[600], marginBottom:3, display:"block" };
+  const btnStyle = (bg, color) => ({
+    padding:"9px 20px", borderRadius:8, border:"none", background:bg,
+    color, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+    opacity: saving ? 0.6 : 1, transition:"opacity 0.15s"
+  });
+
+  const handleSaveProfile = async () => {
+    setSaving(true);
+    try {
+      // Update name/phone
+      const profileRes = await updateUserProfile(user.id, { name, phone });
+      // Update email if changed
+      if (email !== user.email) {
+        await updateUserEmail(user.id, { email });
+      }
+      // Update localStorage and parent state
+      const updated = { ...user, name, email, phone: phone || user.phone };
+      localStorage.setItem('serlivre_user', JSON.stringify(updated));
+      onUpdate(updated);
+      toast('Dados atualizados com sucesso!', 'success');
+    } catch (err) {
+      toast(err?.response?.data?.error || 'Erro ao salvar dados.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!newPw || newPw.length < 8) {
+      toast('A senha deve ter pelo menos 8 caracteres.', 'error');
+      return;
+    }
+    if (newPw !== confirmPw) {
+      toast('As senhas não coincidem.', 'error');
+      return;
+    }
+    setSavingPw(true);
+    try {
+      await updateUserPassword(user.id, { password: newPw });
+      toast('Senha alterada com sucesso!', 'success');
+      setNewPw('');
+      setConfirmPw('');
+    } catch (err) {
+      toast(err?.response?.data?.error || 'Erro ao alterar senha.', 'error');
+    } finally {
+      setSavingPw(false);
+    }
+  };
+
+  const handleAvatarEdit = async (dataUrl) => {
+    setLocalAvatar(dataUrl);
+    try {
+      // Convert dataUrl to file and upload
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], 'avatar.jpg', { type: blob.type });
+      await updateAvatar(user.id, file);
+      toast('Foto atualizada!', 'success');
+    } catch (err) {
+      toast('Erro ao atualizar foto.', 'error');
+    }
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:9999, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background:"#fff", borderRadius:16, width:"100%", maxWidth:420, maxHeight:"90vh", overflow:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.2)" }}>
+        {/* Header */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"18px 20px 14px", borderBottom:`1px solid ${G[100]}` }}>
+          <h3 style={{ margin:0, fontSize:16, fontWeight:700, color:G[800] }}>Meu perfil</h3>
+          <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <X size={18} color={G[500]}/>
+          </div>
+        </div>
+
+        <div style={{ padding:"20px" }}>
+          {/* Avatar */}
+          <div style={{ display:"flex", justifyContent:"center", marginBottom:20 }}>
+            <Av name={name || 'U'} size={72} src={localAvatar} onEdit={handleAvatarEdit}/>
+          </div>
+
+          {/* Name */}
+          <div style={{ marginBottom:14 }}>
+            <label style={labelStyle}>Nome</label>
+            <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} placeholder="Seu nome"/>
+          </div>
+
+          {/* Email */}
+          <div style={{ marginBottom:14 }}>
+            <label style={labelStyle}>Email</label>
+            <input value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} type="email" placeholder="seu@email.com"/>
+          </div>
+
+          {/* Phone */}
+          <div style={{ marginBottom:18 }}>
+            <label style={labelStyle}>Telefone</label>
+            <input value={phone} onChange={e => setPhone(maskPhone(e.target.value))} style={inputStyle} type="tel" placeholder="(00) 00000-0000"/>
+          </div>
+
+          {/* Save profile button */}
+          <button onClick={handleSaveProfile} disabled={saving} style={btnStyle(G[600], '#fff')}>
+            {saving ? 'Salvando...' : 'Salvar dados'}
+          </button>
+
+          {/* Divider */}
+          <div style={{ borderTop:`1px solid ${G[200]}`, margin:"22px 0 18px" }}/>
+
+          {/* Password section */}
+          <h4 style={{ margin:"0 0 14px", fontSize:14, fontWeight:700, color:G[700], display:"flex", alignItems:"center", gap:6 }}>
+            <Lock size={14}/> Alterar senha
+          </h4>
+
+          <div style={{ marginBottom:12 }}>
+            <label style={labelStyle}>Nova senha</label>
+            <div style={{ position:"relative" }}>
+              <input value={newPw} onChange={e => setNewPw(e.target.value)}
+                type={showPw ? "text" : "password"} style={{ ...inputStyle, paddingRight:36 }}
+                placeholder="Minimo 8 caracteres"/>
+              <div onClick={() => setShowPw(!showPw)} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", cursor:"pointer", display:"flex" }}>
+                {showPw ? <EyeOff size={15} color={G[400]}/> : <Eye size={15} color={G[400]}/>}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginBottom:18 }}>
+            <label style={labelStyle}>Confirmar nova senha</label>
+            <input value={confirmPw} onChange={e => setConfirmPw(e.target.value)}
+              type={showPw ? "text" : "password"} style={inputStyle}
+              placeholder="Repita a senha"/>
+          </div>
+
+          <button onClick={handleChangePassword} disabled={savingPw}
+            style={{ ...btnStyle("transparent", G[700]), border:`1px solid ${G[300]}` }}>
+            {savingPw ? 'Alterando...' : 'Alterar senha'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -5522,6 +5684,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem('serlivre_user') || '{}'); } catch { return {}; }
   });
+  const [showProfile, setShowProfile] = useState(false);
   const [page, setPage] = useState("dash");
 
   // Detectar se veio de link de reset de senha
@@ -5929,6 +6092,9 @@ export default function App() {
           {reloading && <span style={{ fontSize:10, color:G[400], marginLeft:6, fontWeight:400 }}>↻</span>}
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <div style={{ cursor:"pointer" }} onClick={()=>setShowProfile(true)}>
+            <Av name={currentUser.name || 'U'} size={24} src={ta[currentUser.id]}/>
+          </div>
           <div style={{ position:"relative", cursor:"pointer" }} onClick={()=>setPage("alert")}>
             <Bell size={16} color={G[600]}/>
             {ac>0 && <div style={{ position:"absolute", top:-3, right:-3, width:12, height:12, borderRadius:"50%", background:S.red, color:"#fff", fontSize:8, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>{ac}</div>}
@@ -5977,6 +6143,8 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* Profile Modal — mobile */}
+      {showProfile && <ProfileModal user={currentUser} avatarSrc={ta[currentUser.id]} onClose={()=>setShowProfile(false)} onUpdate={u=>{ setCurrentUser(u); setShowProfile(false); }} toast={toast}/>}
     </div>
   );
 
@@ -6007,10 +6175,12 @@ export default function App() {
           })}
         </div>
         <div style={{ padding:"12px 14px", borderTop:`1px solid ${G[700]}`, display:"flex", alignItems:"center", gap:7 }}>
-          <Av name={currentUser.name || 'Usuário'} size={28} src={ta[currentUser.id]}/>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:11, fontWeight:500 }}>{(currentUser.name || 'Usuário').split(' ').slice(0,2).join(' ')}</div>
-            <div style={{ fontSize:9, opacity:0.3 }}>{currentUser.role === 'ADMIN' ? 'Admin' : currentUser.role === 'MEDICA' ? 'Médica' : currentUser.role || 'Equipe'}</div>
+          <div style={{ display:"flex", alignItems:"center", gap:7, flex:1, cursor:"pointer" }} onClick={()=>setShowProfile(true)}>
+            <Av name={currentUser.name || 'Usuário'} size={28} src={ta[currentUser.id]}/>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:11, fontWeight:500 }}>{(currentUser.name || 'Usuário').split(' ').slice(0,2).join(' ')}</div>
+              <div style={{ fontSize:9, opacity:0.3 }}>{currentUser.role === 'ADMIN' ? 'Admin' : currentUser.role === 'MEDICA' ? 'Médica' : currentUser.role || 'Equipe'}</div>
+            </div>
           </div>
           <LogOut size={12} style={{ cursor:"pointer", opacity:0.3 }} onClick={doLogout}/>
         </div>
@@ -6056,6 +6226,8 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* Profile Modal */}
+      {showProfile && <ProfileModal user={currentUser} avatarSrc={ta[currentUser.id]} onClose={()=>setShowProfile(false)} onUpdate={u=>{ setCurrentUser(u); setShowProfile(false); }} toast={toast}/>}
     </div>
   );
 }

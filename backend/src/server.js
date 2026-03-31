@@ -1383,8 +1383,12 @@ app.get('/api/staff', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, 
   }
 });
 
-app.put('/api/users/:id/profile', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
+app.put('/api/users/:id/profile', authRequired, async (req, res) => {
   try {
+    // Allow self-update or admin/medica
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'MEDICA' && req.user.id !== req.params.id) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
     const { name, phone, specialty, active } = req.body;
     const updated = await prisma.user.update({
       where: { id: req.params.id },
@@ -1466,6 +1470,30 @@ app.delete('/api/users/:id', authRequired, requireRole('ADMIN', 'MEDICA'), async
     res.json({ message: 'Usuário excluído com sucesso' });
   } catch (err) {
     console.error('[DELETE USER] Erro:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════
+//  EMAIL — via Supabase Auth Admin + Prisma
+// ════════════════════════════════════════════
+
+app.put('/api/users/:id/email', authRequired, async (req, res) => {
+  try {
+    if (req.user.role !== 'ADMIN' && req.user.id !== req.params.id) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    const { email } = req.body;
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+    // Update in Supabase Auth
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.params.id, { email });
+    if (error) return res.status(400).json({ error: error.message });
+    // Update in Prisma
+    await prisma.user.update({ where: { id: req.params.id }, data: { email } });
+    res.json({ message: 'Email atualizado com sucesso' });
+  } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
