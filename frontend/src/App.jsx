@@ -310,7 +310,7 @@ function AvatarCropModal({ src, onSave, onClose }) {
 /* ════════════════════════════════════════════
    COMPONENTE — PROFILE MODAL
 ═══════════════════════════════════════════════ */
-function ProfileModal({ user, avatarSrc, onClose, onUpdate, toast }) {
+function ProfileModal({ user, avatarSrc, onClose, onUpdate, onAvatarUpdate, toast }) {
   const [name, setName] = useState(user.name || '');
   const [email, setEmail] = useState(user.email || '');
   const [phone, setPhone] = useState(user.phone || '');
@@ -397,7 +397,12 @@ function ProfileModal({ user, avatarSrc, onClose, onUpdate, toast }) {
       for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
       const blob = new Blob([ab], { type: mimeType });
       const file = new File([blob], 'avatar.jpg', { type: mimeType });
-      await updateAvatar(user.id, file);
+      const res = await updateAvatar(user.id, file);
+      const newUrl = res.data?.avatarUrl;
+      if (newUrl) {
+        setLocalAvatar(newUrl);
+        onAvatarUpdate && onAvatarUpdate(user.id, newUrl);
+      }
       toast('Foto atualizada!', 'success');
     } catch (err) {
       console.error('Avatar upload error:', err);
@@ -5840,7 +5845,12 @@ export default function App() {
   // Carrega equipe e activity log após login
   useEffect(() => {
     if (lg && mode !== 'paciente') {
-      getStaff().then(r => setTeam(r.data)).catch(() => {});
+      getStaff().then(r => {
+        setTeam(r.data);
+        const avatars = {};
+        (r.data || []).forEach(m => { if (m.avatarUrl) avatars[m.id] = m.avatarUrl; });
+        setTa(prev => ({ ...prev, ...avatars }));
+      }).catch(() => {});
       getActivity().then(r => setActivityLog(r.data)).catch(() => {});
     }
   }, [lg, mode]);
@@ -6286,7 +6296,7 @@ export default function App() {
         </div>
       )}
       {/* Profile Modal — mobile */}
-      {showProfile && <ProfileModal user={currentUser} avatarSrc={ta[currentUser.id]} onClose={()=>setShowProfile(false)} onUpdate={u=>{ setCurrentUser(u); setShowProfile(false); }} toast={toast}/>}
+      {showProfile && <ProfileModal user={currentUser} avatarSrc={ta[currentUser.id]} onClose={()=>setShowProfile(false)} onUpdate={u=>{ setCurrentUser(u); setShowProfile(false); }} onAvatarUpdate={(id,url)=>setTa(p=>({...p,[id]:url}))} toast={toast}/>}
     </div>
   );
 
@@ -6369,7 +6379,7 @@ export default function App() {
         </div>
       )}
       {/* Profile Modal */}
-      {showProfile && <ProfileModal user={currentUser} avatarSrc={ta[currentUser.id]} onClose={()=>setShowProfile(false)} onUpdate={u=>{ setCurrentUser(u); setShowProfile(false); }} toast={toast}/>}
+      {showProfile && <ProfileModal user={currentUser} avatarSrc={ta[currentUser.id]} onClose={()=>setShowProfile(false)} onUpdate={u=>{ setCurrentUser(u); setShowProfile(false); }} onAvatarUpdate={(id,url)=>setTa(p=>({...p,[id]:url}))} toast={toast}/>}
     </div>
   );
 }
