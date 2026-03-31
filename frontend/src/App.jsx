@@ -206,6 +206,108 @@ function Av({ name, size=40, src, onEdit }) {
 }
 
 /* ════════════════════════════════════════════
+   COMPONENTE — AVATAR CROP MODAL
+═══════════════════════════════════════════════ */
+function AvatarCropModal({ src, onSave, onClose }) {
+  const canvasRef = useRef(null);
+  const [scale, setScale] = useState(1);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [imgSize, setImgSize] = useState({ w: 0, h: 0 });
+  const imgRef = useRef(new Image());
+
+  useEffect(() => {
+    const img = imgRef.current;
+    img.onload = () => setImgSize({ w: img.naturalWidth, h: img.naturalHeight });
+    img.src = src;
+  }, [src]);
+
+  const SIZE = 240;
+
+  const handleMouseDown = (e) => {
+    e.preventDefault();
+    setDragging(true);
+    const pt = e.touches ? e.touches[0] : e;
+    setDragStart({ x: pt.clientX - pos.x, y: pt.clientY - pos.y });
+  };
+  const handleMouseMove = (e) => {
+    if (!dragging) return;
+    const pt = e.touches ? e.touches[0] : e;
+    setPos({ x: pt.clientX - dragStart.x, y: pt.clientY - dragStart.y });
+  };
+  const handleMouseUp = () => setDragging(false);
+
+  const handleSave = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const img = imgRef.current;
+    canvas.width = 300;
+    canvas.height = 300;
+    const ratio = Math.max(SIZE / img.naturalWidth, SIZE / img.naturalHeight) * scale;
+    const drawW = img.naturalWidth * ratio;
+    const drawH = img.naturalHeight * ratio;
+    const offsetX = (SIZE - drawW) / 2 + pos.x;
+    const offsetY = (SIZE - drawH) / 2 + pos.y;
+    const scaleCanvas = 300 / SIZE;
+    ctx.beginPath();
+    ctx.arc(150, 150, 150, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(img, offsetX * scaleCanvas, offsetY * scaleCanvas, drawW * scaleCanvas, drawH * scaleCanvas);
+    onSave(canvas.toDataURL('image/jpeg', 0.85));
+  };
+
+  const ratio = imgSize.w > 0 ? Math.max(SIZE / imgSize.w, SIZE / imgSize.h) * scale : 1;
+  const drawW = imgSize.w * ratio;
+  const drawH = imgSize.h * ratio;
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:10000, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background:"#fff", borderRadius:16, padding:24, maxWidth:340, width:"100%", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+          <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>Ajustar foto</span>
+          <div onClick={onClose} style={{ cursor:"pointer", padding:4 }}><X size={18} color={G[500]}/></div>
+        </div>
+
+        {/* Preview area */}
+        <div style={{ width:SIZE, height:SIZE, borderRadius:"50%", overflow:"hidden", margin:"0 auto 16px", border:`3px solid ${G[300]}`, cursor:"grab", position:"relative", background:"#f5f5f5", touchAction:"none" }}
+          onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
+          onTouchStart={handleMouseDown} onTouchMove={handleMouseMove} onTouchEnd={handleMouseUp}>
+          <img src={src} alt="" draggable={false} style={{
+            position:"absolute",
+            width: drawW, height: drawH,
+            left: (SIZE - drawW) / 2 + pos.x,
+            top: (SIZE - drawH) / 2 + pos.y,
+            pointerEvents:"none", userSelect:"none"
+          }}/>
+        </div>
+
+        {/* Zoom slider */}
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, padding:"0 10px" }}>
+          <span style={{ fontSize:11, color:G[500] }}>-</span>
+          <input type="range" min="0.5" max="3" step="0.05" value={scale}
+            onChange={e => setScale(parseFloat(e.target.value))}
+            style={{ flex:1, accentColor:G[600] }}/>
+          <span style={{ fontSize:11, color:G[500] }}>+</span>
+        </div>
+
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={handleSave} style={{ flex:1, padding:"10px 0", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+            Salvar foto
+          </button>
+          <button onClick={onClose} style={{ flex:1, padding:"10px 0", borderRadius:8, background:G[100], color:G[800], border:"none", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+            Cancelar
+          </button>
+        </div>
+        <canvas ref={canvasRef} style={{ display:"none" }}/>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
    COMPONENTE — PROFILE MODAL
 ═══════════════════════════════════════════════ */
 function ProfileModal({ user, avatarSrc, onClose, onUpdate, toast }) {
@@ -275,11 +377,19 @@ function ProfileModal({ user, avatarSrc, onClose, onUpdate, toast }) {
     }
   };
 
-  const handleAvatarEdit = async (dataUrl) => {
-    setLocalAvatar(dataUrl);
+  const [cropSrc, setCropSrc] = useState(null);
+
+  // Step 1: user picks image → open crop modal
+  const handleAvatarPick = (dataUrl) => {
+    setCropSrc(dataUrl);
+  };
+
+  // Step 2: user adjusts position → save cropped result
+  const handleCroppedSave = async (croppedDataUrl) => {
+    setCropSrc(null);
+    setLocalAvatar(croppedDataUrl);
     try {
-      // Convert dataUrl to file and upload
-      const res = await fetch(dataUrl);
+      const res = await fetch(croppedDataUrl);
       const blob = await res.blob();
       const file = new File([blob], 'avatar.jpg', { type: blob.type });
       await updateAvatar(user.id, file);
@@ -290,6 +400,8 @@ function ProfileModal({ user, avatarSrc, onClose, onUpdate, toast }) {
   };
 
   return (
+    <>
+    {cropSrc && <AvatarCropModal src={cropSrc} onSave={handleCroppedSave} onClose={()=>setCropSrc(null)}/>}
     <div style={{ position:"fixed", inset:0, zIndex:9999, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ background:"#fff", borderRadius:16, width:"100%", maxWidth:420, maxHeight:"90vh", overflow:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.2)" }}>
@@ -304,7 +416,7 @@ function ProfileModal({ user, avatarSrc, onClose, onUpdate, toast }) {
         <div style={{ padding:"20px" }}>
           {/* Avatar */}
           <div style={{ display:"flex", justifyContent:"center", marginBottom:20 }}>
-            <Av name={name || 'U'} size={72} src={localAvatar} onEdit={handleAvatarEdit}/>
+            <Av name={name || 'U'} size={72} src={localAvatar} onEdit={handleAvatarPick}/>
           </div>
 
           {/* Name */}
@@ -386,6 +498,7 @@ function ProfileModal({ user, avatarSrc, onClose, onUpdate, toast }) {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
