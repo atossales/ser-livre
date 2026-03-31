@@ -916,9 +916,89 @@ function RelTab({ p, mob, plan, met, be, mn }) {
                 <div style={{ textAlign:"right" }}>
                   <div style={{ fontSize:14, fontWeight:700, color:G[800], textTransform:"uppercase" }}>{p.name}</div>
                   <div style={{ fontSize:10, color:"#888" }}>Feminino | {age} anos | {heightM.toFixed(2)}m</div>
+                  <div style={{ fontSize:10, color:"#888" }}>Semana {p.week}/16 — Ciclo {p.cycle}</div>
                   <div style={{ fontSize:10, color:"#888" }}>Avaliacao em: {format(new Date(), "dd/MM/yyyy")}</div>
+                  {relComp && histFilt.length >= 2 && (
+                    <div style={{ fontSize:9, color:G[500], marginTop:2, fontStyle:"italic" }}>
+                      Comparativo: {safeFmt(histFilt[0]?.date,'dd/MM/yy')} → {safeFmt(histFilt[histFilt.length-1]?.date,'dd/MM/yy')}
+                    </div>
+                  )}
+                  {(relDe||relAte) && (
+                    <div style={{ fontSize:9, color:G[500] }}>Periodo: {relDe||"inicio"} a {relAte||"hoje"}</div>
+                  )}
                 </div>
               </div>
+
+              {/* Dados do paciente + peso */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8, marginBottom:14 }}>
+                <div style={{ padding:"10px 12px", background:"#fff", border:`1px solid ${G[200]}`, borderRadius:8 }}>
+                  <div style={{ fontSize:9, color:"#aaa", textTransform:"uppercase", fontWeight:600 }}>Peso inicial</div>
+                  <div style={{ fontSize:18, fontWeight:700, color:G[800] }}>{p.iw}kg</div>
+                </div>
+                <div style={{ padding:"10px 12px", background:"#fff", border:`1px solid ${G[200]}`, borderRadius:8 }}>
+                  <div style={{ fontSize:9, color:"#aaa", textTransform:"uppercase", fontWeight:600 }}>Peso atual</div>
+                  <div style={{ fontSize:18, fontWeight:700, color:G[800] }}>{p.cw}kg</div>
+                </div>
+                <div style={{ padding:"10px 12px", background:"#fff", border:`1px solid ${G[200]}`, borderRadius:8 }}>
+                  <div style={{ fontSize:9, color:"#aaa", textTransform:"uppercase", fontWeight:600 }}>Evolucao</div>
+                  <div style={{ fontSize:18, fontWeight:700, color: (p.iw-p.cw)>0 ? S.grn : (p.iw-p.cw)<0 ? S.red : G[800] }}>-{(p.iw-p.cw).toFixed(1)}kg</div>
+                </div>
+                <div style={{ padding:"10px 12px", background:"#fff", border:`1px solid ${G[200]}`, borderRadius:8 }}>
+                  <div style={{ fontSize:9, color:"#aaa", textTransform:"uppercase", fontWeight:600 }}>Perda total</div>
+                  <div style={{ fontSize:18, fontWeight:700, color: S.grn }}>{p.iw>0 ? (((p.iw-p.cw)/p.iw)*100).toFixed(1) : "0.0"}%</div>
+                </div>
+              </div>
+
+              {/* Dados da ficha */}
+              <div style={{ display:"flex", gap:12, marginBottom:14, flexWrap:"wrap", fontSize:11, color:G[700] }}>
+                <span>Telefone: <strong>{p.phone||"—"}</strong></span>
+                <span>Plano: <strong>{plan?.name||p.plan}</strong></span>
+                <span>Inicio: <strong>{safeFmt(p.sd,'dd/MM/yyyy')}</strong></span>
+                <span>Ciclo: <strong>{p.cycle}</strong></span>
+              </div>
+
+              {/* Scores clinicos com barras */}
+              <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:14 }}>
+                {[{l:"Saude metabolica",t:met,m:24,fn:sM,c:"#27AE60"},{l:"Bem-estar",t:be,m:18,fn:sB,c:"#F39C12"},{l:"Blindagem mental",t:mn,m:9,fn:sN,c:"#F39C12"}].map((s,i) => {
+                  const st=s.fn(s.t);
+                  const pct = Math.min(100, (s.t/s.m*100));
+                  return (
+                    <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:"#fff", borderRadius:8, border:`1px solid ${G[200]}` }}>
+                      <div style={{ width:36, height:36, borderRadius:"50%", background:st.c, display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontWeight:700, fontSize:14, flexShrink:0 }}>{s.t}</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:12, fontWeight:600, color:G[800], marginBottom:4 }}>{s.l}</div>
+                        <div style={{ height:6, background:G[100], borderRadius:3, overflow:"hidden" }}>
+                          <div style={{ height:"100%", width:`${pct}%`, background:st.c, borderRadius:3 }}/>
+                        </div>
+                      </div>
+                      <Bg color={st.c} bg={st.bg}>{st.l}</Bg>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Composicao corporal */}
+              {(mmLast > 0 || mgLast > 0) && (
+                <div style={{ padding:"14px", background:"#fff", border:`1px solid ${G[200]}`, borderRadius:8, marginBottom:14 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:G[800], marginBottom:10 }}>Composicao corporal</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+                    <div style={{ textAlign:"center", padding:"10px 8px", background:S.blueBg, borderRadius:8 }}>
+                      <div style={{ fontSize:18, fontWeight:700, color:S.blue }}>{mmLast.toFixed(1)}kg</div>
+                      <div style={{ fontSize:10, color:S.blue, fontWeight:600 }}>Massa Magra</div>
+                      <div style={{ fontSize:10, color:"#aaa" }}>{(mmLast/totComp*100).toFixed(1)}% do total</div>
+                    </div>
+                    <div style={{ textAlign:"center", padding:"10px 8px", background:S.yelBg, borderRadius:8 }}>
+                      <div style={{ fontSize:18, fontWeight:700, color:S.yel }}>{mgLast.toFixed(1)}kg</div>
+                      <div style={{ fontSize:10, color:S.yel, fontWeight:600 }}>Massa Gorda</div>
+                      <div style={{ fontSize:10, color:"#aaa" }}>{(mgLast/totComp*100).toFixed(1)}% do total</div>
+                    </div>
+                  </div>
+                  <div style={{ height:7, borderRadius:4, overflow:"hidden", display:"flex" }}>
+                    <div style={{ width:`${(mmLast/totComp*100).toFixed(1)}%`, background:S.blue }}/>
+                    <div style={{ width:`${(mgLast/totComp*100).toFixed(1)}%`, background:S.yel }}/>
+                  </div>
+                </div>
+              )}
 
               {/* Analise global da composicao corporal */}
               <SectionTitle>Analise global da composicao corporal</SectionTitle>
