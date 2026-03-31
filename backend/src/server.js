@@ -1488,8 +1488,8 @@ app.put('/api/users/:id/email', authRequired, async (req, res) => {
     if (!email || !email.includes('@')) {
       return res.status(400).json({ error: 'Email inválido' });
     }
-    // Update in Supabase Auth
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.params.id, { email });
+    // Update in Supabase Auth (email_confirm: true pula verificação)
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.params.id, { email, email_confirm: true });
     if (error) return res.status(400).json({ error: error.message });
     // Update in Prisma
     await prisma.user.update({ where: { id: req.params.id }, data: { email } });
