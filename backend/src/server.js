@@ -1359,10 +1359,40 @@ app.put('/api/users/:id/avatar', authRequired, upload.single('avatar'), async (r
     }
     if (!req.file) return res.status(400).json({ error: 'Nenhuma imagem enviada' });
 
-    const avatarUrl = `/uploads/${req.file.filename}`;
-    await prisma.user.update({ where: { id: req.params.id }, data: { avatarUrl } });
+    const userId = req.params.id;
+    const ext = path.extname(req.file.originalname) || '.jpg';
+    const fileName = `avatars/${userId}${ext}`;
+
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from('avatars')
+      .upload(fileName, req.file.buffer || fs.readFileSync(req.file.path), {
+        contentType: req.file.mimetype,
+        upsert: true, // Sobrescreve se já existe
+      });
+
+    if (uploadError) {
+      console.error('[AVATAR] Supabase Storage error:', uploadError.message);
+      // Fallback: salva localmente
+      const avatarUrl = `/uploads/${req.file.filename}`;
+      await prisma.user.update({ where: { id: userId }, data: { avatarUrl } });
+      return res.json({ avatarUrl });
+    }
+
+    // Get public URL
+    const { data: urlData } = supabaseAdmin.storage.from('avatars').getPublicUrl(fileName);
+    const avatarUrl = urlData.publicUrl;
+
+    // Remove arquivo local se existir
+    if (req.file.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    await prisma.user.update({ where: { id: userId }, data: { avatarUrl } });
+    console.log(`[AVATAR] Uploaded to Supabase Storage: ${avatarUrl}`);
     res.json({ avatarUrl });
   } catch (err) {
+    console.error('[AVATAR] Error:', err.message);
     res.status(400).json({ error: err.message });
   }
 });
