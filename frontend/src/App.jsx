@@ -2656,7 +2656,7 @@ function MiniChat({ p, messages, setMessages, onLog }) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState(null);
-  const [whatsappMode, setWhatsappMode] = useState(false);
+  const [whatsappMode, setWhatsappMode] = useState(!!p.phone);
   const [autoSignature, setAutoSignature] = useState(true);
   const [templates, setTemplates] = useState([]);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -2751,7 +2751,11 @@ function MiniChat({ p, messages, setMessages, onLog }) {
       await sendMessage({ patientId: p.id, body: finalText, channel });
       // Se WhatsApp, também dispara pelo endpoint de WA
       if (channel === 'whatsapp' && p.phone) {
-        sendWhatsAppMsg({ phone: p.phone, message: finalText, patientId: p.id }).catch(() => {});
+        try {
+          await sendWhatsAppMsg({ phone: p.phone, message: finalText, patientId: p.id });
+        } catch (waErr) {
+          console.warn('WhatsApp send failed (msg saved internally):', waErr?.message);
+        }
       }
       // Recarrega mensagens reais da API (substitui o optimistic)
       setTimeout(() => loadMessages(), 500);
