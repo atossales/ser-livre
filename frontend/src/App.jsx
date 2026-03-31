@@ -28,7 +28,8 @@ import * as Lucide from "lucide-react";
 import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area
+  ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area,
+  PieChart, Pie
 } from "recharts";
 import {
   Users, LayoutDashboard, ClipboardCheck, AlertTriangle, FileText,
@@ -897,6 +898,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
   const [sw, setSw]   = useState(p.week);
   const [showWeighIn, setShowWeighIn] = useState(false);
   const [showCircumferenceModal, setShowCircumferenceModal] = useState(false);
+  const [medView, setMedView] = useState("avaliacao");
   const [showChangePlan, setShowChangePlan] = useState(false);
   const [newPlanId, setNewPlanId] = useState(p.plan);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -1500,117 +1502,489 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
       {/* ABA CIRCUNFERÊNCIAS */}
       {tab==="circunferencias" && (() => {
         const circ = p.circumferenceHistory || [];
+        const hist = p.history || [];
         const COLORS = { torax:S.blue, abdomen:S.red, cintura:S.grn, quadril:S.yel, panturrilha:S.pur, braco:"#E67E22" };
+        const lastCirc = circ[circ.length - 1];
+        const prevCirc = circ[circ.length - 2];
+        const lastBody = hist[hist.length - 1];
+        const prevBody = hist[hist.length - 2];
+        const heightCm = p.height || 165;
+        const heightM = heightCm / 100;
+        const curWeight = lastBody?.weight || p.cw || null;
+        const prevWeight = prevBody?.weight || p.iw || null;
+        const curMagra = lastBody?.massaMagra || null;
+        const prevMagra = prevBody?.massaMagra || null;
+        const curGorda = lastBody?.massaGordura || null;
+        const prevGorda = prevBody?.massaGordura || null;
+        const fatPct = (curWeight && curGorda) ? ((curGorda / curWeight) * 100) : null;
+        const prevFatPct = (prevWeight && prevGorda) ? ((prevGorda / prevWeight) * 100) : null;
+        const leanPct = fatPct != null ? (100 - fatPct) : null;
+        const waterEst = curMagra ? (curMagra * 0.723) : null;
+        const ger = curMagra ? Math.round(500 + 22 * curMagra) : null;
+        const imc = curWeight ? (curWeight / (heightM * heightM)) : null;
+        const prevImc = prevWeight ? (prevWeight / (heightM * heightM)) : null;
+        const imm = curMagra ? (curMagra / (heightM * heightM)) : null;
+        const img = curGorda ? (curGorda / (heightM * heightM)) : null;
+        const prevImm = prevMagra ? (prevMagra / (heightM * heightM)) : null;
+        const prevImg = prevGorda ? (prevGorda / (heightM * heightM)) : null;
+        const cintura = lastCirc?.cintura || null;
+        const quadril = lastCirc?.quadril || null;
+        const prevCintura = prevCirc?.cintura || null;
+        const prevQuadril = prevCirc?.quadril || null;
+        const rcq = (cintura && quadril) ? (cintura / quadril) : null;
+        const rce = cintura ? (cintura / heightCm) : null;
+        const ic = (cintura && curWeight) ? ((cintura / 100) / (0.109 * Math.sqrt(curWeight / heightM))) : null;
+
+        // Helpers
+        const delta = (cur, prev, inv) => {
+          if (cur == null || prev == null) return null;
+          const d = cur - prev;
+          const better = inv ? d < 0 : d > 0;
+          return { val: d, better };
+        };
+        const DeltaBadge = ({ cur, prev, inv, unit, dec }) => {
+          const d = delta(cur, prev, inv);
+          if (!d) return null;
+          const txt = `${d.val > 0 ? '+' : ''}${d.val.toFixed(dec||1)}${unit||''}`;
+          return <span style={{ fontSize:9, fontWeight:600, padding:"1px 5px", borderRadius:4, marginLeft:4, background: d.better ? S.grnBg : S.redBg, color: d.better ? S.grn : S.red }}>{txt}</span>;
+        };
+
+        // Classification bar component
+        const ClassBar = ({ value, zones, unit, height }) => {
+          if (value == null) return null;
+          const h = height || 14;
+          const totalRange = zones[zones.length - 1].max - zones[0].min;
+          const clamp = Math.max(zones[0].min, Math.min(zones[zones.length - 1].max, value));
+          const pct = ((clamp - zones[0].min) / totalRange) * 100;
+          return (
+            <div style={{ position:"relative", width:"100%", marginTop:4 }}>
+              <div style={{ display:"flex", height:h, borderRadius:h/2, overflow:"hidden" }}>
+                {zones.map((z, i) => {
+                  const w = ((z.max - z.min) / totalRange) * 100;
+                  return <div key={i} style={{ width:`${w}%`, background:z.color, display:"flex", alignItems:"center", justifyContent:"center" }}><span style={{ fontSize:7, color:"#fff", fontWeight:600, textShadow:"0 1px 2px rgba(0,0,0,0.3)" }}>{z.label}</span></div>;
+                })}
+              </div>
+              <div style={{ position:"absolute", top:-3, left:`calc(${pct}% - 5px)`, width:10, height:h+6, borderRadius:3, background:"#333", border:"2px solid #fff", boxShadow:"0 1px 4px rgba(0,0,0,0.3)" }}/>
+              <div style={{ fontSize:9, fontWeight:600, color:G[800], marginTop:4 }}>{value.toFixed(1)}{unit||''}</div>
+            </div>
+          );
+        };
+
+        // Get classification
+        const classify = (val, zones) => {
+          if (val == null) return { label:"--", color:"#aaa" };
+          for (const z of zones) { if (val >= z.min && val < z.max) return { label:z.label, color:z.color }; }
+          return { label:zones[zones.length-1].label, color:zones[zones.length-1].color };
+        };
+
+        // Zone definitions (female)
+        const IMC_ZONES = [
+          { min:14, max:18.5, label:"Baixo peso", color:S.blue },
+          { min:18.5, max:25, label:"Eutrofia", color:S.grn },
+          { min:25, max:30, label:"Sobrepeso", color:S.yel },
+          { min:30, max:45, label:"Obesidade", color:S.red },
+        ];
+        const FAT_ZONES = [
+          { min:5, max:15, label:"Atencao", color:S.blue },
+          { min:15, max:25, label:"Baixo risco", color:S.grn },
+          { min:25, max:32, label:"Moderado", color:S.yel },
+          { min:32, max:50, label:"Alto risco", color:S.red },
+        ];
+        const IMM_ZONES = [
+          { min:10, max:15, label:"Baixo", color:S.yel },
+          { min:15, max:18, label:"Adequado", color:S.grn },
+          { min:18, max:26, label:"Alto", color:S.blue },
+        ];
+        const IMG_ZONES = [
+          { min:1, max:5, label:"Baixo", color:S.blue },
+          { min:5, max:9, label:"Adequado", color:S.grn },
+          { min:9, max:20, label:"Alto", color:S.red },
+        ];
+        const CINTURA_ZONES = [
+          { min:55, max:80, label:"Baixo risco", color:S.grn },
+          { min:80, max:88, label:"Moderado", color:S.yel },
+          { min:88, max:130, label:"Alto risco", color:S.red },
+        ];
+        const RCE_ZONES = [
+          { min:0.3, max:0.5, label:"Baixo risco", color:S.grn },
+          { min:0.5, max:0.6, label:"Moderado", color:S.yel },
+          { min:0.6, max:0.9, label:"Alto risco", color:S.red },
+        ];
+        const RCQ_ZONES = [
+          { min:0.5, max:0.85, label:"Adequado", color:S.grn },
+          { min:0.85, max:1.1, label:"Inadequado", color:S.red },
+        ];
+        const IC_ZONES = [
+          { min:0.9, max:1.18, label:"Adequado", color:S.grn },
+          { min:1.18, max:1.22, label:"Moderado", color:S.yel },
+          { min:1.22, max:1.5, label:"Inadequado", color:S.red },
+        ];
+
+        // Card style
+        const cardS = { background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px 16px", marginBottom:0 };
+        const secTitle = (t) => <div style={{ fontSize:13, fontWeight:700, color:G[800], marginBottom:10 }}>{t}</div>;
+        const infoRow = (label, val, unit, deltaCur, deltaPrev, inv) => (
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 0", borderBottom:`1px solid ${G[50]}` }}>
+            <span style={{ fontSize:11, color:G[600] }}>{label}</span>
+            <span style={{ fontSize:13, fontWeight:700, color:G[800] }}>
+              {val != null ? `${typeof val === 'number' ? val.toFixed(1) : val}${unit||''}` : "--"}
+              {deltaCur != null && deltaPrev != null && <DeltaBadge cur={deltaCur} prev={deltaPrev} inv={inv} unit={unit} dec={1}/>}
+            </span>
+          </div>
+        );
+
+        // Donut chart data
+        const donutData = fatPct != null ? [
+          { name:"Gordura", value: Math.round(fatPct * 10) / 10 },
+          { name:"Massa magra", value: Math.round(leanPct * 10) / 10 },
+        ] : [];
+        const DONUT_COLORS = [G[400], S.grn];
+
+        // Female SVG silhouette
+        const FemaleSilhouette = () => (
+          <svg viewBox="0 0 200 480" width="100%" height="100%" style={{ maxHeight:360 }}>
+            <path d="M100,12 C88,12 80,22 80,35 C80,48 88,58 100,58 C112,58 120,48 120,35 C120,22 112,12 100,12 Z M85,60 C72,62 62,72 58,90 L52,130 C50,142 55,148 62,148 L65,148 L60,195 C58,215 60,235 65,255 L70,280 L55,360 C53,375 55,390 60,400 L65,430 C66,440 70,450 75,455 L80,460 C82,463 88,465 95,465 L100,465 L105,465 C112,465 118,463 120,460 L125,455 C130,450 134,440 135,430 L140,400 C145,390 147,375 145,360 L130,280 L135,255 C140,235 142,215 140,195 L135,148 L138,148 C145,148 150,142 148,130 L142,90 C138,72 128,62 115,60 Z" fill="none" stroke={G[300]} strokeWidth="1.5" />
+          </svg>
+        );
+
+        // Measurement labels for silhouette
+        const SilLabel = ({ label, val, prev, top, left, right, align }) => (
+          <div style={{ position:"absolute", top, left, right, textAlign:align||"left", minWidth:70 }}>
+            <div style={{ fontSize:9, color:G[500], fontWeight:600 }}>{label}</div>
+            <div style={{ fontSize:12, fontWeight:700, color:G[800] }}>
+              {val != null ? `${val}cm` : "--"}
+              {val != null && prev != null && <DeltaBadge cur={val} prev={prev} inv={true} unit="cm" dec={1}/>}
+            </div>
+          </div>
+        );
+
+        // Summary indicator
+        const SummaryBadge = ({ label, zones, value }) => {
+          const c = classify(value, zones);
+          return (
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 10px", background:"#fff", borderRadius:8, border:`1px solid ${G[200]}` }}>
+              <span style={{ fontSize:11, color:G[700] }}>{label}</span>
+              <span style={{ fontSize:10, fontWeight:600, padding:"2px 8px", borderRadius:10, background: c.color === S.grn ? S.grnBg : c.color === S.yel ? S.yelBg : c.color === S.red ? S.redBg : S.blueBg, color:c.color }}>{c.label}</span>
+            </div>
+          );
+        };
+
+        // Evolution chart data
         const chartData = circ.map((c, i) => ({
           label: safeFmt(c.date, 'dd/MM/yy'),
-          torax:       c.torax,
-          abdomen:     c.abdomen,
-          cintura:     c.cintura,
-          quadril:     c.quadril,
-          panturrilha: c.panturrilha,
-          braco:       c.braco,
+          torax: c.torax, abdomen: c.abdomen, cintura: c.cintura,
+          quadril: c.quadril, panturrilha: c.panturrilha, braco: c.braco,
         }));
-        const last = circ[circ.length - 1];
-        const prev = circ[circ.length - 2];
+
+        const noData = !curWeight && circ.length === 0;
+
         return (
           <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-            {/* Botão rápido */}
-            <div style={{ display:"flex", justifyContent:"flex-end" }}>
+            {/* Header with toggle and button */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div style={{ display:"flex", background:G[100], borderRadius:8, overflow:"hidden" }}>
+                {[{k:"avaliacao",l:"Avaliacao atual"},{k:"historico",l:"Historico"}].map(v => (
+                  <button key={v.k} onClick={()=>setMedView(v.k)} style={{ padding:"6px 14px", fontSize:11, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit", background:medView===v.k?G[600]:"transparent", color:medView===v.k?"#fff":G[600], borderRadius:medView===v.k?6:0 }}>{v.l}</button>
+                ))}
+              </div>
               <button onClick={()=>setShowCircumferenceModal(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}>
-                📏 Nova medição
+                + Nova medicao
               </button>
             </div>
 
-            {circ.length === 0 && (
+            {noData && (
               <div style={{ textAlign:"center", padding:40, color:"#aaa", background:"#fff", borderRadius:10, border:`1px solid ${G[200]}` }}>
-                <div style={{ fontSize:32, marginBottom:8 }}>📏</div>
-                <div style={{ fontSize:13, fontWeight:600, color:G[700], marginBottom:4 }}>Sem medições registradas</div>
-                <div style={{ fontSize:11 }}>Registre após consulta com a nutricionista</div>
+                <div style={{ fontSize:32, marginBottom:8 }}>Medidas</div>
+                <div style={{ fontSize:13, fontWeight:600, color:G[700], marginBottom:4 }}>Sem dados registrados</div>
+                <div style={{ fontSize:11 }}>Registre medidas apos consulta com a nutricionista</div>
               </div>
             )}
 
-            {/* Cards com última medição + variação */}
-            {last && (
-              <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-                <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>
-                  Última medição — {safeFmt(last.date, "dd/MM/yyyy")}
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
-                  {CIRC_FIELDS.map(f => {
-                    const val = last[f.key];
-                    const pval = prev?.[f.key];
-                    const diff = (val != null && pval != null) ? (val - pval).toFixed(1) : null;
-                    return (
-                      <div key={f.key} style={{ textAlign:"center", padding:"10px 6px", background:G[50], borderRadius:8 }}>
-                        <div style={{ fontSize:15, fontWeight:700, color:COLORS[f.key] || G[700] }}>
-                          {val != null ? `${val}cm` : "—"}
+            {/* ===== AVALIACAO ATUAL ===== */}
+            {medView === "avaliacao" && !noData && (<>
+
+              {/* Section 1: Analise Global da Composicao Corporal */}
+              {(fatPct != null || curWeight) && (
+                <div style={cardS}>
+                  {secTitle("Analise Global da Composicao Corporal")}
+                  <div style={{ display:"flex", gap:16, flexDirection:mob?"column":"row", alignItems:mob?"stretch":"flex-start" }}>
+                    {/* Donut chart */}
+                    {fatPct != null && (
+                      <div style={{ width:mob?"100%":180, minWidth:160, display:"flex", justifyContent:"center", position:"relative" }}>
+                        <ResponsiveContainer width={160} height={160}>
+                          <PieChart>
+                            <Pie data={donutData} cx="50%" cy="50%" innerRadius={45} outerRadius={68} dataKey="value" startAngle={90} endAngle={-270} strokeWidth={0}>
+                              {donutData.map((_, i) => <Cell key={i} fill={DONUT_COLORS[i]}/>)}
+                            </Pie>
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", textAlign:"center" }}>
+                          <div style={{ fontSize:20, fontWeight:800, color:G[700] }}>{fatPct.toFixed(1)}%</div>
+                          <div style={{ fontSize:8, color:G[500] }}>gordura</div>
+                          <div style={{ fontSize:11, fontWeight:600, color:S.grn }}>{leanPct.toFixed(1)}%</div>
+                          <div style={{ fontSize:8, color:G[500] }}>magra</div>
                         </div>
-                        <div style={{ fontSize:10, color:G[600], fontWeight:600 }}>{f.label}</div>
-                        {diff !== null && (
-                          <div style={{ fontSize:9, marginTop:2, color: parseFloat(diff) < 0 ? S.grn : parseFloat(diff) > 0 ? S.red : "#aaa", fontWeight:600 }}>
-                            {parseFloat(diff) > 0 ? `+${diff}` : diff}cm
-                          </div>
-                        )}
                       </div>
-                    );
-                  })}
+                    )}
+                    {/* Info cards */}
+                    <div style={{ flex:1, display:"flex", flexDirection:"column", gap:4 }}>
+                      {infoRow("Peso", curWeight, "kg", curWeight, prevWeight, true)}
+                      {curGorda != null && infoRow("Massa gorda", curGorda, "kg", curGorda, prevGorda, true)}
+                      {curMagra != null && infoRow("Massa magra", curMagra, "kg", curMagra, prevMagra, false)}
+                      {waterEst != null && infoRow("Agua corporal est.", waterEst, "L")}
+                      {ger != null && infoRow("Gasto energ. repouso", ger, " kcal")}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Gráfico de evolução */}
-            {chartData.length > 1 && (
-              <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-                <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Evolução das medidas (cm)</div>
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={chartData} margin={{ top:5, right:10, bottom:5, left:0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/>
-                    <XAxis dataKey="label" tick={{ fontSize:9, fill:G[600] }}/>
-                    <YAxis tick={{ fontSize:9, fill:"#bbb" }} domain={["dataMin-2","dataMax+2"]}/>
-                    <Tooltip contentStyle={{ borderRadius:8, fontSize:11 }}/>
-                    <Legend wrapperStyle={{ fontSize:10 }}/>
-                    {CIRC_FIELDS.map(f => (
-                      <Line key={f.key} type="monotone" dataKey={f.key} name={f.label}
-                        stroke={COLORS[f.key] || G[500]} strokeWidth={2} dot={{ r:3 }}
-                        connectNulls/>
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            )}
+              {/* Section 2: IMC */}
+              {imc != null && (
+                <div style={cardS}>
+                  {secTitle("IMC - Indice de Massa Corporal")}
+                  <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:4 }}>
+                    <span style={{ fontSize:22, fontWeight:800, color:G[800] }}>{imc.toFixed(1)}</span>
+                    <span style={{ fontSize:12, fontWeight:600, color:classify(imc, IMC_ZONES).color, padding:"2px 8px", borderRadius:6, background: classify(imc, IMC_ZONES).color === S.grn ? S.grnBg : classify(imc, IMC_ZONES).color === S.yel ? S.yelBg : classify(imc, IMC_ZONES).color === S.red ? S.redBg : S.blueBg }}>
+                      {classify(imc, IMC_ZONES).label}
+                    </span>
+                    <DeltaBadge cur={imc} prev={prevImc} inv={true} dec={1}/>
+                  </div>
+                  <ClassBar value={imc} zones={IMC_ZONES} unit=" kg/m2"/>
+                </div>
+              )}
 
-            {/* Tabela histórica */}
-            {circ.length > 0 && (
-              <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-                <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Histórico completo</div>
+              {/* Section 3: Percentual de Gordura */}
+              {fatPct != null && (
+                <div style={cardS}>
+                  {secTitle("Percentual de Gordura")}
+                  <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:4 }}>
+                    <span style={{ fontSize:22, fontWeight:800, color:G[800] }}>{fatPct.toFixed(1)}%</span>
+                    <span style={{ fontSize:12, fontWeight:600, color:classify(fatPct, FAT_ZONES).color, padding:"2px 8px", borderRadius:6, background: classify(fatPct, FAT_ZONES).color === S.grn ? S.grnBg : classify(fatPct, FAT_ZONES).color === S.yel ? S.yelBg : classify(fatPct, FAT_ZONES).color === S.red ? S.redBg : S.blueBg }}>
+                      {classify(fatPct, FAT_ZONES).label}
+                    </span>
+                    <DeltaBadge cur={fatPct} prev={prevFatPct} inv={true} unit="%" dec={1}/>
+                  </div>
+                  <ClassBar value={fatPct} zones={FAT_ZONES} unit="%"/>
+                </div>
+              )}
+
+              {/* Section 4: IMM e IMG */}
+              {(imm != null || img != null) && (
+                <div style={{ display:"grid", gridTemplateColumns:mob?"1fr":"1fr 1fr", gap:10 }}>
+                  {imm != null && (
+                    <div style={cardS}>
+                      {secTitle("IMM - Indice de Massa Magra")}
+                      <div style={{ fontSize:20, fontWeight:800, color:G[800], marginBottom:2 }}>{imm.toFixed(1)} <span style={{ fontSize:11, fontWeight:500 }}>kg/m2</span></div>
+                      <DeltaBadge cur={imm} prev={prevImm} inv={false} dec={1}/>
+                      <ClassBar value={imm} zones={IMM_ZONES} unit=" kg/m2"/>
+                    </div>
+                  )}
+                  {img != null && (
+                    <div style={cardS}>
+                      {secTitle("IMG - Indice de Massa Gorda")}
+                      <div style={{ fontSize:20, fontWeight:800, color:G[800], marginBottom:2 }}>{img.toFixed(1)} <span style={{ fontSize:11, fontWeight:500 }}>kg/m2</span></div>
+                      <DeltaBadge cur={img} prev={prevImg} inv={true} dec={1}/>
+                      <ClassBar value={img} zones={IMG_ZONES} unit=" kg/m2"/>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Section 5 & 6: Silhueta + Perimetros */}
+              {lastCirc && (
+                <div style={cardS}>
+                  {secTitle("Silhueta e Perimetros")}
+                  <div style={{ display:"flex", gap:16, flexDirection:mob?"column":"row" }}>
+                    {/* Silhouette */}
+                    <div style={{ position:"relative", width:mob?"100%":200, minHeight:340 }}>
+                      <FemaleSilhouette/>
+                      <SilLabel label="Braco" val={lastCirc.braco} prev={prevCirc?.braco} top="22%" right="60%" align="right"/>
+                      <SilLabel label="Torax" val={lastCirc.torax} prev={prevCirc?.torax} top="32%" left="58%"/>
+                      <SilLabel label="Cintura" val={lastCirc.cintura} prev={prevCirc?.cintura} top="44%" right="58%" align="right"/>
+                      <SilLabel label="Quadril" val={lastCirc.quadril} prev={prevCirc?.quadril} top="52%" left="58%"/>
+                      <SilLabel label="Coxa" val={lastCirc.panturrilha} prev={prevCirc?.panturrilha} top="68%" right="58%" align="right"/>
+                      <SilLabel label="Panturrilha" val={lastCirc.panturrilha} prev={prevCirc?.panturrilha} top="82%" left="58%"/>
+                    </div>
+                    {/* Perimetros e Razoes */}
+                    <div style={{ flex:1, display:"flex", flexDirection:"column", gap:10 }}>
+                      {cintura != null && (
+                        <div>
+                          <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:2 }}>Cintura: {cintura}cm <DeltaBadge cur={cintura} prev={prevCintura} inv={true} unit="cm" dec={1}/></div>
+                          <ClassBar value={cintura} zones={CINTURA_ZONES} unit="cm"/>
+                        </div>
+                      )}
+                      {quadril != null && (
+                        <div>
+                          <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:2 }}>Quadril: {quadril}cm <DeltaBadge cur={quadril} prev={prevQuadril} inv={true} unit="cm" dec={1}/></div>
+                        </div>
+                      )}
+                      {rce != null && (
+                        <div>
+                          <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:2 }}>Razao cintura-estatura</div>
+                          <ClassBar value={rce} zones={RCE_ZONES}/>
+                        </div>
+                      )}
+                      {rcq != null && (
+                        <div>
+                          <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:2 }}>Razao cintura/quadril</div>
+                          <ClassBar value={rcq} zones={RCQ_ZONES}/>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Section 7: Indice de Conicidade */}
+              {ic != null && (
+                <div style={cardS}>
+                  {secTitle("Indice de Conicidade")}
+                  <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:4 }}>
+                    <span style={{ fontSize:20, fontWeight:800, color:G[800] }}>{ic.toFixed(2)}</span>
+                    <span style={{ fontSize:12, fontWeight:600, color:classify(ic, IC_ZONES).color, padding:"2px 8px", borderRadius:6, background: classify(ic, IC_ZONES).color === S.grn ? S.grnBg : classify(ic, IC_ZONES).color === S.yel ? S.yelBg : S.redBg }}>
+                      {classify(ic, IC_ZONES).label}
+                    </span>
+                  </div>
+                  <ClassBar value={ic} zones={IC_ZONES}/>
+                  <div style={{ display:"flex", gap:20, marginTop:10, fontSize:10, color:G[600] }}>
+                    <span>Biconcavo (baixo risco)</span>
+                    <span>Cilindrico</span>
+                    <span>Biconico (alto risco)</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Section 8: Resumo de Indicadores */}
+              {(fatPct != null || imc != null || cintura != null) && (
+                <div style={cardS}>
+                  {secTitle("Resumo de Indicadores")}
+                  <div style={{ display:"grid", gridTemplateColumns:mob?"1fr":"1fr 1fr", gap:6 }}>
+                    {fatPct != null && <SummaryBadge label="Percentual de gordura" zones={FAT_ZONES} value={fatPct}/>}
+                    {img != null && <SummaryBadge label="Indice de massa gorda" zones={IMG_ZONES} value={img}/>}
+                    {imm != null && <SummaryBadge label="Indice de massa magra" zones={IMM_ZONES} value={imm}/>}
+                    {rce != null && <SummaryBadge label="Razao cintura/estatura" zones={RCE_ZONES} value={rce}/>}
+                    {rcq != null && <SummaryBadge label="Razao cintura/quadril" zones={RCQ_ZONES} value={rcq}/>}
+                    {ic != null && <SummaryBadge label="Indice de conicidade" zones={IC_ZONES} value={ic}/>}
+                  </div>
+                </div>
+              )}
+            </>)}
+
+            {/* ===== HISTORICO ===== */}
+            {medView === "historico" && (<>
+              {/* Evolution charts for circumferences */}
+              {chartData.length > 1 && (
+                <div style={cardS}>
+                  {secTitle("Evolucao das medidas (cm)")}
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={chartData} margin={{ top:5, right:10, bottom:5, left:0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/>
+                      <XAxis dataKey="label" tick={{ fontSize:9, fill:G[600] }}/>
+                      <YAxis tick={{ fontSize:9, fill:"#bbb" }} domain={["dataMin-2","dataMax+2"]}/>
+                      <Tooltip contentStyle={{ borderRadius:8, fontSize:11 }}/>
+                      <Legend wrapperStyle={{ fontSize:10 }}/>
+                      {CIRC_FIELDS.map(f => (
+                        <Line key={f.key} type="monotone" dataKey={f.key} name={f.label}
+                          stroke={COLORS[f.key] || G[500]} strokeWidth={2} dot={{ r:3 }} connectNulls/>
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Weight evolution */}
+              {hist.length > 1 && (
+                <div style={cardS}>
+                  {secTitle("Evolucao do peso (kg)")}
+                  <ResponsiveContainer width="100%" height={180}>
+                    <AreaChart data={hist.map(h => ({ label: safeFmt(h.date, 'dd/MM/yy'), peso: h.weight, magra: h.massaMagra, gorda: h.massaGordura }))} margin={{ top:5, right:10, bottom:5, left:0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/>
+                      <XAxis dataKey="label" tick={{ fontSize:9, fill:G[600] }}/>
+                      <YAxis tick={{ fontSize:9, fill:"#bbb" }}/>
+                      <Tooltip contentStyle={{ borderRadius:8, fontSize:11 }}/>
+                      <Legend wrapperStyle={{ fontSize:10 }}/>
+                      <Area type="monotone" dataKey="peso" name="Peso" stroke={G[500]} fill={G[100]} strokeWidth={2}/>
+                      <Area type="monotone" dataKey="magra" name="Massa magra" stroke={S.grn} fill={S.grnBg} strokeWidth={2}/>
+                      <Area type="monotone" dataKey="gorda" name="Massa gorda" stroke={S.red} fill={S.redBg} strokeWidth={2}/>
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Indicators table with reference values */}
+              <div style={cardS}>
+                {secTitle("Tabela de indicadores")}
                 <div style={{ overflowX:"auto" }}>
-                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:420 }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:400 }}>
                     <thead>
                       <tr>
-                        {["Data","Tórax","Abdômen","Cintura","Quadril","Panturrilha","Braço"].map(h=>(
-                          <th key={h} style={{ textAlign:"left", padding:"4px 7px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600, textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
+                        {["Indicador","Referencia","Anterior","Atual","Status"].map(h => (
+                          <th key={h} style={{ textAlign:"left", padding:"5px 8px", borderBottom:`2px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:700, textTransform:"uppercase" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {[...circ].reverse().map((c,i)=>(
-                        <tr key={c.id||i} style={{ background:i===0?G[50]:"transparent" }}>
-                          <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10, whiteSpace:"nowrap" }}>{safeFmt(c.date,"dd/MM/yy")}</td>
-                          {CIRC_FIELDS.map(f=>(
-                            <td key={f.key} style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400, color:COLORS[f.key]||G[700] }}>
-                              {c[f.key]!=null?`${c[f.key]}cm`:"—"}
+                      {[
+                        { label:"IMC", ref:"18.5-24.9", prev:prevImc, cur:imc, zones:IMC_ZONES, unit:"", dec:1 },
+                        { label:"% Gordura", ref:"15-25%", prev:prevFatPct, cur:fatPct, zones:FAT_ZONES, unit:"%", dec:1 },
+                        { label:"IMM", ref:"15-18 kg/m2", prev:prevImm, cur:imm, zones:IMM_ZONES, unit:"", dec:1 },
+                        { label:"IMG", ref:"5-9 kg/m2", prev:prevImg, cur:img, zones:IMG_ZONES, unit:"", dec:1 },
+                        { label:"Razao C/E", ref:"<0.5", prev:null, cur:rce, zones:RCE_ZONES, unit:"", dec:2 },
+                        { label:"Razao C/Q", ref:"<0.85", prev:null, cur:rcq, zones:RCQ_ZONES, unit:"", dec:2 },
+                        { label:"Ind. Conicidade", ref:"<1.18", prev:null, cur:ic, zones:IC_ZONES, unit:"", dec:2 },
+                      ].map((r, i) => {
+                        const cls = classify(r.cur, r.zones);
+                        return (
+                          <tr key={i} style={{ background:i%2===0?"#fff":G[50] }}>
+                            <td style={{ padding:"6px 8px", fontWeight:600, color:G[800] }}>{r.label}</td>
+                            <td style={{ padding:"6px 8px", color:G[500], fontSize:10 }}>{r.ref}</td>
+                            <td style={{ padding:"6px 8px", color:"#aaa" }}>{r.prev != null ? r.prev.toFixed(r.dec) : "--"}</td>
+                            <td style={{ padding:"6px 8px", fontWeight:600, color:G[800] }}>{r.cur != null ? `${r.cur.toFixed(r.dec)}${r.unit}` : "--"}</td>
+                            <td style={{ padding:"6px 8px" }}>
+                              <span style={{ fontSize:9, fontWeight:600, padding:"2px 7px", borderRadius:8, color:cls.color, background: cls.color===S.grn?S.grnBg : cls.color===S.yel?S.yelBg : cls.color===S.red?S.redBg : S.blueBg }}>{cls.label}</span>
                             </td>
-                          ))}
-                        </tr>
-                      ))}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
               </div>
-            )}
+
+              {/* Circumference history table */}
+              {circ.length > 0 && (
+                <div style={cardS}>
+                  {secTitle("Historico de circunferencias")}
+                  <div style={{ overflowX:"auto" }}>
+                    <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, minWidth:420 }}>
+                      <thead>
+                        <tr>
+                          {["Data","Torax","Abdomen","Cintura","Quadril","Panturrilha","Braco"].map(h=>(
+                            <th key={h} style={{ textAlign:"left", padding:"4px 7px", borderBottom:`1px solid ${G[200]}`, fontSize:9, color:G[600], fontWeight:600, textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...circ].reverse().map((c,i)=>(
+                          <tr key={c.id||i} style={{ background:i===0?G[50]:"transparent" }}>
+                            <td style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, color:"#aaa", fontSize:10, whiteSpace:"nowrap" }}>{safeFmt(c.date,"dd/MM/yy")}</td>
+                            {CIRC_FIELDS.map(f=>(
+                              <td key={f.key} style={{ padding:"5px 7px", borderBottom:`1px solid ${G[50]}`, fontWeight:i===0?600:400, color:COLORS[f.key]||G[700] }}>
+                                {c[f.key]!=null?`${c[f.key]}cm`:"--"}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>)}
           </div>
         );
       })()}
+      {showCircumferenceModal && tab==="circunferencias" && <CircumferenceModal p={p} onClose={()=>setShowCircumferenceModal(false)} onSave={()=>{ onAddCircumference && onAddCircumference(); }} onLog={onLog}/>}
 
       {tab==="msgs" && (
         <MiniChat
@@ -3323,6 +3697,7 @@ const CIRC_FIELDS = [
 function CircumferenceModal({ p, onClose, onSave, onLog }) {
   const [date, setDate]   = useState(format(new Date(),'yyyy-MM-dd'));
   const [vals, setVals]   = useState({ torax:"", abdomen:"", cintura:"", quadril:"", panturrilha:"", braco:"" });
+  const [body, setBody]   = useState({ peso:"", gordura:"", massaMagra:"", massaGorda:"" });
   const [obs,  setObs]    = useState("");
   const [err,  setErr]    = useState("");
   const [saving, setSaving] = useState(false);
@@ -3336,49 +3711,94 @@ function CircumferenceModal({ p, onClose, onSave, onLog }) {
   const hasValue = Object.values(vals).some(v => v && parseFloat(v) > 0);
 
   const handleSave = async () => {
-    if (!hasValue) return setErr("Preencha pelo menos uma medida.");
+    if (!hasValue && !body.peso) return setErr("Preencha pelo menos uma medida ou o peso.");
     setSaving(true); setErr("");
     try {
       const cycleId = p._activeCycle?.id;
       if (!cycleId) throw new Error("Paciente sem ciclo ativo");
-      const entry = await apiSaveCircumference({ cycleId, date, ...vals, observations: obs || undefined });
-      onSave && onSave(entry);
-      onLog && onLog({ action:"circunferencia", patientId: p.id, patientName: p.name, detail: `Circunferências registradas em ${format(new Date(date+'T12:00:00'),'dd/MM/yy')}` });
+
+      // Save circumferences if any value provided
+      if (hasValue) {
+        const entry = await apiSaveCircumference({ cycleId, date, ...vals, observations: obs || undefined });
+        onLog && onLog({ action:"circunferencia", patientId: p.id, patientName: p.name, detail: `Circunferências registradas em ${format(new Date(date+'T12:00:00'),'dd/MM/yy')}` });
+      }
+
+      // Save body composition via weekcheck if weight provided
+      if (body.peso && parseFloat(body.peso) > 0) {
+        const weekNumber = p.week || 1;
+        await apiSaveWeekCheck({
+          cycleId,
+          weekNumber,
+          pesoRegistrado: parseFloat(body.peso),
+          massaMagra:     body.massaMagra ? parseFloat(body.massaMagra) : undefined,
+          massaGordura:   body.massaGorda ? parseFloat(body.massaGorda) : undefined,
+          weekDate:       date ? new Date(date+'T12:00:00').toISOString() : new Date().toISOString(),
+          sendWhatsApp:   false,
+        });
+        onLog && onLog({ action:"composicao_corporal", patientId: p.id, patientName: p.name, detail: `Composição corporal registrada: ${body.peso}kg${body.gordura ? `, ${body.gordura}% gordura` : ''}` });
+      }
+
+      onSave && onSave();
       onClose();
     } catch (e) {
       setErr(e?.response?.data?.error || e?.message || 'Erro ao salvar. Tente novamente.');
     } finally { setSaving(false); }
   };
 
+  const BODY_FIELDS = [
+    { key:"peso", label:"Peso (kg)", ph: p.cw ? String(p.cw) : "70.0" },
+    { key:"gordura", label:"% Gordura", ph:"25.0" },
+    { key:"massaMagra", label:"Massa magra (kg)", ph:"45.0" },
+    { key:"massaGorda", label:"Massa gorda (kg)", ph:"20.0" },
+  ];
+
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"#fff", width:"100%", maxWidth:400, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)", maxHeight:"90vh", overflowY:"auto" }}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:440, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)", maxHeight:"90vh", overflowY:"auto" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-          <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>📏 Registrar circunferências</span>
-          <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50], fontSize:13, color:"#aaa" }}>✕</div>
+          <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>Registrar medidas</span>
+          <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50], fontSize:13, color:"#aaa" }}>X</div>
         </div>
-        <div style={{ fontSize:11, color:"#aaa", marginBottom:14 }}>{p.name} · Preencher após consulta com a nutricionista</div>
+        <div style={{ fontSize:11, color:"#aaa", marginBottom:14 }}>{p.name} -- Preencher apos consulta com a nutricionista</div>
 
         {err && <div style={{ color:"#C0392B", fontSize:12, marginBottom:10, padding:"8px 10px", background:"#fef2f2", borderRadius:6 }}>{err}</div>}
 
-        {/* Data — suporta retroativo */}
+        {/* Data */}
         <div style={{ marginBottom:14 }}>
-          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Data da medição</label>
+          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Data da avaliacao</label>
           <input type="date" value={date} onChange={e=>setDate(e.target.value)}
             style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
           <div style={{ fontSize:10, color:"#aaa", marginTop:3 }}>Pode informar uma data retroativa para alinhar com dados anteriores</div>
         </div>
 
-        {/* 6 medidas em grid 2x3 */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
-          {CIRC_FIELDS.map(f => (
-            <div key={f.key}>
-              <label style={{ fontSize:10, fontWeight:500, color:G[700], marginBottom:2, display:"block" }}>{f.label} (cm)</label>
-              <input type="number" step="0.1" value={vals[f.key]} placeholder={f.ph}
-                onChange={e=>setVals(pr=>({...pr,[f.key]:e.target.value}))}
-                style={{ width:"100%", padding:"8px 10px", borderRadius:6, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
-            </div>
-          ))}
+        {/* Body composition (optional) */}
+        <div style={{ marginBottom:14 }}>
+          <div style={{ fontSize:12, fontWeight:600, color:G[700], marginBottom:8, paddingBottom:4, borderBottom:`1px solid ${G[200]}` }}>Composicao corporal (opcional)</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            {BODY_FIELDS.map(f => (
+              <div key={f.key}>
+                <label style={{ fontSize:10, fontWeight:500, color:G[700], marginBottom:2, display:"block" }}>{f.label}</label>
+                <input type="number" step="0.1" value={body[f.key]} placeholder={f.ph}
+                  onChange={e=>setBody(pr=>({...pr,[f.key]:e.target.value}))}
+                  style={{ width:"100%", padding:"8px 10px", borderRadius:6, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Circumference fields */}
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:12, fontWeight:600, color:G[700], marginBottom:8, paddingBottom:4, borderBottom:`1px solid ${G[200]}` }}>Circunferencias (cm)</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            {CIRC_FIELDS.map(f => (
+              <div key={f.key}>
+                <label style={{ fontSize:10, fontWeight:500, color:G[700], marginBottom:2, display:"block" }}>{f.label} (cm)</label>
+                <input type="number" step="0.1" value={vals[f.key]} placeholder={f.ph}
+                  onChange={e=>setVals(pr=>({...pr,[f.key]:e.target.value}))}
+                  style={{ width:"100%", padding:"8px 10px", borderRadius:6, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Última medição para referência */}
@@ -3386,7 +3806,7 @@ function CircumferenceModal({ p, onClose, onSave, onLog }) {
           const last = p.circumferenceHistory.slice(-1)[0];
           return (
             <div style={{ background:G[50], borderRadius:8, padding:"8px 12px", marginBottom:12, fontSize:10, color:G[700] }}>
-              <div style={{ fontWeight:600, marginBottom:4 }}>Última medição: {safeFmt(last.date,'dd/MM/yy')}</div>
+              <div style={{ fontWeight:600, marginBottom:4 }}>Ultima medicao: {safeFmt(last.date,'dd/MM/yy')}</div>
               <div style={{ display:"flex", flexWrap:"wrap", gap:"4px 12px" }}>
                 {CIRC_FIELDS.map(f => last[f.key] ? <span key={f.key}>{f.label}: <strong>{last[f.key]}cm</strong></span> : null)}
               </div>
@@ -3395,15 +3815,15 @@ function CircumferenceModal({ p, onClose, onSave, onLog }) {
         })()}
 
         <div style={{ marginBottom:12 }}>
-          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Observações (opcional)</label>
-          <textarea value={obs} onChange={e=>setObs(e.target.value)} rows={2} placeholder="Ex: medição pós-consulta nutrição semana 8"
+          <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Observacoes (opcional)</label>
+          <textarea value={obs} onChange={e=>setObs(e.target.value)} rows={2} placeholder="Ex: medicao pos-consulta nutricao semana 8"
             style={{ width:"100%", padding:"8px 10px", borderRadius:6, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", resize:"none", boxSizing:"border-box" }}/>
         </div>
 
         <div style={{ display:"flex", gap:8 }}>
           <button onClick={handleSave} disabled={saving}
             style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity:saving?0.7:1 }}>
-            {saving ? "Salvando..." : "💾 Salvar"}
+            {saving ? "Salvando..." : "Salvar"}
           </button>
           <button onClick={onClose} style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
         </div>
@@ -3477,6 +3897,7 @@ function NewLeadModal({ onClose, onSave }) {
   const [peso, setPeso]   = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [altura, setAltura] = useState("");
   const [plan, setPlan]   = useState("essential");
   const [err,  setErr]    = useState("");
   // Circunferências iniciais (opcionais — para pacientes em execução)
@@ -3497,7 +3918,8 @@ function NewLeadModal({ onClose, onSave }) {
     const np = {
       id: crypto.randomUUID(), name: nome.trim(), plan, cycle: 1, week: 1,
       birthDate: nasc, phone, email, sd: new Date().toISOString(),
-      iw: w, cw: w, history: [], scoreHistory: [], circumferenceHistory: [],
+      iw: w, cw: w, height: altura ? parseFloat(altura) : undefined,
+      history: [], scoreHistory: [], circumferenceHistory: [],
       nr: addDays(new Date(), 7).toISOString(), eng: 100,
       // Circunferências iniciais (enviadas ao backend junto com o paciente)
       ...(showCirc && { circumferenceDate: circDate, torax, abdomen, cintura, quadril, panturrilha, braco })
@@ -3529,6 +3951,7 @@ function NewLeadModal({ onClose, onSave }) {
           { label:"E-mail *", val:email, set:setEmail, type:"email", ph:"paciente@email.com" },
           { label:"Data de nascimento", val:nasc, set:setNasc, type:"date", ph:"" },
           { label:"Peso inicial (kg)", val:peso, set:setPeso, type:"number", ph:"80.5" },
+          { label:"Altura (cm)", val:altura, set:setAltura, type:"number", ph:"165" },
           { label:"Telefone / WhatsApp", val:phone, set:setPhone, type:"tel", ph:"(24) 99999-0000" },
         ].map(f => (
           <div key={f.label} style={{ marginBottom:12 }}>
@@ -3765,7 +4188,8 @@ function normalizePatient(p) {
     birthDate: p.birthDate ? p.birthDate.split('T')[0] : '',
     sd:        p.startDate ? p.startDate.split('T')[0] : p.createdAt ? p.createdAt.split('T')[0] : '',
 
-    // pesos
+    // altura e pesos
+    height: p.height || null,
     iw:  p.initialWeight  || 0,
     cw:  p.currentWeight  || p.initialWeight || 0,
 
