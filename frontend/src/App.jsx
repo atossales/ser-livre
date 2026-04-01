@@ -7170,6 +7170,8 @@ function Financeiro({ ps }) {
                     <button onClick={()=>setRecords(prev=>prev.map(x=>x.id===r.id?{...x,status:'pendente'}:x))}
                       style={{ padding:"4px 8px", borderRadius:5, background:S.yelBg, border:`1px solid #F7DC6F`, color:S.yel, fontSize:9, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>Desfazer</button>
                   )}
+                  <button onClick={()=>{ if(window.confirm(`Excluir registro de ${r.patientName||'este paciente'}?`)) setRecords(prev=>prev.filter(x=>x.id!==r.id)); }}
+                    style={{ padding:"4px 8px", borderRadius:5, background:S.redBg, border:`1px solid #F5B7B1`, color:S.red, fontSize:9, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Excluir</button>
                 </div>
               </div>
             );
@@ -7428,23 +7430,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // PART 6: Session timeout warning
-  useEffect(() => {
-    if (!lg) return;
-    const checkToken = () => {
-      const token = localStorage.getItem('serlivre_token');
-      if (!token) return;
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        const expiresIn = payload.exp * 1000 - Date.now();
-        if (expiresIn < 5 * 60 * 1000 && expiresIn > 0) {
-          toast('Sua sessao expira em breve. Salve seu trabalho.', 'warning');
-        }
-      } catch { /* invalid token format — skip */ }
-    };
-    const interval = setInterval(checkToken, 60000);
-    return () => clearInterval(interval);
-  }, [lg]);
 
   /* alertas críticos */
   const ac = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); }).length;
