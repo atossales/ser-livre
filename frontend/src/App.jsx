@@ -885,7 +885,11 @@ function PList({  ps, onSel, mob, onAdd, onDelete }) {
   const SC = genSC(ps);
   const [q,  setQ]  = useState("");
   const [fp, setFp] = useState("all");
-  const f = ps.filter(p => p.name.toLowerCase().includes(q.toLowerCase()) && (fp==="all"||p.plan===fp));
+  const f = ps.filter(p => {
+    const ql = q.toLowerCase();
+    const matchSearch = !q || p.name?.toLowerCase().includes(ql) || p.email?.toLowerCase().includes(ql) || p.phone?.includes(q);
+    return matchSearch && (fp==="all"||p.plan===fp);
+  });
 
   return (
     <div>
@@ -895,7 +899,7 @@ function PList({  ps, onSel, mob, onAdd, onDelete }) {
       <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
         <div style={{ flex:1, minWidth:140, position:"relative" }}>
           <Search size={14} color="#bbb" style={{ position:"absolute", left:10, top:10 }}/>
-          <input style={{ width:"100%", padding:"8px 10px 8px 30px", borderRadius:8, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} placeholder="Buscar..." value={q} onChange={e=>setQ(e.target.value)}/>
+          <input style={{ width:"100%", padding:"8px 10px 8px 30px", borderRadius:8, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} placeholder="Buscar por nome, e-mail ou telefone..." value={q} onChange={e=>setQ(e.target.value)}/>
         </div>
         <select style={{ padding:"8px 10px", borderRadius:8, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", background:"#fff" }} value={fp} onChange={e=>setFp(e.target.value)}>
           <option value="all">Todos</option>
@@ -2187,7 +2191,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                   </>}
                 </div>
               </div>
-              {/* Botão Concluir / Reabrir semana */}
+              {/* Botão Salvar / Concluir / Reabrir semana */}
               <div style={{ marginTop:14, paddingTop:12, borderTop:`1px solid ${G[200]}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
                 {cl[sw].concluida ? (
                   <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
@@ -2207,42 +2211,79 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                     </button>
                   </div>
                 ) : (
-                  <button
-                    disabled={savingWeek}
-                    onClick={async () => {
-                      const cycleId = p._activeCycle?.id;
-                      if (!cycleId) return;
-                      setSavingWeek(true);
-                      try {
-                        const w = cl[sw];
-                        await apiSaveWeekCheck({
-                          cycleId,
-                          weekNumber: sw,
-                          tirzepatida: !!w.tirz,
-                          tirzepatidaDose: w.dose || "2.5mg",
-                          terapiaInjetavel: w.ter != null ? !!w.ter : undefined,
-                          pesagem: !!w.peso,
-                          sessaoPsicologia: w.psi != null ? !!w.psi : undefined,
-                          bioimpedancia: !!w.bio,
-                          treino1: w.tr?.[0] || false,
-                          treino2: w.tr?.[1] || false,
-                          treino3: w.tr?.[2] != null ? w.tr[2] : undefined,
-                          nutriAvaliacaoCompleta: w.nu ? !!w.nu.av : undefined,
-                          nutriPlanoAlimentar: w.nu ? !!w.nu.pl : undefined,
-                          nutriScoresClinicos: w.nu ? !!w.nu.sc : undefined,
-                          weekDate: w.weekDate || new Date().toISOString(),
-                        });
-                        setCl(pr => ({ ...pr, [sw]: { ...pr[sw], concluida: true } }));
-                        onLog && onLog({ action:"checklist", patientId:p.id, patientName:p.name, detail:`Semana ${sw} concluída` });
-                      } catch (err) {
-                        console.error('Erro ao salvar semana:', err);
-                      } finally {
-                        setSavingWeek(false);
-                      }
-                    }}
-                    style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 16px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:savingWeek?"wait":"pointer", fontFamily:"inherit", opacity:savingWeek?0.7:1 }}>
-                    <Check size={14}/>{savingWeek ? "Salvando..." : `Concluir semana ${sw}`}
-                  </button>
+                  <div style={{ display:"flex", gap:8, flex:1 }}>
+                    <button
+                      disabled={savingWeek}
+                      onClick={async () => {
+                        const cycleId = p._activeCycle?.id;
+                        if (!cycleId) return;
+                        setSavingWeek(true);
+                        try {
+                          const w = cl[sw];
+                          await apiSaveWeekCheck({
+                            cycleId,
+                            weekNumber: sw,
+                            tirzepatida: !!w.tirz,
+                            tirzepatidaDose: w.dose || "2.5mg",
+                            terapiaInjetavel: w.ter != null ? !!w.ter : undefined,
+                            pesagem: !!w.peso,
+                            sessaoPsicologia: w.psi != null ? !!w.psi : undefined,
+                            bioimpedancia: !!w.bio,
+                            treino1: w.tr?.[0] || false,
+                            treino2: w.tr?.[1] || false,
+                            treino3: w.tr?.[2] != null ? w.tr[2] : undefined,
+                            nutriAvaliacaoCompleta: w.nu ? !!w.nu.av : undefined,
+                            nutriPlanoAlimentar: w.nu ? !!w.nu.pl : undefined,
+                            nutriScoresClinicos: w.nu ? !!w.nu.sc : undefined,
+                            weekDate: w.weekDate || new Date().toISOString(),
+                          });
+                          console.log('Semana salva com sucesso');
+                        } catch (err) {
+                          console.error('Erro ao salvar semana:', err);
+                        } finally {
+                          setSavingWeek(false);
+                        }
+                      }}
+                      style={{ padding:"10px 16px", borderRadius:8, background:"#fff", border:`1px solid ${G[300]}`, color:G[700], fontSize:12, fontWeight:600, cursor:savingWeek?"wait":"pointer", fontFamily:"inherit", opacity:savingWeek?0.7:1 }}>
+                      {savingWeek ? "Salvando..." : "Salvar semana"}
+                    </button>
+                    <button
+                      disabled={savingWeek}
+                      onClick={async () => {
+                        const cycleId = p._activeCycle?.id;
+                        if (!cycleId) return;
+                        setSavingWeek(true);
+                        try {
+                          const w = cl[sw];
+                          await apiSaveWeekCheck({
+                            cycleId,
+                            weekNumber: sw,
+                            tirzepatida: !!w.tirz,
+                            tirzepatidaDose: w.dose || "2.5mg",
+                            terapiaInjetavel: w.ter != null ? !!w.ter : undefined,
+                            pesagem: !!w.peso,
+                            sessaoPsicologia: w.psi != null ? !!w.psi : undefined,
+                            bioimpedancia: !!w.bio,
+                            treino1: w.tr?.[0] || false,
+                            treino2: w.tr?.[1] || false,
+                            treino3: w.tr?.[2] != null ? w.tr[2] : undefined,
+                            nutriAvaliacaoCompleta: w.nu ? !!w.nu.av : undefined,
+                            nutriPlanoAlimentar: w.nu ? !!w.nu.pl : undefined,
+                            nutriScoresClinicos: w.nu ? !!w.nu.sc : undefined,
+                            weekDate: w.weekDate || new Date().toISOString(),
+                          });
+                          setCl(pr => ({ ...pr, [sw]: { ...pr[sw], concluida: true } }));
+                          onLog && onLog({ action:"checklist", patientId:p.id, patientName:p.name, detail:`Semana ${sw} concluída` });
+                        } catch (err) {
+                          console.error('Erro ao salvar semana:', err);
+                        } finally {
+                          setSavingWeek(false);
+                        }
+                      }}
+                      style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 16px", borderRadius:8, background:G[600], color:"#fff", fontSize:13, fontWeight:600, border:"none", cursor:savingWeek?"wait":"pointer", fontFamily:"inherit", opacity:savingWeek?0.7:1 }}>
+                      <Check size={14}/>{savingWeek ? "Salvando..." : `Concluir semana ${sw}`}
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -3795,23 +3836,82 @@ function MiniChat({ p, messages, setMessages, onLog }) {
 ═══════════════════════════════════════════════ */
 function Alerts({ ps, onSel, onResolve }) {
   const SC = genSC(ps);
+  const today = new Date();
+  const todayMs = today.getTime();
+
+  // Score-based alerts (existing)
   const data = ps.map(p => {
     const sc=SC[p.id]; if(!sc) return null;
     const m=cM(sc.m), b=cB(sc.b), n=cN(sc.n);
     const al=[];
-    if(m<=12)         al.push({t:"r",l:"Met crítico",       s:`${m}/24`,a:"Ataque+detox"});
-    if(m>=13&&m<=16)  al.push({t:"y",l:"Met transição",       s:`${m}/24`,a:"Ajustes"});
-    if(b<10)          al.push({t:"r",l:"Bem-estar crítico",  s:`${b}/18`,a:"Médica"});
+    if(m<=12)         al.push({t:"r",l:"Met critico",       s:`${m}/24`,a:"Ataque+detox"});
+    if(m>=13&&m<=16)  al.push({t:"y",l:"Met transicao",       s:`${m}/24`,a:"Ajustes"});
+    if(b<10)          al.push({t:"r",l:"Bem-estar critico",  s:`${b}/18`,a:"Medica"});
     if(b>=10&&b<=13)  al.push({t:"y",l:"Bem-estar alerta",   s:`${b}/18`,a:"Nutri"});
-    if(n<=4)          al.push({t:"r",l:"Recaída",            s:`${n}/9`, a:"Sessão individual"});
-    if(n>=5&&n<=7)    al.push({t:"y",l:"Mental construção",  s:`${n}/9`, a:"Reforço"});
+    if(n<=4)          al.push({t:"r",l:"Recaida",            s:`${n}/9`, a:"Sessao individual"});
+    if(n>=5&&n<=7)    al.push({t:"y",l:"Mental construcao",  s:`${n}/9`, a:"Reforco"});
     return al.length ? {...p,al} : null;
   }).filter(Boolean);
   const reds = data.filter(p=>p.al.some(a=>a.t==="r"));
   const yels = data.filter(p=>p.al.every(a=>a.t==="y"));
 
+  // Upcoming returns (next 3 days)
+  const upcomingReturns = ps.filter(p => {
+    if (!p.nr) return false;
+    const rd = new Date(p.nr);
+    if (isNaN(rd.getTime())) return false;
+    const diffDays = Math.ceil((rd.getTime() - todayMs) / 86400000);
+    return diffDays >= 0 && diffDays <= 3;
+  }).map(p => {
+    const rd = new Date(p.nr);
+    const diffDays = Math.ceil((rd.getTime() - todayMs) / 86400000);
+    return { ...p, _returnDate: rd, _diffDays: diffDays };
+  }).sort((a,b) => a._returnDate - b._returnDate);
+
+  // Overdue weigh-ins (no weighing in 14+ days)
+  const overdueWeighIns = ps.filter(p => {
+    const hist = p.history || [];
+    if (hist.length === 0) return false;
+    const lastWeigh = hist[hist.length - 1];
+    const lastDate = new Date(lastWeigh.date);
+    if (isNaN(lastDate.getTime())) return false;
+    const diffDays = Math.floor((todayMs - lastDate.getTime()) / 86400000);
+    return diffDays >= 14;
+  }).map(p => {
+    const hist = p.history || [];
+    const lastDate = new Date(hist[hist.length - 1].date);
+    const diffDays = Math.floor((todayMs - lastDate.getTime()) / 86400000);
+    return { ...p, _lastWeighDate: lastDate, _daysSinceWeigh: diffDays };
+  }).sort((a,b) => b._daysSinceWeigh - a._daysSinceWeigh);
+
+  // Inactive patients (no activity in 14+ days) — based on updatedAt or last score
+  const inactivePatients = ps.filter(p => {
+    const dates = [];
+    if (p.updatedAt) dates.push(new Date(p.updatedAt));
+    const sh = p.scoreHistory || [];
+    if (sh.length > 0) dates.push(new Date(sh[sh.length - 1].date));
+    const hist = p.history || [];
+    if (hist.length > 0) dates.push(new Date(hist[hist.length - 1].date));
+    if (dates.length === 0) return true;
+    const latest = Math.max(...dates.map(d => d.getTime()));
+    return Math.floor((todayMs - latest) / 86400000) >= 14;
+  });
+
+  // Low engagement (< 50%)
+  const lowEngagement = ps.filter(p => {
+    const wc = p._activeCycle?.weekChecks || [];
+    if (!wc.length) return false;
+    const eng = calcularEngajamento(wc);
+    return eng < 50;
+  }).map(p => ({ ...p, _engagement: calcularEngajamento(p._activeCycle?.weekChecks || []) }));
+
+  const hasScoreAlerts = reds.length > 0 || yels.length > 0;
+  const hasInfoAlerts = upcomingReturns.length > 0 || overdueWeighIns.length > 0 || inactivePatients.length > 0 || lowEngagement.length > 0;
+  const hasAny = hasScoreAlerts || hasInfoAlerts;
+
   return (
     <div>
+      {/* Score-based: Red alerts */}
       {reds.length>0 && (
         <div style={{ marginBottom:16 }}>
           <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:8 }}>
@@ -3828,8 +3928,10 @@ function Alerts({ ps, onSel, onResolve }) {
           ))}
         </div>
       )}
+
+      {/* Score-based: Yellow alerts */}
       {yels.length>0 && (
-        <div>
+        <div style={{ marginBottom:16 }}>
           <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:8 }}>
             <div style={{ width:9, height:9, borderRadius:"50%", background:S.yel }}/><span style={{ fontWeight:600, color:S.yel, fontSize:13 }}>Amarelos — equipe</span>
           </div>
@@ -3844,7 +3946,98 @@ function Alerts({ ps, onSel, onResolve }) {
           ))}
         </div>
       )}
-      {data.length===0 && <div style={{ textAlign:"center", padding:30 }}><div style={{ fontSize:32 }}>🟢</div><div style={{ fontSize:14, fontWeight:600, color:S.grn, marginTop:6 }}>Todos bem!</div></div>}
+
+      {/* Upcoming returns (blue) */}
+      {upcomingReturns.length > 0 && (
+        <div style={{ marginBottom:16 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:8 }}>
+            <div style={{ width:9, height:9, borderRadius:"50%", background:S.blue }}/><span style={{ fontWeight:600, color:S.blue, fontSize:13 }}>Retornos proximos (3 dias)</span>
+          </div>
+          {upcomingReturns.map(p => (
+            <div key={`ret-${p.id}`} onClick={()=>onSel(p.id)} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.blue}`, padding:"10px 12px", marginBottom:5, cursor:"pointer" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <Av name={p.name} size={24}/>
+                <div style={{ flex:1 }}>
+                  <span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span>
+                  <div style={{ fontSize:11, color:"#aaa" }}>S{p.week}/16</div>
+                </div>
+                <div style={{ fontSize:11, padding:"3px 8px", background:S.blueBg, borderRadius:5, color:S.blue, fontWeight:600 }}>
+                  {p._diffDays === 0 ? "Hoje" : p._diffDays === 1 ? "Amanha" : `${p._diffDays} dias`}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Overdue weigh-ins (orange) */}
+      {overdueWeighIns.length > 0 && (
+        <div style={{ marginBottom:16 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:8 }}>
+            <div style={{ width:9, height:9, borderRadius:"50%", background:"#E67E22" }}/><span style={{ fontWeight:600, color:"#E67E22", fontSize:13 }}>Pesagem atrasada (14+ dias)</span>
+          </div>
+          {overdueWeighIns.map(p => (
+            <div key={`ow-${p.id}`} onClick={()=>onSel(p.id)} style={{ background:"#fff", borderRadius:8, borderLeft:"4px solid #E67E22", padding:"10px 12px", marginBottom:5, cursor:"pointer" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <Av name={p.name} size={24}/>
+                <div style={{ flex:1 }}>
+                  <span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span>
+                  <div style={{ fontSize:11, color:"#aaa" }}>Ultima pesagem: {p._daysSinceWeigh} dias atras</div>
+                </div>
+                <div style={{ fontSize:11, padding:"3px 8px", background:"#FEF5E7", borderRadius:5, color:"#E67E22", fontWeight:600 }}>
+                  {p._daysSinceWeigh}d
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Inactive patients (orange) */}
+      {inactivePatients.length > 0 && (
+        <div style={{ marginBottom:16 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:8 }}>
+            <div style={{ width:9, height:9, borderRadius:"50%", background:"#D35400" }}/><span style={{ fontWeight:600, color:"#D35400", fontSize:13 }}>Pacientes inativos (14+ dias)</span>
+          </div>
+          {inactivePatients.map(p => (
+            <div key={`in-${p.id}`} onClick={()=>onSel(p.id)} style={{ background:"#fff", borderRadius:8, borderLeft:"4px solid #D35400", padding:"10px 12px", marginBottom:5, cursor:"pointer" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <Av name={p.name} size={24}/>
+                <div style={{ flex:1 }}>
+                  <span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span>
+                  <div style={{ fontSize:11, color:"#aaa" }}>Sem atividade recente</div>
+                </div>
+                <div style={{ fontSize:11, padding:"3px 8px", background:"#FDEBD0", borderRadius:5, color:"#D35400", fontWeight:600 }}>Inativo</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Low engagement (orange) */}
+      {lowEngagement.length > 0 && (
+        <div style={{ marginBottom:16 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:8 }}>
+            <div style={{ width:9, height:9, borderRadius:"50%", background:S.yel }}/><span style={{ fontWeight:600, color:S.yel, fontSize:13 }}>Engajamento baixo (&lt;50%)</span>
+          </div>
+          {lowEngagement.map(p => (
+            <div key={`eng-${p.id}`} onClick={()=>onSel(p.id)} style={{ background:"#fff", borderRadius:8, borderLeft:`4px solid ${S.yel}`, padding:"10px 12px", marginBottom:5, cursor:"pointer" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <Av name={p.name} size={24}/>
+                <div style={{ flex:1 }}>
+                  <span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span>
+                  <div style={{ fontSize:11, color:"#aaa" }}>S{p.week}/16</div>
+                </div>
+                <div style={{ fontSize:11, padding:"3px 8px", background:S.yelBg, borderRadius:5, color:S.yel, fontWeight:600 }}>
+                  {Math.round(p._engagement)}%
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!hasAny && <div style={{ textAlign:"center", padding:30 }}><div style={{ fontSize:32 }}>🟢</div><div style={{ fontSize:14, fontWeight:600, color:S.grn, marginTop:6 }}>Todos bem!</div></div>}
     </div>
   );
 }
@@ -4316,46 +4509,65 @@ function Agenda({ ps, onSel, mob }) {
       {/* Eventos do dia selecionado */}
       {selDay && (() => {
         const items = getDayItems(selDay);
+        const APPT_COLORS = { CONSULTA_MEDICA: '#2980B9', CONSULTA_NUTRI: '#27AE60', EXAME: '#8E44AD', OUTRO: '#F39C12' };
         return (
           <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[300]}`, padding:"12px 14px" }}>
-            <div style={{ fontSize:12, fontWeight:600, color:G[800], marginBottom:8 }}>
+            <div style={{ fontSize:12, fontWeight:600, color:G[800], marginBottom:10 }}>
               {selDay} de {MN[month]}
               <span style={{ fontSize:11, fontWeight:400, color:"#aaa", marginLeft:6 }}>{items.length} evento{items.length!==1?"s":""}</span>
             </div>
             {items.length === 0 ? (
               <div style={{ color:"#ccc", fontSize:12, textAlign:"center", padding:"12px 0" }}>Nenhum evento neste dia</div>
-            ) : items.map((item, i, arr) => item.type === 'return' ? (
-              <div key={`r${i}`} onClick={()=>onSel(item.p.id)}
-                style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
-                  borderBottom:i<arr.length-1?`1px solid ${G[50]}`:"none", cursor:"pointer" }}>
-                <div style={{ width:32,height:32,borderRadius:8,background:G[50],display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0 }}>🔄</div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{item.p.user?.name || item.p.name}</div>
-                  <div style={{ fontSize:10, color:"#aaa" }}>Retorno · S{item.p.week}/16</div>
-                </div>
-                <ChevronRightIcon size={14} color={G[400]}/>
-              </div>
             ) : (
-              <div key={`a${item.a.id}`}
-                style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
-                  borderBottom:i<arr.length-1?`1px solid ${G[50]}`:"none" }}>
-                <div style={{ width:32,height:32,borderRadius:8,background:"#fef3c7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0 }}>
-                  {item.typeInfo?.icon || '📌'}
-                </div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{item.label}</div>
-                  <div style={{ fontSize:10, color:"#aaa" }}>
-                    {item.d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
-                    {item.patientName ? ` · ${item.patientName}` : ''}
-                    {item.a.sendReminder ? ' · 📱' : ''}
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                {items.map((item, i) => item.type === 'return' ? (
+                  <div key={`r${i}`} onClick={()=>onSel(item.p.id)}
+                    style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
+                      background:G[50], borderRadius:10, borderLeft:`4px solid ${G[500]}`, cursor:"pointer" }}>
+                    <div style={{ width:32,height:32,borderRadius:8,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0 }}>🔄</div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>{item.p.user?.name || item.p.name}</div>
+                      <div style={{ fontSize:10, color:"#999" }}>Retorno · S{item.p.week}/16</div>
+                    </div>
+                    {item.p.phone && (
+                      <button onClick={e => { e.stopPropagation(); const phone = item.p.phone; const name = item.p.user?.name || item.p.name; sendWhatsAppMsg({ phone, message: `Ola ${name}! Lembramos que seu retorno esta agendado. Nos vemos em breve!`, patientId: item.p.id }).catch(()=>{}); }}
+                        style={{ padding:"5px 8px", borderRadius:6, background:"#dcf8c6", border:"1px solid #25D366", color:"#128C7E", fontSize:10, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+                        WhatsApp
+                      </button>
+                    )}
+                    <ChevronRightIcon size={14} color={G[400]}/>
                   </div>
-                </div>
-                <button onClick={()=>handleDeleteAppt(item.a.id)} disabled={deleting===item.a.id}
-                  style={{ padding:"4px 8px", borderRadius:6, border:`1px solid ${G[200]}`, background:"#fff", cursor:"pointer", fontSize:11, color:"#dc2626" }}>
-                  {deleting===item.a.id ? '...' : 'Remover'}
-                </button>
+                ) : (
+                  <div key={`a${item.a.id}`}
+                    style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
+                      background:"#fff", borderRadius:10, borderLeft:`4px solid ${APPT_COLORS[item.a.type] || '#F39C12'}`, border:`1px solid ${G[200]}` }}>
+                    <div style={{ width:32,height:32,borderRadius:8,background:(APPT_COLORS[item.a.type]||'#F39C12')+"15",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0 }}>
+                      {item.typeInfo?.icon || '📌'}
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>{item.label}</div>
+                      <div style={{ fontSize:10, color:"#999", display:"flex", alignItems:"center", gap:4, flexWrap:"wrap" }}>
+                        <span>{item.d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>
+                        {item.patientName && <><span>·</span><span style={{ fontWeight:500 }}>{item.patientName}</span></>}
+                        {item.a.notes && <><span>·</span><span>{item.a.notes}</span></>}
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", gap:4, flexShrink:0 }}>
+                      {item.a.patientId && item.a.patient?.user?.phone && (
+                        <button onClick={()=>{ const phone = item.a.patient.user.phone; const name = item.patientName || 'paciente'; sendWhatsAppMsg({ phone, message: `Ola ${name}! Lembramos da sua ${item.label.toLowerCase()} agendada para ${item.d.toLocaleDateString('pt-BR')} as ${item.d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}. Confirmamos sua presenca?`, patientId: item.a.patientId }).catch(()=>{}); }}
+                          style={{ padding:"5px 8px", borderRadius:6, background:"#dcf8c6", border:"1px solid #25D366", color:"#128C7E", fontSize:10, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+                          Lembrete
+                        </button>
+                      )}
+                      <button onClick={()=>handleDeleteAppt(item.a.id)} disabled={deleting===item.a.id}
+                        style={{ padding:"5px 8px", borderRadius:6, border:`1px solid ${G[200]}`, background:"#fff", cursor:"pointer", fontSize:10, color:"#dc2626", fontWeight:500 }}>
+                        {deleting===item.a.id ? '...' : 'Remover'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         );
       })()}
@@ -4363,18 +4575,20 @@ function Agenda({ ps, onSel, mob }) {
       {/* Próximos agendamentos */}
       {upcomingAppts.length > 0 && (
         <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px" }}>
-          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>🗓 Próximas consultas e exames</div>
-          {upcomingAppts.map((a,i,arr) => {
+          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Proximas consultas e exames</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+          {upcomingAppts.map((a) => {
             const isNow = a.d.toDateString()===today.toDateString();
             const diff  = Math.ceil((a.d - todayMidnight) / 86400000);
+            const typeColor = { CONSULTA_MEDICA: '#2980B9', CONSULTA_NUTRI: '#27AE60', EXAME: '#8E44AD', OUTRO: '#F39C12' }[a.a.type] || '#F39C12';
             return (
-              <div key={a.a.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
-                borderBottom:i<arr.length-1?`1px solid ${G[50]}`:"none" }}>
+              <div key={a.a.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
+                borderRadius:10, borderLeft:`4px solid ${typeColor}`, background:G[50] }}>
                 <div style={{ width:38, textAlign:"center", flexShrink:0 }}>
-                  <div style={{ fontSize:15, fontWeight:700, color:isNow?S.grn:"#f59e0b" }}>{a.d.getDate()}</div>
+                  <div style={{ fontSize:15, fontWeight:700, color:isNow?S.grn:typeColor }}>{a.d.getDate()}</div>
                   <div style={{ fontSize:9, color:"#aaa" }}>{MS[a.d.getMonth()]}</div>
                 </div>
-                <div style={{ width:30,height:30,borderRadius:7,background:"#fef3c7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0 }}>
+                <div style={{ width:30,height:30,borderRadius:7,background:typeColor+"15",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0 }}>
                   {a.typeInfo?.icon||'📌'}
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
@@ -4386,13 +4600,22 @@ function Agenda({ ps, onSel, mob }) {
                     {a.patientName ? ` · ${a.patientName}` : ''}
                   </div>
                 </div>
-                <Bg color={isNow?S.grn:diff<=2?S.red:diff<=5?S.yel:G[500]}
-                    bg={isNow?S.grnBg:diff<=2?S.redBg:diff<=5?S.yelBg:G[50]}>
-                  {isNow?"Hoje":`${diff}d`}
-                </Bg>
+                <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
+                  {a.a.patientId && a.a.patient?.user?.phone && (
+                    <button onClick={()=>{ const phone = a.a.patient.user.phone; const name = a.patientName || 'paciente'; sendWhatsAppMsg({ phone, message: `Ola ${name}! Lembramos da sua ${a.label.toLowerCase()} agendada para ${a.d.toLocaleDateString('pt-BR')} as ${a.d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}. Confirmamos sua presenca?`, patientId: a.a.patientId }).catch(()=>{}); }}
+                      style={{ padding:"4px 8px", borderRadius:6, background:"#dcf8c6", border:"1px solid #25D366", color:"#128C7E", fontSize:10, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+                      Lembrete
+                    </button>
+                  )}
+                  <Bg color={isNow?S.grn:diff<=2?S.red:diff<=5?S.yel:G[500]}
+                      bg={isNow?S.grnBg:diff<=2?S.redBg:diff<=5?S.yelBg:G[50]}>
+                    {isNow?"Hoje":`${diff}d`}
+                  </Bg>
+                </div>
               </div>
             );
           })}
+          </div>
         </div>
       )}
 
