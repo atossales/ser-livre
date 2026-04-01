@@ -38,7 +38,7 @@ import {
   ArrowLeft, Camera, Star, Award, Flame, Target, Zap, BarChart3,
   Trophy, CalendarDays, Weight, Home, Heart, Brain, RefreshCw, Plus, Settings, UserPlus, Cake, FileSignature, Save,
   MessageCircle, Send, ChevronLeft, ChevronRight as ChevronRightIcon,
-  Eye, EyeOff, X, Mail
+  Eye, EyeOff, X, Mail, DollarSign, Copy
 } from "lucide-react";
 
 /* ════════════════════════════════════════════
@@ -75,6 +75,14 @@ const TIER = {
   2:{ ter:"quinzenal",  psi:"quinzenal",  tr:2, nf:false },
   3:{ ter:null,         psi:null,         tr:2, nf:false },
 };
+
+const PLAN_PRICES = {
+  platinum_plus: 3500, gold_plus: 2800, platinum: 2200,
+  gold: 1800, essential_plus: 1400, essential: 990,
+};
+
+const MEAL_NAMES = ["Cafe da manha","Lanche da manha","Almoco","Lanche da tarde","Jantar","Ceia"];
+const MEAL_EMOJIS = {"Cafe da manha":"☀️","Lanche da manha":"🍎","Almoco":"🍽️","Lanche da tarde":"🥤","Jantar":"🌙","Ceia":"🍵"};
 
 const TODAY = new Date();
 const fmt   = d => { const dt = new Date(d); return `${String(dt.getDate()).padStart(2,"0")}/${String(dt.getMonth()+1).padStart(2,"0")}`; };
@@ -1892,6 +1900,19 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
   const [prontuarioText, setProntuarioText] = useState('');
   const prontuarioAuthor = (() => { try { return JSON.parse(localStorage.getItem('serlivre_user') || '{}').name || 'Equipe'; } catch { return 'Equipe'; } })();
 
+  // ── Plano Alimentar (Dieta) state ──
+  const [mealPlans, setMealPlans] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`serlivre_mealplans_${p.id}`) || '[]'); } catch { return []; }
+  });
+  const [mealPlanModalOpen, setMealPlanModalOpen] = useState(false);
+  const [editingPlan, setEditingPlan] = useState(null);
+  const [expandedMeals, setExpandedMeals] = useState({});
+  const emptyMealPlanForm = { name:'', startDate:format(new Date(),'yyyy-MM-dd'), endDate:'', calories:'', protein:'', carbs:'', fat:'', meals:MEAL_NAMES.map(n=>({name:n, items:'', notes:''})) };
+  const [mealPlanForm, setMealPlanForm] = useState(emptyMealPlanForm);
+
+  // Persist meal plans
+  useEffect(() => { localStorage.setItem(`serlivre_mealplans_${p.id}`, JSON.stringify(mealPlans)); }, [mealPlans, p.id]);
+
   const tabs = [
     {k:"ficha",          l:"Ficha",      i:User},
     {k:"jornada",        l:"Jornada",    i:ClipboardCheck},
@@ -1903,6 +1924,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
     {k:"rel",            l:"Relatório",  i:FileText},
     {k:"anamnese",       l:"Anamnese",   i:FileSignature},
     {k:"prontuario",     l:"Prontuário", i:Lucide.Stethoscope},
+    {k:"dieta",          l:"Dieta",      i:Lucide.UtensilsCrossed},
   ];
 
   return (
@@ -3497,6 +3519,174 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                   }}
                     style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
                   <button onClick={() => setProntuarioModalOpen(false)}
+                    style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ABA DIETA — Plano Alimentar */}
+      {tab==="dieta" && (
+        <div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+            <div style={{ fontSize:14, fontWeight:600, color:G[800] }}>Plano Alimentar</div>
+            <button onClick={() => { setEditingPlan(null); setMealPlanForm({...emptyMealPlanForm, meals:MEAL_NAMES.map(n=>({name:n, items:'', notes:''}))}); setMealPlanModalOpen(true); }}
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 16px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+              <Plus size={12}/>Novo plano
+            </button>
+          </div>
+
+          {mealPlans.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"40px 20px" }}>
+              <Lucide.UtensilsCrossed size={40} color={G[300]} style={{ marginBottom:12 }}/>
+              <div style={{ fontSize:14, fontWeight:600, color:G[700], marginBottom:6 }}>Nenhum plano alimentar cadastrado</div>
+              <div style={{ fontSize:12, color:"#aaa" }}>Crie um plano alimentar personalizado para o paciente.</div>
+            </div>
+          ) : (
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {[...mealPlans].sort((a,b)=>new Date(b.startDate)-new Date(a.startDate)).map(plan => {
+                const isActive = plan.active && (!plan.endDate || new Date(plan.endDate+'T23:59:59') >= new Date());
+                return (
+                  <div key={plan.id} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10, flexWrap:"wrap", gap:6 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>{plan.name || "Plano alimentar"}</div>
+                        <span style={{ fontSize:10, padding:"2px 8px", borderRadius:20, fontWeight:600, background:isActive?S.grnBg:G[100], color:isActive?S.grn:G[600], border:`1px solid ${isActive?'#A9DFBF':G[200]}` }}>{isActive?"Ativo":"Finalizado"}</span>
+                      </div>
+                      <div style={{ fontSize:10, color:"#aaa" }}>{safeFmt(plan.startDate,'dd/MM/yyyy')} — {plan.endDate?safeFmt(plan.endDate,'dd/MM/yyyy'):'Indefinido'}</div>
+                    </div>
+                    {/* Macro cards */}
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:10 }}>
+                      {[{l:"Calorias",v:`${plan.calories||0}kcal`,c:S.yel,bg:S.yelBg},{l:"Proteina",v:`${plan.protein||0}g`,c:S.red,bg:S.redBg},{l:"Carboidrato",v:`${plan.carbs||0}g`,c:S.blue,bg:S.blueBg},{l:"Gordura",v:`${plan.fat||0}g`,c:S.grn,bg:S.grnBg}].map(m=>(
+                        <div key={m.l} style={{ background:m.bg, borderRadius:8, padding:"8px 10px", textAlign:"center" }}>
+                          <div style={{ fontSize:14, fontWeight:700, color:m.c }}>{m.v}</div>
+                          <div style={{ fontSize:9, color:m.c, opacity:0.7 }}>{m.l}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Expandable meals */}
+                    <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                      {(plan.meals||[]).map((meal,mi) => {
+                        const mKey = `${plan.id}_${mi}`;
+                        const isExp = expandedMeals[mKey];
+                        const hasContent = meal.items?.trim();
+                        return (
+                          <div key={mi}>
+                            <div onClick={()=>hasContent&&setExpandedMeals(prev=>({...prev,[mKey]:!prev[mKey]}))} style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 8px", borderRadius:6, background:G[50], cursor:hasContent?"pointer":"default", fontSize:11 }}>
+                              <span>{MEAL_EMOJIS[meal.name]||"🍽️"}</span>
+                              <span style={{ fontWeight:500, color:G[800], flex:1 }}>{meal.name}</span>
+                              {hasContent && <ChevronRight size={12} color={G[400]} style={{ transform:isExp?"rotate(90deg)":"none", transition:"transform 0.15s" }}/>}
+                              {!hasContent && <span style={{ fontSize:10, color:"#ccc" }}>—</span>}
+                            </div>
+                            {isExp && hasContent && (
+                              <div style={{ padding:"6px 8px 6px 28px", fontSize:11, color:G[700], lineHeight:1.6 }}>
+                                {meal.items.split('\n').filter(Boolean).map((item,ii)=><div key={ii}>• {item}</div>)}
+                                {meal.notes?.trim() && <div style={{ fontSize:10, color:"#aaa", marginTop:4, fontStyle:"italic" }}>Obs: {meal.notes}</div>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Action buttons */}
+                    <div style={{ display:"flex", gap:6, marginTop:10, flexWrap:"wrap" }}>
+                      <button onClick={()=>{ setEditingPlan(plan.id); setMealPlanForm({...plan, meals:plan.meals||MEAL_NAMES.map(n=>({name:n,items:'',notes:''}))}); setMealPlanModalOpen(true); }}
+                        style={{ padding:"6px 12px", borderRadius:6, background:G[50], border:`1px solid ${G[300]}`, color:G[700], fontSize:10, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
+                      <button onClick={()=>{ const dup = {...plan, id:crypto.randomUUID(), name:(plan.name||"Plano")+" (copia)", startDate:format(new Date(),'yyyy-MM-dd'), endDate:'', active:true}; setMealPlans(prev=>[...prev,dup]); }}
+                        style={{ padding:"6px 12px", borderRadius:6, background:G[50], border:`1px solid ${G[300]}`, color:G[700], fontSize:10, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:4 }}><Copy size={10}/>Duplicar</button>
+                      {p.phone && (
+                        <button onClick={async()=>{
+                          let txt = `🥗 Plano Alimentar — ${plan.name||"Plano"}\nPeríodo: ${safeFmt(plan.startDate,'dd/MM/yyyy')} a ${plan.endDate?safeFmt(plan.endDate,'dd/MM/yyyy'):'Indefinido'}\nMeta: ${plan.calories||0}kcal | P:${plan.protein||0}g C:${plan.carbs||0}g G:${plan.fat||0}g\n`;
+                          (plan.meals||[]).forEach(m=>{
+                            if(m.items?.trim()){
+                              txt+=`\n${MEAL_EMOJIS[m.name]||"🍽️"} ${m.name}:\n`;
+                              m.items.split('\n').filter(Boolean).forEach(item=>{txt+=`- ${item}\n`;});
+                              if(m.notes?.trim()) txt+=`(${m.notes})\n`;
+                            }
+                          });
+                          try { await sendWhatsAppMsg({phone:p.phone, message:txt, patientId:p.id}); } catch(err) { console.warn('WhatsApp send failed:', err?.message); }
+                        }}
+                          style={{ padding:"6px 12px", borderRadius:6, background:"#dcf8c6", border:"1px solid #25D366", color:"#128C7E", fontSize:10, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:4 }}><Send size={10}/>WhatsApp</button>
+                      )}
+                      <button onClick={()=>{ setMealPlans(prev=>prev.map(mp=>mp.id===plan.id?{...mp,active:!mp.active}:mp)); }}
+                        style={{ padding:"6px 12px", borderRadius:6, background:isActive?S.redBg:S.grnBg, border:`1px solid ${isActive?'#F5B7B1':'#A9DFBF'}`, color:isActive?S.red:S.grn, fontSize:10, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>{isActive?"Desativar":"Reativar"}</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Modal novo/editar plano alimentar */}
+          {mealPlanModalOpen && (
+            <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"flex-start", justifyContent:"center", padding:16, overflowY:"auto" }}>
+              <div style={{ background:"#fff", width:"100%", maxWidth:560, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)", margin:"40px 0" }}>
+                <div style={{ fontSize:15, fontWeight:700, color:G[800], marginBottom:16 }}>{editingPlan?"Editar plano alimentar":"Novo plano alimentar"}</div>
+                {/* Plan info */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+                  <div style={{ gridColumn:"1/3" }}>
+                    <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Nome do plano</label>
+                    <input type="text" value={mealPlanForm.name} onChange={e=>setMealPlanForm(f=>({...f,name:e.target.value}))} placeholder="Semana 1-4, Fase de ataque..."
+                      style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+                  </div>
+                  <div>
+                    <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Inicio</label>
+                    <input type="date" value={mealPlanForm.startDate} onChange={e=>setMealPlanForm(f=>({...f,startDate:e.target.value}))}
+                      style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+                  </div>
+                  <div>
+                    <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Fim</label>
+                    <input type="date" value={mealPlanForm.endDate} onChange={e=>setMealPlanForm(f=>({...f,endDate:e.target.value}))}
+                      style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+                  </div>
+                </div>
+                {/* Macros */}
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:16 }}>
+                  {[{k:"calories",l:"Calorias (kcal/dia)"},{k:"protein",l:"Proteina (g)"},{k:"carbs",l:"Carboidrato (g)"},{k:"fat",l:"Gordura (g)"}].map(m=>(
+                    <div key={m.k}>
+                      <label style={{ fontSize:10, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{m.l}</label>
+                      <input type="number" value={mealPlanForm[m.k]} onChange={e=>setMealPlanForm(f=>({...f,[m.k]:e.target.value}))}
+                        style={{ width:"100%", padding:"8px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+                    </div>
+                  ))}
+                </div>
+                {/* Meals */}
+                <div style={{ fontSize:12, fontWeight:600, color:G[800], marginBottom:8 }}>Refeicoes</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:16, maxHeight:350, overflowY:"auto" }}>
+                  {(mealPlanForm.meals||[]).map((meal,mi)=>(
+                    <div key={mi} style={{ background:G[50], borderRadius:8, padding:"10px 12px" }}>
+                      <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:6 }}>{MEAL_EMOJIS[meal.name]||"🍽️"} {meal.name}</div>
+                      <div style={{ marginBottom:6 }}>
+                        <label style={{ fontSize:10, color:G[600], marginBottom:2, display:"block" }}>Alimentos (1 por linha)</label>
+                        <textarea value={meal.items} onChange={e=>{ const ms=[...mealPlanForm.meals]; ms[mi]={...ms[mi],items:e.target.value}; setMealPlanForm(f=>({...f,meals:ms})); }}
+                          rows={3} placeholder="100g frango grelhado&#10;1 xicara arroz integral&#10;Salada verde a vontade"
+                          style={{ width:"100%", padding:"8px 10px", borderRadius:6, border:`1px solid ${G[200]}`, fontSize:11, fontFamily:"inherit", resize:"vertical", boxSizing:"border-box" }}/>
+                      </div>
+                      <div>
+                        <label style={{ fontSize:10, color:G[600], marginBottom:2, display:"block" }}>Observacoes / substituicoes</label>
+                        <textarea value={meal.notes} onChange={e=>{ const ms=[...mealPlanForm.meals]; ms[mi]={...ms[mi],notes:e.target.value}; setMealPlanForm(f=>({...f,meals:ms})); }}
+                          rows={1} placeholder="Pode substituir frango por peixe..."
+                          style={{ width:"100%", padding:"7px 10px", borderRadius:6, border:`1px solid ${G[200]}`, fontSize:11, fontFamily:"inherit", resize:"vertical", boxSizing:"border-box" }}/>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={()=>{
+                    if(!mealPlanForm.name?.trim()) return;
+                    if(editingPlan){
+                      setMealPlans(prev=>prev.map(mp=>mp.id===editingPlan?{...mealPlanForm, id:editingPlan}:mp));
+                    } else {
+                      const np = {...mealPlanForm, id:crypto.randomUUID(), active:true};
+                      setMealPlans(prev=>[...prev, np]);
+                    }
+                    onLog && onLog({ action:"dieta", patientId:p.id, patientName:p.name, detail:`Plano alimentar "${mealPlanForm.name}" ${editingPlan?'atualizado':'criado'}` });
+                    setMealPlanModalOpen(false);
+                  }}
+                    style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
+                  <button onClick={()=>setMealPlanModalOpen(false)}
                     style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
                 </div>
               </div>
@@ -6357,6 +6547,247 @@ function normalizePatient(p) {
 }
 
 /* ════════════════════════════════════════════
+   CONFIGURACOES (SETTINGS)
+═══════════════════════════════════════════════ */
+function SettingsPage() {
+  const defaultSettings = {
+    welcomeWhatsApp: true, appointmentReminder: true, weighReminder: true,
+    weekStart: true, weightLossCongrats: true, inactivityAlert: true,
+  };
+  const [settings, setSettings] = useState(() => {
+    try { return {...defaultSettings, ...JSON.parse(localStorage.getItem('serlivre_settings') || '{}')}; } catch { return defaultSettings; }
+  });
+  useEffect(() => { localStorage.setItem('serlivre_settings', JSON.stringify(settings)); }, [settings]);
+
+  const toggle = (key) => setSettings(prev => ({...prev, [key]: !prev[key]}));
+
+  const notifications = [
+    {k:"welcomeWhatsApp", name:"Boas-vindas WhatsApp", desc:"Envia mensagem de boas-vindas ao cadastrar paciente", channel:"WhatsApp"},
+    {k:"appointmentReminder", name:"Lembrete de consulta", desc:"Envia lembrete 1 dia antes da consulta agendada", channel:"WhatsApp"},
+    {k:"weighReminder", name:"Lembrete de pesagem", desc:"Lembrete semanal para o paciente fazer pesagem", channel:"WhatsApp"},
+    {k:"weekStart", name:"Inicio de semana", desc:"Mensagem motivacional toda segunda-feira", channel:"WhatsApp"},
+    {k:"weightLossCongrats", name:"Parabens por perda de peso", desc:"Mensagem automatica ao registrar perda de peso", channel:"WhatsApp"},
+    {k:"inactivityAlert", name:"Alerta de inatividade", desc:"Alerta quando paciente fica 14 dias sem interacao", channel:"E-mail / WhatsApp"},
+  ];
+
+  return (
+    <div>
+      <div style={{ fontSize:16, fontWeight:700, color:G[800], marginBottom:16 }}>Configuracoes</div>
+      <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"18px 20px" }}>
+        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:14 }}>Notificacoes automaticas</div>
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {notifications.map(n => (
+            <div key={n.k} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 14px", borderRadius:8, background:G[50], border:`1px solid ${G[100]}` }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{n.name}</div>
+                <div style={{ fontSize:10, color:"#aaa", marginTop:2 }}>{n.desc}</div>
+                <div style={{ fontSize:9, color:G[400], marginTop:3 }}>Canal: {n.channel}</div>
+              </div>
+              <div onClick={()=>toggle(n.k)} style={{ width:42, height:22, borderRadius:11, background:settings[n.k]?S.grn:G[200], cursor:"pointer", position:"relative", transition:"background 0.2s", flexShrink:0 }}>
+                <div style={{ width:18, height:18, borderRadius:"50%", background:"#fff", position:"absolute", top:2, left:settings[n.k]?22:2, transition:"left 0.2s", boxShadow:"0 1px 3px rgba(0,0,0,0.2)" }}/>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize:10, color:"#aaa", marginTop:14, padding:"8px 10px", background:G[50], borderRadius:6 }}>
+          Estas configuracoes controlam as notificacoes automaticas do sistema. A automacao real depende do backend estar configurado com os cron jobs correspondentes.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
+   FINANCEIRO
+═══════════════════════════════════════════════ */
+function Financeiro({ ps }) {
+  const [records, setRecords] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('serlivre_financeiro') || '[]'); } catch { return []; }
+  });
+  const [modalOpen, setModalOpen] = useState(false);
+  const [filterMonth, setFilterMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [form, setForm] = useState({ patientId:'', tipo:'mensalidade', valor:'', data:format(new Date(),'yyyy-MM-dd'), status:'pendente', obs:'' });
+
+  useEffect(() => { localStorage.setItem('serlivre_financeiro', JSON.stringify(records)); }, [records]);
+
+  // Auto-generate monthly entries for active patients without an entry this month
+  useEffect(() => {
+    if (!ps?.length) return;
+    const month = filterMonth;
+    const existing = records.filter(r => r.data?.startsWith(month)).map(r => r.patientId);
+    const missing = ps.filter(p => p.plan && !existing.includes(p.id));
+    if (missing.length > 0) {
+      const newRecs = missing.map(p => ({
+        id: crypto.randomUUID(),
+        patientId: p.id,
+        patientName: p.name,
+        tipo: 'mensalidade',
+        planName: PLANS.find(pl=>pl.id===p.plan)?.name || p.plan,
+        valor: PLAN_PRICES[p.plan] || 0,
+        data: month + '-05',
+        status: 'pendente',
+        obs: 'Gerado automaticamente',
+      }));
+      setRecords(prev => [...prev, ...newRecs]);
+    }
+  }, [ps, filterMonth]);
+
+  const monthRecords = records.filter(r => r.data?.startsWith(filterMonth));
+  const receita = monthRecords.filter(r => r.status === 'pago').reduce((s, r) => s + (Number(r.valor) || 0), 0);
+  const pendente = monthRecords.filter(r => r.status !== 'pago').reduce((s, r) => s + (Number(r.valor) || 0), 0);
+  const pagos = monthRecords.filter(r => r.status === 'pago').length;
+  const inadimplentes = monthRecords.filter(r => r.status !== 'pago').length;
+
+  const statusColors = { pago:{bg:S.grnBg,c:S.grn,label:"Pago",icon:"✅"}, pendente:{bg:S.yelBg,c:S.yel,label:"Pendente",icon:"⏳"}, atrasado:{bg:S.redBg,c:S.red,label:"Atrasado",icon:"🔴"} };
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:G[800] }}>Financeiro</div>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <input type="month" value={filterMonth} onChange={e=>setFilterMonth(e.target.value)}
+            style={{ padding:"7px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit" }}/>
+          <button onClick={()=>{ setForm({patientId:'',tipo:'mensalidade',valor:'',data:format(new Date(),'yyyy-MM-dd'),status:'pendente',obs:''}); setModalOpen(true); }}
+            style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 16px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+            <Plus size={12}/>Novo registro
+          </button>
+        </div>
+      </div>
+
+      {/* Summary cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:16 }}>
+        <div style={{ background:S.grnBg, borderRadius:10, padding:"14px 16px", border:`1px solid #A9DFBF` }}>
+          <div style={{ fontSize:10, color:S.grn, fontWeight:500 }}>Receita total</div>
+          <div style={{ fontSize:18, fontWeight:700, color:S.grn }}>R$ {receita.toLocaleString('pt-BR')}</div>
+        </div>
+        <div style={{ background:S.redBg, borderRadius:10, padding:"14px 16px", border:`1px solid #F5B7B1` }}>
+          <div style={{ fontSize:10, color:S.red, fontWeight:500 }}>Pendente</div>
+          <div style={{ fontSize:18, fontWeight:700, color:S.red }}>R$ {pendente.toLocaleString('pt-BR')}</div>
+        </div>
+        <div style={{ background:S.blueBg, borderRadius:10, padding:"14px 16px", border:`1px solid #A9CCE3` }}>
+          <div style={{ fontSize:10, color:S.blue, fontWeight:500 }}>Saldo</div>
+          <div style={{ fontSize:18, fontWeight:700, color:S.blue }}>R$ {(receita - pendente).toLocaleString('pt-BR')}</div>
+        </div>
+        <div style={{ background:G[50], borderRadius:10, padding:"14px 16px", border:`1px solid ${G[200]}` }}>
+          <div style={{ fontSize:10, color:G[600], fontWeight:500 }}>Adimplentes / Inadimplentes</div>
+          <div style={{ fontSize:18, fontWeight:700, color:G[800] }}>{pagos} <span style={{ fontSize:12, color:"#aaa" }}>/</span> {inadimplentes}</div>
+        </div>
+      </div>
+
+      {/* Payment list */}
+      <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, overflow:"hidden" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr 1.2fr", padding:"10px 14px", background:G[50], borderBottom:`1px solid ${G[200]}`, fontSize:10, fontWeight:600, color:G[600] }}>
+          <div>Paciente</div><div>Plano</div><div>Valor</div><div>Status</div><div>Vencimento</div><div>Acoes</div>
+        </div>
+        {monthRecords.length === 0 ? (
+          <div style={{ textAlign:"center", padding:"30px 20px", color:"#aaa", fontSize:12 }}>Nenhum registro neste mes.</div>
+        ) : (
+          monthRecords.map(r => {
+            const st = statusColors[r.status] || statusColors.pendente;
+            return (
+              <div key={r.id} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr 1.2fr", padding:"10px 14px", borderBottom:`1px solid ${G[100]}`, alignItems:"center", fontSize:11 }}>
+                <div style={{ fontWeight:500, color:G[800] }}>{r.patientName || '—'}</div>
+                <div style={{ color:G[600] }}>{r.planName || r.tipo}</div>
+                <div style={{ fontWeight:600, color:G[800] }}>R$ {Number(r.valor||0).toLocaleString('pt-BR')}</div>
+                <div>
+                  <span style={{ padding:"2px 8px", borderRadius:20, fontSize:10, fontWeight:600, background:st.bg, color:st.c }}>{st.icon} {st.label}</span>
+                </div>
+                <div style={{ color:"#aaa" }}>{safeFmt(r.data, 'dd/MM')}</div>
+                <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                  {r.status !== 'pago' && (
+                    <button onClick={()=>setRecords(prev=>prev.map(x=>x.id===r.id?{...x,status:'pago'}:x))}
+                      style={{ padding:"4px 8px", borderRadius:5, background:S.grnBg, border:`1px solid #A9DFBF`, color:S.grn, fontSize:9, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Pago</button>
+                  )}
+                  {r.status !== 'pago' && (() => { const pat = ps.find(p=>p.id===r.patientId); return pat?.phone; })() && (
+                    <button onClick={async()=>{
+                      const pat = ps.find(p=>p.id===r.patientId);
+                      if(!pat?.phone) return;
+                      try { await sendWhatsAppMsg({phone:pat.phone, message:`Ola ${pat.name}! Identificamos que sua mensalidade de R$ ${Number(r.valor||0).toLocaleString('pt-BR')} referente ao plano ${r.planName||''} esta pendente. Podemos ajudar com alguma duvida? 😊`, patientId:pat.id}); } catch {}
+                    }}
+                      style={{ padding:"4px 8px", borderRadius:5, background:"#dcf8c6", border:"1px solid #25D366", color:"#128C7E", fontSize:9, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Cobranca</button>
+                  )}
+                  {r.status === 'pago' && (
+                    <button onClick={()=>setRecords(prev=>prev.map(x=>x.id===r.id?{...x,status:'pendente'}:x))}
+                      style={{ padding:"4px 8px", borderRadius:5, background:S.yelBg, border:`1px solid #F7DC6F`, color:S.yel, fontSize:9, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>Desfazer</button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* New record modal */}
+      {modalOpen && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+          <div style={{ background:"#fff", width:"100%", maxWidth:440, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+            <div style={{ fontSize:15, fontWeight:700, color:G[800], marginBottom:16 }}>Novo registro financeiro</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:16 }}>
+              <div>
+                <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Paciente</label>
+                <select value={form.patientId} onChange={e=>setForm(f=>({...f,patientId:e.target.value}))}
+                  style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}>
+                  <option value="">Selecione...</option>
+                  {(ps||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Tipo</label>
+                <select value={form.tipo} onChange={e=>setForm(f=>({...f,tipo:e.target.value}))}
+                  style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}>
+                  <option value="mensalidade">Mensalidade</option>
+                  <option value="consulta_avulsa">Consulta avulsa</option>
+                  <option value="exame">Exame</option>
+                  <option value="outro">Outro</option>
+                </select>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Valor (R$)</label>
+                  <input type="number" value={form.valor} onChange={e=>setForm(f=>({...f,valor:e.target.value}))}
+                    style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+                </div>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Data</label>
+                  <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))}
+                    style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Status</label>
+                <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))}
+                  style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}>
+                  <option value="pago">Pago</option>
+                  <option value="pendente">Pendente</option>
+                  <option value="atrasado">Atrasado</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Observacoes</label>
+                <textarea value={form.obs} onChange={e=>setForm(f=>({...f,obs:e.target.value}))} rows={2}
+                  style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", resize:"vertical", boxSizing:"border-box" }}/>
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={()=>{
+                if(!form.patientId || !form.valor) return;
+                const pat = ps.find(p=>p.id===form.patientId);
+                const nr = { ...form, id:crypto.randomUUID(), patientName:pat?.name||'', planName:form.tipo==='mensalidade'?(PLANS.find(pl=>pl.id===pat?.plan)?.name||''):form.tipo };
+                setRecords(prev=>[...prev, nr]);
+                setModalOpen(false);
+              }}
+                style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
+              <button onClick={()=>setModalOpen(false)}
+                style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
    APP PRINCIPAL
 ═══════════════════════════════════════════════ */
 export default function App() {
@@ -6518,7 +6949,7 @@ export default function App() {
   /* mensagens não lidas */
   const unreadMsgs = messages.filter(m => !m.read && m.role !== "admin").length;
 
-  const titles = { dash:"Dashboard", pat:"Pacientes", det:sp?.name||"", alert:"Central de alertas", team:"Equipe", agenda:"Agenda", msg:"Mensagens" };
+  const titles = { dash:"Dashboard", pat:"Pacientes", det:sp?.name||"", alert:"Central de alertas", team:"Equipe", agenda:"Agenda", msg:"Mensagens", settings:"Configuracoes", fin:"Financeiro" };
   const nav = [
     {k:"dash",  l:"Dashboard", i:LayoutDashboard},
     {k:"pat",   l:"Pacientes", i:Users},
@@ -6851,6 +7282,8 @@ export default function App() {
       {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog} onToast={toast} currentUser={currentUser}/>}
       {page==="agenda"&& <Agenda ps={ps} onSel={go} mob={mob}/>}
       {page==="msg"   && <Mensagens ps={ps} messages={messages} setMessages={setMessages} mob={mob}/>}
+      {page==="settings" && <SettingsPage/>}
+      {page==="fin" && <Financeiro ps={ps}/>}
     </>
   );
 
@@ -6936,7 +7369,7 @@ export default function App() {
           </div>
         </div>
         <div style={{ flex:1, paddingTop:8 }}>
-          {[...nav, {k:"team", l:"Equipe", i:Shield}].map(n => {
+          {[...nav, {k:"team", l:"Equipe", i:Shield}, {k:"fin", l:"Financeiro", i:DollarSign}, {k:"settings", l:"Configurações", i:Settings}].map(n => {
             const a = page===n.k || (n.k==="pat"&&page==="det");
             return (
               <div key={n.k} onClick={()=>{ setPage(n.k); setSid(null); }} style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 14px", cursor:"pointer", fontSize:12, fontWeight:a?600:400, background:a?"rgba(255,255,255,0.1)":"transparent", borderLeft:a?`3px solid ${G[300]}`:"3px solid transparent", color:a?"#fff":"rgba(255,255,255,0.55)", transition:"all 0.15s" }}>
