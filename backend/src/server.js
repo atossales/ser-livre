@@ -520,10 +520,24 @@ app.delete('/api/patients/:id', authRequired, requireRole('ADMIN', 'MEDICA'), as
     const patient = await prisma.patient.findUnique({ where: { id: patientId } });
     if (!patient) return res.status(404).json({ error: 'Paciente não encontrado' });
 
-    // Deleta do Supabase Auth primeiro (cascata apaga public.users via trigger)
-    await supabaseAdmin.auth.admin.deleteUser(patient.userId);
-    // Agora deleta o patient (FK de patient → users já foi removida pela cascata)
+    // Apaga todos os dados relacionados (cascata manual para garantir limpeza total)
+    const cycles = await prisma.cycle.findMany({ where: { patientId }, select: { id: true } });
+    const cycleIds = cycles.map(c => c.id);
+    if (cycleIds.length > 0) {
+      await prisma.circumference.deleteMany({ where: { cycleId: { in: cycleIds } } });
+      await prisma.scoreEntry.deleteMany({ where: { cycleId: { in: cycleIds } } });
+      await prisma.weekCheck.deleteMany({ where: { cycleId: { in: cycleIds } } });
+      await prisma.cycle.deleteMany({ where: { patientId } });
+    }
+    await prisma.alert.deleteMany({ where: { patientId } });
+    await prisma.appointment.deleteMany({ where: { patientId } });
+    await prisma.messageLog.deleteMany({ where: { patientId } });
+    await prisma.activityLog.deleteMany({ where: { patientId } });
     await prisma.patient.delete({ where: { id: patientId } });
+    await prisma.user.delete({ where: { id: patient.userId } }).catch(() => {});
+
+    // Apaga do Supabase Auth (libera o e-mail para reuso)
+    await supabaseAdmin.auth.admin.deleteUser(patient.userId).catch(() => {});
 
     res.json({ message: 'Paciente removido com sucesso.' });
   } catch (err) {
@@ -541,11 +555,27 @@ app.delete('/api/patients', authRequired, requireRole('ADMIN', 'MEDICA'), async 
     const patients = await prisma.patient.findMany({
       where: { id: { in: ids.map(Number) } }
     });
+    const patientIds = patients.map(p => p.id);
+    const userIds = patients.map(p => p.userId);
 
-    // Deleta do Supabase Auth primeiro (cascata apaga public.users via trigger)
-    // Apenas depois remove do Prisma — mesmo padrão do delete individual
-    await Promise.all(patients.map(p => supabaseAdmin.auth.admin.deleteUser(p.userId)));
-    await prisma.patient.deleteMany({ where: { id: { in: ids.map(Number) } } });
+    // Apaga todos os dados relacionados (cascata manual)
+    const cycles = await prisma.cycle.findMany({ where: { patientId: { in: patientIds } }, select: { id: true } });
+    const cycleIds = cycles.map(c => c.id);
+    if (cycleIds.length > 0) {
+      await prisma.circumference.deleteMany({ where: { cycleId: { in: cycleIds } } });
+      await prisma.scoreEntry.deleteMany({ where: { cycleId: { in: cycleIds } } });
+      await prisma.weekCheck.deleteMany({ where: { cycleId: { in: cycleIds } } });
+      await prisma.cycle.deleteMany({ where: { patientId: { in: patientIds } } });
+    }
+    await prisma.alert.deleteMany({ where: { patientId: { in: patientIds } } });
+    await prisma.appointment.deleteMany({ where: { patientId: { in: patientIds } } });
+    await prisma.messageLog.deleteMany({ where: { patientId: { in: patientIds } } });
+    await prisma.activityLog.deleteMany({ where: { patientId: { in: patientIds } } });
+    await prisma.patient.deleteMany({ where: { id: { in: patientIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: userIds } } }).catch(() => {});
+
+    // Apaga do Supabase Auth (libera e-mails para reuso)
+    await Promise.all(userIds.map(uid => supabaseAdmin.auth.admin.deleteUser(uid).catch(() => {})));
 
     res.json({ deleted: patients.length });
   } catch (err) {
