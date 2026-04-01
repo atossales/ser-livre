@@ -9,5 +9,17 @@ export default defineConfig({
       '/api': 'http://localhost:3001',
       '/uploads': 'http://localhost:3001'
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-charts': ['recharts'],
+          'vendor-dates': ['date-fns'],
+          'vendor-utils': ['axios', 'html2pdf.js'],
+        }
+      }
+    }
   }
 });
