@@ -453,13 +453,13 @@ function ProfileModal({ user, avatarSrc, onClose, onUpdate, onAvatarUpdate, toas
           <div style={{ marginBottom:18, padding:"10px 14px", background:G[50], borderRadius:8, border:`1px solid ${G[200]}` }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
-                <div style={{ fontSize:10, color:"#aaa", textTransform:"uppercase", fontWeight:600 }}>Cargo</div>
+                <div style={{ fontSize:10, color:G[500], textTransform:"uppercase", fontWeight:600 }}>Cargo</div>
                 <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>
                   {user.role === 'ADMIN' ? 'Administrador(a)' : user.role === 'MEDICA' ? 'Médico(a)' : user.role === 'ENFERMAGEM' ? 'Enfermagem' : user.role === 'NUTRICIONISTA' ? 'Nutricionista' : user.role === 'PSICOLOGA' ? 'Psicóloga' : user.role || 'Equipe'}
                 </div>
               </div>
               <div style={{ textAlign:"right" }}>
-                <div style={{ fontSize:10, color:"#aaa", textTransform:"uppercase", fontWeight:600 }}>Desde</div>
+                <div style={{ fontSize:10, color:G[500], textTransform:"uppercase", fontWeight:600 }}>Desde</div>
                 <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>{user.createdAt ? new Date(user.createdAt).toLocaleDateString('pt-BR') : '—'}</div>
               </div>
             </div>
@@ -524,7 +524,7 @@ function Mt({ value, label, icon:Icon, color, sub, trend }) {
         {Icon && <Icon size={15} color={color||G[400]}/>}
       </div>
       <div style={{ fontSize:22, fontWeight:700, color:color||G[800], lineHeight:1.2, marginTop:2 }}>{value}</div>
-      {sub   && <div style={{ fontSize:10, color:"#aaa", marginTop:1 }}>{sub}</div>}
+      {sub   && <div style={{ fontSize:10, color:G[500], marginTop:1 }}>{sub}</div>}
       {trend !== undefined && (
         <div style={{ display:"flex", alignItems:"center", gap:2, fontSize:10, fontWeight:600, color:trend>=0?S.grn:S.red, marginTop:2 }}>
           {trend>=0 ? <TrendingUp size={10}/> : <TrendingDown size={10}/>}
@@ -767,7 +767,7 @@ function Dash({  ps, onSel, mob }) {
       {/* Gráfico composição corporal */}
       <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
         <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:4 }}>Composição corporal média</div>
-        <div style={{ fontSize:10, color:"#aaa", marginBottom:8 }}>Massa magra vs massa gorda (kg) ao longo do programa</div>
+        <div style={{ fontSize:10, color:G[500], marginBottom:8 }}>Massa magra vs massa gorda (kg) ao longo do programa</div>
         <ResponsiveContainer width="100%" height={180}>
           <AreaChart data={compHist}>
             <defs>
@@ -849,7 +849,7 @@ function Dash({  ps, onSel, mob }) {
       <div style={{ display:"grid", gridTemplateColumns:gc2, gap:12 }}>
         <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
           <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:4 }}>Radar metabólico médio</div>
-          <div style={{ fontSize:10, color:"#aaa", marginBottom:6 }}>Onde os pacientes mais melhoram</div>
+          <div style={{ fontSize:10, color:G[500], marginBottom:6 }}>Onde os pacientes mais melhoram</div>
           <ResponsiveContainer width="100%" height={200}>
             <RadarChart data={pavg} outerRadius={65}>
               <PolarGrid stroke={G[200]}/><PolarAngleAxis dataKey="p" tick={{fontSize:10,fill:G[700]}}/><PolarRadiusAxis domain={[0,6]} tick={{fontSize:8,fill:"#ddd"}}/>
@@ -866,11 +866,11 @@ function Dash({  ps, onSel, mob }) {
               <Av name={p.name} size={30}/>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:12, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
-                <div style={{ fontSize:10, color:"#aaa" }}>{PLANS.find(x=>x.id===p.plan)?.name}</div>
+                <div style={{ fontSize:10, color:G[500] }}>{PLANS.find(x=>x.id===p.plan)?.name}</div>
               </div>
               <div style={{ textAlign:"right" }}>
                 <div style={{ fontSize:14, fontWeight:700, color:S.grn }}>-{p.pct.toFixed(1)}%</div>
-                <div style={{ fontSize:10, color:"#aaa" }}>-{(p.iw-p.cw).toFixed(1)}kg</div>
+                <div style={{ fontSize:10, color:G[500] }}>-{(p.iw-p.cw).toFixed(1)}kg</div>
               </div>
             </div>
           ))}
@@ -917,7 +917,7 @@ function Dash({  ps, onSel, mob }) {
                   <div style={{ height:5, width:44, background:G[100], borderRadius:3, overflow:"hidden" }}>
                     <div style={{ height:"100%", width:`${p.eng}%`, background:p.eng>=80?S.grn:p.eng>=60?S.yel:S.red, borderRadius:3 }}/>
                   </div>
-                  <div style={{ fontSize:9, color:"#aaa" }}>{p.eng}%</div>
+                  <div style={{ fontSize:9, color:G[500] }}>{p.eng}%</div>
                 </td>
                 <td style={{ padding:"8px", borderBottom:`1px solid ${G[100]}`, color:S.grn, fontWeight:600 }}>-{(p.iw-p.cw).toFixed(1)}kg</td>
               </tr>
@@ -1001,7 +1001,7 @@ function PList({  ps, onSel, mob, onAdd, onDelete }) {
                 <Av name={p.name} size={mob?36:40}/>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
-                  <div style={{ fontSize:10, color:"#aaa" }}>{PLANS.find(x=>x.id===p.plan)?.name} • S{p.week}/16 • {calcAge(p.birthDate)}a</div>
+                  <div style={{ fontSize:10, color:G[500] }}>{PLANS.find(x=>x.id===p.plan)?.name} • S{p.week}/16 • {calcAge(p.birthDate)}a</div>
                 </div>
                 <div style={{ textAlign:"right" }}>
                   <Bg color={ms.c} bg={ms.bg}>{ms.e}{ms.l}</Bg>
@@ -1092,11 +1092,11 @@ function RelTab({ p, mob, plan, met, be, mn }) {
         </div>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
           <div style={{ flex:1, minWidth:130 }}>
-            <label style={{ fontSize:10, color:"#aaa", marginBottom:2, display:"block" }}>De</label>
+            <label style={{ fontSize:10, color:G[500], marginBottom:2, display:"block" }}>De</label>
             <input type="date" value={relDe} onChange={e=>setRelDe(e.target.value)} style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:11, fontFamily:"inherit", boxSizing:"border-box" }}/>
           </div>
           <div style={{ flex:1, minWidth:130 }}>
-            <label style={{ fontSize:10, color:"#aaa", marginBottom:2, display:"block" }}>Até</label>
+            <label style={{ fontSize:10, color:G[500], marginBottom:2, display:"block" }}>Até</label>
             <input type="date" value={relAte} onChange={e=>setRelAte(e.target.value)} style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:11, fontFamily:"inherit", boxSizing:"border-box" }}/>
           </div>
           {(relDe||relAte) && <button onClick={()=>{setRelDe("");setRelAte("");}} style={{ alignSelf:"flex-end", padding:"7px 12px", borderRadius:7, background:G[50], border:`1px solid ${G[300]}`, fontSize:11, color:G[700], cursor:"pointer", fontFamily:"inherit" }}>Limpar</button>}
@@ -1259,7 +1259,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
                 <div style={{ display:"flex", height, borderRadius:4, overflow:"hidden" }}>
                   {zones.map((z, i) => (
                     <div key={i} style={{ flex:z.width, background:z.color, position:"relative" }}>
-                      <span style={{ position:"absolute", bottom:-14, left:"50%", transform:"translateX(-50%)", fontSize:8, color:"#999", whiteSpace:"nowrap" }}>{z.label}</span>
+                      <span style={{ position:"absolute", bottom:-14, left:"50%", transform:"translateX(-50%)", fontSize:9, color:"#999", whiteSpace:"nowrap" }}>{z.label}</span>
                     </div>
                   ))}
                 </div>
@@ -1349,19 +1349,19 @@ function RelTab({ p, mob, plan, met, be, mn }) {
               {/* Dados do paciente + peso */}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8, marginBottom:14 }}>
                 <div style={{ padding:"10px 12px", background:"#fff", border:`1px solid ${G[200]}`, borderRadius:8 }}>
-                  <div style={{ fontSize:9, color:"#aaa", textTransform:"uppercase", fontWeight:600 }}>Peso inicial</div>
+                  <div style={{ fontSize:9, color:G[500], textTransform:"uppercase", fontWeight:600 }}>Peso inicial</div>
                   <div style={{ fontSize:18, fontWeight:700, color:G[800] }}>{p.iw}kg</div>
                 </div>
                 <div style={{ padding:"10px 12px", background:"#fff", border:`1px solid ${G[200]}`, borderRadius:8 }}>
-                  <div style={{ fontSize:9, color:"#aaa", textTransform:"uppercase", fontWeight:600 }}>Peso atual</div>
+                  <div style={{ fontSize:9, color:G[500], textTransform:"uppercase", fontWeight:600 }}>Peso atual</div>
                   <div style={{ fontSize:18, fontWeight:700, color:G[800] }}>{p.cw}kg</div>
                 </div>
                 <div style={{ padding:"10px 12px", background:"#fff", border:`1px solid ${G[200]}`, borderRadius:8 }}>
-                  <div style={{ fontSize:9, color:"#aaa", textTransform:"uppercase", fontWeight:600 }}>Evolucao</div>
+                  <div style={{ fontSize:9, color:G[500], textTransform:"uppercase", fontWeight:600 }}>Evolucao</div>
                   <div style={{ fontSize:18, fontWeight:700, color: (p.iw-p.cw)>0 ? S.grn : (p.iw-p.cw)<0 ? S.red : G[800] }}>-{(p.iw-p.cw).toFixed(1)}kg</div>
                 </div>
                 <div style={{ padding:"10px 12px", background:"#fff", border:`1px solid ${G[200]}`, borderRadius:8 }}>
-                  <div style={{ fontSize:9, color:"#aaa", textTransform:"uppercase", fontWeight:600 }}>Perda total</div>
+                  <div style={{ fontSize:9, color:G[500], textTransform:"uppercase", fontWeight:600 }}>Perda total</div>
                   <div style={{ fontSize:18, fontWeight:700, color: S.grn }}>{p.iw>0 ? (((p.iw-p.cw)/p.iw)*100).toFixed(1) : "0.0"}%</div>
                 </div>
               </div>
@@ -1396,7 +1396,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
               </div>
               ) : (
               <div style={{ padding:"12px 14px", background:"#fff", borderRadius:8, border:`1px solid ${G[200]}`, marginBottom:14, textAlign:"center" }}>
-                <div style={{ fontSize:12, color:"#aaa" }}>Scores clínicos ainda não registrados</div>
+                <div style={{ fontSize:12, color:G[500] }}>Scores clínicos ainda não registrados</div>
                 <div style={{ fontSize:10, color:"#ccc", marginTop:2 }}>Registre na aba Scores para visualizar aqui</div>
               </div>
               )}
@@ -1409,12 +1409,12 @@ function RelTab({ p, mob, plan, met, be, mn }) {
                     <div style={{ textAlign:"center", padding:"10px 8px", background:S.blueBg, borderRadius:8 }}>
                       <div style={{ fontSize:18, fontWeight:700, color:S.blue }}>{mmLast.toFixed(1)}kg</div>
                       <div style={{ fontSize:10, color:S.blue, fontWeight:600 }}>Massa Magra</div>
-                      <div style={{ fontSize:10, color:"#aaa" }}>{(mmLast/totComp*100).toFixed(1)}% do total</div>
+                      <div style={{ fontSize:10, color:G[500] }}>{(mmLast/totComp*100).toFixed(1)}% do total</div>
                     </div>
                     <div style={{ textAlign:"center", padding:"10px 8px", background:S.yelBg, borderRadius:8 }}>
                       <div style={{ fontSize:18, fontWeight:700, color:S.yel }}>{mgLast.toFixed(1)}kg</div>
                       <div style={{ fontSize:10, color:S.yel, fontWeight:600 }}>Massa Gorda</div>
-                      <div style={{ fontSize:10, color:"#aaa" }}>{(mgLast/totComp*100).toFixed(1)}% do total</div>
+                      <div style={{ fontSize:10, color:G[500] }}>{(mgLast/totComp*100).toFixed(1)}% do total</div>
                     </div>
                   </div>
                   <div style={{ height:7, borderRadius:4, overflow:"hidden", display:"flex" }}>
@@ -1747,7 +1747,7 @@ function RelTab({ p, mob, plan, met, be, mn }) {
               <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16, marginBottom:10 }}>
                 <div style={{ width:80, height:80, borderRadius:"50%", border:`4px solid ${scoreColor}`, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column" }}>
                   <div style={{ fontSize:24, fontWeight:700, color:scoreColor }}>{serLivreScore}</div>
-                  <div style={{ fontSize:8, color:"#888" }}>/100</div>
+                  <div style={{ fontSize:9, color:"#888" }}>/100</div>
                 </div>
                 <div style={{ fontSize:10, color:"#666", maxWidth:250 }}>
                   Score composto baseado na media de todos os indicadores corporais avaliados, normalizado para uma escala de 0 a 100.
@@ -2000,7 +2000,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
         <Av name={p.name} size={40} src={avs[p.id]} onEdit={url=>setAvs(prev=>({...prev,[p.id]:url}))}/>
         <div style={{ minWidth:0 }}>
           <div style={{ fontSize:mob?15:17, fontWeight:700, color:G[800], overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
-          <div style={{ fontSize:11, color:"#aaa" }}>{plan?.name} • {calcAge(p.birthDate)}a • C{p.cycle} • S{p.week}/16</div>
+          <div style={{ fontSize:11, color:G[500] }}>{plan?.name} • {calcAge(p.birthDate)}a • C{p.cycle} • S{p.week}/16</div>
         </div>
       </div>
 
@@ -2058,17 +2058,17 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
               </div>
             )}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"6px 16px" }}>
-              <div><span style={{ color:"#aaa" }}>Telefone: </span>{p.phone}</div>
-              <div><span style={{ color:"#aaa" }}>Plano: </span>{plan?.name}</div>
-              <div><span style={{ color:"#aaa" }}>Início: </span>{p.sd}</div>
-              <div><span style={{ color:"#aaa" }}>Ciclo: </span>{p.cycle}</div>
+              <div><span style={{ color:G[500] }}>Telefone: </span>{p.phone}</div>
+              <div><span style={{ color:G[500] }}>Plano: </span>{plan?.name}</div>
+              <div><span style={{ color:G[500] }}>Início: </span>{p.sd}</div>
+              <div><span style={{ color:G[500] }}>Ciclo: </span>{p.cycle}</div>
             </div>
           </div>
           {showChangePlan && (
             <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
               <div style={{ background:"#fff", width:"100%", maxWidth:380, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
                 <div style={{ fontSize:15, fontWeight:700, color:G[800], marginBottom:6 }}>Alterar plano</div>
-                <div style={{ fontSize:12, color:"#aaa", marginBottom:16 }}>O histórico já realizado é mantido. A mudança vale a partir da semana atual.</div>
+                <div style={{ fontSize:12, color:G[500], marginBottom:16 }}>O histórico já realizado é mantido. A mudança vale a partir da semana atual.</div>
                 <div style={{ marginBottom:16 }}>
                   <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:4, display:"block" }}>Novo plano</label>
                   <select value={newPlanId} onChange={e=>setNewPlanId(e.target.value)}
@@ -2112,12 +2112,12 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                   <div style={{ textAlign:"center", padding:"10px 8px", background:S.blueBg, borderRadius:8 }}>
                     <div style={{ fontSize:20, fontWeight:700, color:S.blue }}>{mm.toFixed(1)}kg</div>
                     <div style={{ fontSize:10, color:S.blue, fontWeight:600 }}>Massa Magra</div>
-                    <div style={{ fontSize:10, color:"#aaa" }}>{pctMM}% do total</div>
+                    <div style={{ fontSize:10, color:G[500] }}>{pctMM}% do total</div>
                   </div>
                   <div style={{ textAlign:"center", padding:"10px 8px", background:S.yelBg, borderRadius:8 }}>
                     <div style={{ fontSize:20, fontWeight:700, color:S.yel }}>{mg.toFixed(1)}kg</div>
                     <div style={{ fontSize:10, color:S.yel, fontWeight:600 }}>Massa Gorda</div>
-                    <div style={{ fontSize:10, color:"#aaa" }}>{pctMG}% do total</div>
+                    <div style={{ fontSize:10, color:G[500] }}>{pctMG}% do total</div>
                   </div>
                 </div>
                 {/* Barra de composição */}
@@ -2168,9 +2168,9 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ fontSize:12, fontWeight:500, color:G[800] }}>{a.memberName||"Equipe"}</div>
-                      <div style={{ fontSize:11, color:"#aaa" }}>{a.detail}</div>
+                      <div style={{ fontSize:11, color:G[500] }}>{a.detail}</div>
                     </div>
-                    <div style={{ fontSize:10, color:"#bbb", whiteSpace:"nowrap" }}>{safeFmt(a.date,"dd/MM HH:mm")}</div>
+                    <div style={{ fontSize:10, color:G[400], whiteSpace:"nowrap" }}>{safeFmt(a.date,"dd/MM HH:mm")}</div>
                   </div>
                 );
               })}
@@ -2409,18 +2409,18 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                       {s.month?.startsWith('S') ? (
                         <>
                           <span style={{ fontSize:13, fontWeight:700, color:G[800] }}>Semana {parseInt(s.month.slice(1,3))}</span>
-                          <span style={{ fontSize:11, color:"#aaa", marginLeft:6 }}>{s.month.split(' — ')[1] || ''}</span>
+                          <span style={{ fontSize:11, color:G[500], marginLeft:6 }}>{s.month.split(' — ')[1] || ''}</span>
                         </>
                       ) : s.month?.includes(' — ') ? (
                         <>
                           <span style={{ fontSize:12, fontWeight:700, color:G[800] }}>📅 {s.month.split(' — ')[0]}</span>
-                          <span style={{ fontSize:11, color:"#aaa", marginLeft:4 }}>→ {s.month.split(' — ')[1]}</span>
+                          <span style={{ fontSize:11, color:G[500], marginLeft:4 }}>→ {s.month.split(' — ')[1]}</span>
                         </>
                       ) : (
                         <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>{s.month}</span>
                       )}
                     </div>
-                    <div style={{ fontSize:10, color:"#aaa" }}>{s.date ? format(new Date(s.date),"dd/MM/yy") : ""}</div>
+                    <div style={{ fontSize:10, color:G[500] }}>{s.date ? format(new Date(s.date),"dd/MM/yy") : ""}</div>
                   </div>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
                     {[{l:"Metabólico",v:tm,max:24,st:stm},{l:"Bem-estar",v:tb,max:18,st:stb},{l:"Mental",v:tn,max:9,st:stn}].map((x,j)=>(
@@ -2448,7 +2448,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                 {/* Período de referência — datas livres */}
                 <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"10px 14px" }}>
                   <div style={{ fontSize:12, fontWeight:600, color:G[700], marginBottom:2 }}>Período de referência</div>
-                  <div style={{ fontSize:11, color:"#aaa", marginBottom:8 }}>Informe o início e fim da semana em que este score foi coletado</div>
+                  <div style={{ fontSize:11, color:G[500], marginBottom:8 }}>Informe o início e fim da semana em que este score foi coletado</div>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                     <div>
                       <label style={{ fontSize:10, fontWeight:500, color:G[600], display:"block", marginBottom:3 }}>Início da semana</label>
@@ -2563,7 +2563,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                 {/* Gráfico evolução normalizada (%) */}
                 <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
                   <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:2 }}>Evolução mensal — % do máximo</div>
-                  <div style={{ fontSize:10, color:"#aaa", marginBottom:8 }}>Comparação normalizada entre os 3 pilares</div>
+                  <div style={{ fontSize:10, color:G[500], marginBottom:8 }}>Comparação normalizada entre os 3 pilares</div>
                   <ResponsiveContainer width="100%" height={220}>
                     <LineChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/>
@@ -2581,7 +2581,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                 {/* Gráfico scores absolutos */}
                 <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
                   <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:2 }}>Scores absolutos por mês</div>
-                  <div style={{ fontSize:10, color:"#aaa", marginBottom:8 }}>Metabólico (0-24) · Bem-estar (0-18) · Mental (0-9)</div>
+                  <div style={{ fontSize:10, color:G[500], marginBottom:8 }}>Metabólico (0-24) · Bem-estar (0-18) · Mental (0-9)</div>
                   <ResponsiveContainer width="100%" height={200}>
                     <BarChart data={chartData} barCategoryGap="25%">
                       <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/>
@@ -3073,9 +3073,9 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                         </ResponsiveContainer>
                         <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", textAlign:"center" }}>
                           <div style={{ fontSize:20, fontWeight:800, color:G[700] }}>{fatPct.toFixed(1)}%</div>
-                          <div style={{ fontSize:8, color:G[500] }}>gordura</div>
+                          <div style={{ fontSize:9, color:G[500] }}>gordura</div>
                           <div style={{ fontSize:11, fontWeight:600, color:S.grn }}>{leanPct.toFixed(1)}%</div>
-                          <div style={{ fontSize:8, color:G[500] }}>magra</div>
+                          <div style={{ fontSize:9, color:G[500] }}>magra</div>
                         </div>
                       </div>
                     )}
@@ -3356,7 +3356,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
         );
         const fieldReadOnly = (label, value) => (
           <div style={{ marginBottom:8 }}>
-            <div style={{ fontSize:10, color:"#aaa", fontWeight:500, marginBottom:2 }}>{label}</div>
+            <div style={{ fontSize:10, color:G[500], fontWeight:500, marginBottom:2 }}>{label}</div>
             <div style={{ fontSize:12, color:G[800] }}>{value || "--"}</div>
           </div>
         );
@@ -3440,7 +3440,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
             <div style={{ textAlign:"center", padding:"40px 20px" }}>
               <FileSignature size={40} color={G[300]} style={{ marginBottom:12 }}/>
               <div style={{ fontSize:14, fontWeight:600, color:G[700], marginBottom:6 }}>Anamnese nao preenchida</div>
-              <div style={{ fontSize:12, color:"#aaa", marginBottom:16 }}>Preencha a anamnese na primeira consulta do paciente.</div>
+              <div style={{ fontSize:12, color:G[500], marginBottom:16 }}>Preencha a anamnese na primeira consulta do paciente.</div>
               <button onClick={() => setAnamneseEditing(true)}
                 style={{ padding:"10px 24px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Preencher anamnese</button>
             </div>
@@ -3527,7 +3527,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
             <div style={{ textAlign:"center", padding:"40px 20px" }}>
               <Lucide.Stethoscope size={40} color={G[300]} style={{ marginBottom:12 }}/>
               <div style={{ fontSize:14, fontWeight:600, color:G[700], marginBottom:6 }}>Nenhuma anotacao no prontuario</div>
-              <div style={{ fontSize:12, color:"#aaa" }}>Registre anotacoes clinicas a cada consulta.</div>
+              <div style={{ fontSize:12, color:G[500] }}>Registre anotacoes clinicas a cada consulta.</div>
             </div>
           ) : (
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -3540,7 +3540,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                       </div>
                       <div>
                         <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{note.author}</div>
-                        <div style={{ fontSize:10, color:"#aaa" }}>{safeFmt(note.date, "dd/MM/yyyy")}</div>
+                        <div style={{ fontSize:10, color:G[500] }}>{safeFmt(note.date, "dd/MM/yyyy")}</div>
                       </div>
                     </div>
                     <button onClick={() => setProntuarioNotes(prev => prev.filter(n => n.id !== note.id))}
@@ -3609,7 +3609,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
             <div style={{ textAlign:"center", padding:"40px 20px" }}>
               <Lucide.UtensilsCrossed size={40} color={G[300]} style={{ marginBottom:12 }}/>
               <div style={{ fontSize:14, fontWeight:600, color:G[700], marginBottom:6 }}>Nenhum plano alimentar cadastrado</div>
-              <div style={{ fontSize:12, color:"#aaa" }}>Crie um plano alimentar personalizado para o paciente.</div>
+              <div style={{ fontSize:12, color:G[500] }}>Crie um plano alimentar personalizado para o paciente.</div>
             </div>
           ) : (
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
@@ -3622,7 +3622,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                         <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>{plan.name || "Plano alimentar"}</div>
                         <span style={{ fontSize:10, padding:"2px 8px", borderRadius:20, fontWeight:600, background:isActive?S.grnBg:G[100], color:isActive?S.grn:G[600], border:`1px solid ${isActive?'#A9DFBF':G[200]}` }}>{isActive?"Ativo":"Finalizado"}</span>
                       </div>
-                      <div style={{ fontSize:10, color:"#aaa" }}>{safeFmt(plan.startDate,'dd/MM/yyyy')} — {plan.endDate?safeFmt(plan.endDate,'dd/MM/yyyy'):'Indefinido'}</div>
+                      <div style={{ fontSize:10, color:G[500] }}>{safeFmt(plan.startDate,'dd/MM/yyyy')} — {plan.endDate?safeFmt(plan.endDate,'dd/MM/yyyy'):'Indefinido'}</div>
                     </div>
                     {/* Macro cards */}
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:10 }}>
@@ -3650,7 +3650,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                             {isExp && hasContent && (
                               <div style={{ padding:"6px 8px 6px 28px", fontSize:11, color:G[700], lineHeight:1.6 }}>
                                 {meal.items.split('\n').filter(Boolean).map((item,ii)=><div key={ii}>• {item}</div>)}
-                                {meal.notes?.trim() && <div style={{ fontSize:10, color:"#aaa", marginTop:4, fontStyle:"italic" }}>Obs: {meal.notes}</div>}
+                                {meal.notes?.trim() && <div style={{ fontSize:10, color:G[500], marginTop:4, fontStyle:"italic" }}>Obs: {meal.notes}</div>}
                               </div>
                             )}
                           </div>
@@ -4216,7 +4216,7 @@ function Alerts({ ps, onSel, onResolve }) {
                 <Av name={p.name} size={24}/>
                 <div style={{ flex:1 }}>
                   <span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span>
-                  <div style={{ fontSize:11, color:"#aaa" }}>S{p.week}/16</div>
+                  <div style={{ fontSize:11, color:G[500] }}>S{p.week}/16</div>
                 </div>
                 <div style={{ fontSize:11, padding:"3px 8px", background:S.blueBg, borderRadius:5, color:S.blue, fontWeight:600 }}>
                   {p._diffDays === 0 ? "Hoje" : p._diffDays === 1 ? "Amanha" : `${p._diffDays} dias`}
@@ -4239,7 +4239,7 @@ function Alerts({ ps, onSel, onResolve }) {
                 <Av name={p.name} size={24}/>
                 <div style={{ flex:1 }}>
                   <span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span>
-                  <div style={{ fontSize:11, color:"#aaa" }}>Ultima pesagem: {p._daysSinceWeigh} dias atras</div>
+                  <div style={{ fontSize:11, color:G[500] }}>Ultima pesagem: {p._daysSinceWeigh} dias atras</div>
                 </div>
                 <div style={{ fontSize:11, padding:"3px 8px", background:"#FEF5E7", borderRadius:5, color:"#E67E22", fontWeight:600 }}>
                   {p._daysSinceWeigh}d
@@ -4262,7 +4262,7 @@ function Alerts({ ps, onSel, onResolve }) {
                 <Av name={p.name} size={24}/>
                 <div style={{ flex:1 }}>
                   <span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span>
-                  <div style={{ fontSize:11, color:"#aaa" }}>Sem atividade recente</div>
+                  <div style={{ fontSize:11, color:G[500] }}>Sem atividade recente</div>
                 </div>
                 <div style={{ fontSize:11, padding:"3px 8px", background:"#FDEBD0", borderRadius:5, color:"#D35400", fontWeight:600 }}>Inativo</div>
               </div>
@@ -4283,7 +4283,7 @@ function Alerts({ ps, onSel, onResolve }) {
                 <Av name={p.name} size={24}/>
                 <div style={{ flex:1 }}>
                   <span style={{ fontWeight:600, fontSize:12 }}>{p.name}</span>
-                  <div style={{ fontSize:11, color:"#aaa" }}>S{p.week}/16</div>
+                  <div style={{ fontSize:11, color:G[500] }}>S{p.week}/16</div>
                 </div>
                 <div style={{ fontSize:11, padding:"3px 8px", background:S.yelBg, borderRadius:5, color:S.yel, fontWeight:600 }}>
                   {Math.round(p._engagement)}%
@@ -4358,8 +4358,8 @@ function TeamP({ team, setTeam, ta, setTa, activityLog, onToast, currentUser }) 
           <Av name={m.name} size={56} src={ta[m.id]} onEdit={url=>setTa(pr=>({...pr,[m.id]:url}))}/>
           <div style={{ flex:1 }}>
             <div style={{ fontWeight:700, fontSize:15, color:G[800] }}>{m.name}</div>
-            <div style={{ fontSize:11, color:"#aaa", marginTop:2 }}>{m.specialty} • {m.email}</div>
-            <div style={{ fontSize:11, color:"#aaa" }}>{m.phone}</div>
+            <div style={{ fontSize:11, color:G[500], marginTop:2 }}>{m.specialty} • {m.email}</div>
+            <div style={{ fontSize:11, color:G[500] }}>{m.phone}</div>
             <div style={{ marginTop:6 }}><Bg color={roleInfo.color} bg={roleInfo.color+"22"}>{roleInfo.label}</Bg></div>
           </div>
         </div>
@@ -4379,9 +4379,9 @@ function TeamP({ team, setTeam, ta, setTa, activityLog, onToast, currentUser }) 
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:12, fontWeight:500, color:G[800] }}>{a.patientName}</div>
-                  <div style={{ fontSize:11, color:"#aaa" }}>{a.detail}</div>
+                  <div style={{ fontSize:11, color:G[500] }}>{a.detail}</div>
                 </div>
-                <div style={{ fontSize:10, color:"#bbb", whiteSpace:"nowrap" }}>{safeFmt(a.date,"dd/MM HH:mm")}</div>
+                <div style={{ fontSize:10, color:G[400], whiteSpace:"nowrap" }}>{safeFmt(a.date,"dd/MM HH:mm")}</div>
               </div>
             );
           })}
@@ -4451,8 +4451,8 @@ function TeamP({ team, setTeam, ta, setTa, activityLog, onToast, currentUser }) 
                 <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{m.name}</div>
                 {isMe && <span style={{ fontSize:9, background:G[100], color:G[700], borderRadius:4, padding:"1px 5px", fontWeight:600 }}>Você</span>}
               </div>
-              <div style={{ fontSize:11, color:"#aaa", marginTop:2 }}>{m.specialty} • {m.email}</div>
-              <div style={{ fontSize:10, color:"#bbb", marginTop:2 }}>{mLog.length} atividades registradas</div>
+              <div style={{ fontSize:11, color:G[500], marginTop:2 }}>{m.specialty} • {m.email}</div>
+              <div style={{ fontSize:10, color:G[400], marginTop:2 }}>{mLog.length} atividades registradas</div>
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:5, alignItems:"flex-end" }}>
               <Bg color={roleInfo.color} bg={roleInfo.color+"22"}>{roleInfo.label}</Bg>
@@ -4735,7 +4735,7 @@ function Agenda({ ps, onSel, mob }) {
           </button>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", textAlign:"center", marginBottom:4 }}>
-          {DN.map((d,i) => <div key={i} style={{ fontSize:9, color:"#bbb", fontWeight:600, padding:"2px 0" }}>{d}</div>)}
+          {DN.map((d,i) => <div key={i} style={{ fontSize:9, color:G[400], fontWeight:600, padding:"2px 0" }}>{d}</div>)}
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2 }}>
           {Array.from({length:totalCells},(_,i) => {
@@ -4861,7 +4861,7 @@ function Agenda({ ps, onSel, mob }) {
                   <div style={{ fontSize:12, fontWeight:600, color:G[800], overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {a.label}
                   </div>
-                  <div style={{ fontSize:10, color:"#aaa" }}>
+                  <div style={{ fontSize:10, color:G[500] }}>
                     {a.d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
                     {a.patientName ? ` · ${a.patientName}` : ''}
                   </div>
@@ -4907,7 +4907,7 @@ function Agenda({ ps, onSel, mob }) {
               <Av name={a.p.user?.name || a.p.name} size={32}/>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:12, fontWeight:600, color:G[800], overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.p.user?.name || a.p.name}</div>
-                <div style={{ fontSize:10, color:"#aaa" }}>{plan?.name} · S{a.p.week}/16</div>
+                <div style={{ fontSize:10, color:G[500] }}>{plan?.name} · S{a.p.week}/16</div>
               </div>
               <Bg color={isNow?S.grn:diff<=2?S.red:diff<=5?S.yel:G[500]}
                   bg={isNow?S.grnBg:diff<=2?S.redBg:diff<=5?S.yelBg:G[50]}>
@@ -4968,11 +4968,17 @@ const TPL_CATEGORIES = {
 
 function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) {
   // ── Main tab state ──
-  const [activeTab, setActiveTab] = useState('templates'); // 'templates' | 'historico'
+  const [activeTab, setActiveTab] = useState('templates'); // 'templates' | 'historico' | 'programadas'
   const [templates, setTemplates] = useState([]);
   const [loadingTpls, setLoadingTpls] = useState(true);
   const [historyMsgs, setHistoryMsgs] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // ── Scheduled messages state ──
+  const [schedMsgs, setSchedMsgs] = useState([]);
+  const [loadingSched, setLoadingSched] = useState(false);
+  const [schedFilter, setSchedFilter] = useState('todas'); // 'todas' | 'appointment' | 'weekly' | 'weighin'
+  const [sendingSchedId, setSendingSchedId] = useState(null);
 
   // ── Template CRUD modal ──
   const [tplModal, setTplModal] = useState(null); // null | 'new' | {id,...}
@@ -5018,6 +5024,110 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
   }, []);
 
   useEffect(() => { if (activeTab === 'historico') loadHistory(); }, [activeTab, loadHistory]);
+
+  // ── Helper: get next weekday ──
+  const getNextWeekday = useCallback((dayOfWeek) => {
+    const now = new Date();
+    const d = new Date(now);
+    d.setDate(d.getDate() + ((dayOfWeek + 7 - d.getDay()) % 7 || 7));
+    d.setHours(9, 0, 0, 0);
+    // If today IS that day and it's before 9am, use today
+    if (now.getDay() === dayOfWeek && now.getHours() < 9) {
+      d.setDate(now.getDate());
+    }
+    return d;
+  }, []);
+
+  // ── Load scheduled messages ──
+  const loadScheduled = useCallback(async () => {
+    setLoadingSched(true);
+    try {
+      const apptRes = await getAppointments();
+      const appointments = Array.isArray(apptRes.data) ? apptRes.data : [];
+
+      const now = new Date();
+      const oneWeekLater = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      // Upcoming appointment reminders (next 7 days)
+      const upcomingAppts = appointments.filter(a => {
+        const d = new Date(a.date);
+        return d >= now && d <= oneWeekLater;
+      }).map(a => {
+        const patient = ps.find(p => p.id === a.patientId);
+        return {
+          id: `appt-${a.id}`,
+          type: 'appointment',
+          patient,
+          date: a.date,
+          message: `Lembrete: sua consulta esta marcada para ${safeFmt(a.date, "dd/MM 'as' HH:mm")}`,
+          fullMessage: `Ola ${patient?.name || 'paciente'}, este e um lembrete da sua consulta agendada para ${safeFmt(a.date, "dd/MM/yyyy 'as' HH:mm")}. Equipe Ser Livre.`,
+          channel: 'whatsapp',
+          status: 'agendada',
+        };
+      }).filter(m => m.patient);
+
+      // Next Monday — weekly "Inicio de semana" messages
+      const nextMonday = getNextWeekday(1);
+      const weeklyMsgs = ps.filter(p => p.phone).map(p => ({
+        id: `weekly-${p.id}`,
+        type: 'weekly',
+        patient: p,
+        date: nextMonday.toISOString(),
+        message: `Inicio de semana — S${p.week || 1}/16`,
+        fullMessage: `Ola ${p.name || 'paciente'}, boa semana! Voce esta na semana ${p.week || 1} do seu programa Ser Livre. Continue firme, a equipe esta com voce!`,
+        channel: 'whatsapp',
+        status: 'agendada',
+      }));
+
+      // Next Thursday — weigh-in reminders for patients who haven't weighed in recently
+      const nextThursday = getNextWeekday(4);
+      const weighInMsgs = ps.filter(p => {
+        if (!p.phone) return false;
+        const hist = p.history || [];
+        const lastWeighIn = hist[hist.length - 1];
+        if (!lastWeighIn) return true;
+        return (Date.now() - new Date(lastWeighIn.date).getTime()) > 5 * 24 * 60 * 60 * 1000;
+      }).map(p => ({
+        id: `weighin-${p.id}`,
+        type: 'weighin',
+        patient: p,
+        date: nextThursday.toISOString(),
+        message: `Lembrete de pesagem semanal`,
+        fullMessage: `Ola ${p.name || 'paciente'}, nao esqueca de registrar seu peso esta semana! A pesagem regular e fundamental para acompanharmos sua evolucao. Equipe Ser Livre.`,
+        channel: 'whatsapp',
+        status: 'agendada',
+      }));
+
+      setSchedMsgs([...upcomingAppts, ...weeklyMsgs, ...weighInMsgs]);
+    } catch (e) {
+      console.error('Erro ao carregar mensagens programadas:', e);
+      setSchedMsgs([]);
+    } finally {
+      setLoadingSched(false);
+    }
+  }, [ps, getNextWeekday]);
+
+  useEffect(() => { if (activeTab === 'programadas') loadScheduled(); }, [activeTab, loadScheduled]);
+
+  // ── Send scheduled message now ──
+  const handleSendSchedNow = async (msg) => {
+    if (!msg.patient?.phone) return;
+    setSendingSchedId(msg.id);
+    try {
+      await sendWhatsAppMsg({ phone: msg.patient.phone, message: msg.fullMessage, patientId: msg.patient.id });
+      setSchedMsgs(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'enviada' } : m));
+    } catch (e) {
+      console.error('Erro ao enviar mensagem:', e);
+    } finally {
+      setSendingSchedId(null);
+    }
+  };
+
+  // ── Filtered scheduled messages ──
+  const filteredSched = useMemo(() => {
+    if (schedFilter === 'todas') return schedMsgs;
+    return schedMsgs.filter(m => m.type === schedFilter);
+  }, [schedMsgs, schedFilter]);
 
   // ── Extract variables from body ──
   const extractVars = (body) => {
@@ -5635,6 +5745,99 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
   );
 
   // ══════════════════════════════════════════
+  //  RENDER: Programadas list
+  // ══════════════════════════════════════════
+  const SCHED_TYPES = {
+    appointment: { label:'Consultas', dot:S.blue, dotBg:S.blueBg },
+    weekly:      { label:'Inicio de semana', dot:S.grn, dotBg:S.grnBg },
+    weighin:     { label:'Pesagem', dot:S.yel, dotBg:S.yelBg },
+  };
+
+  const programadasList = (
+    <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:16 }}>
+      {/* Filter pills */}
+      <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
+        {[['todas','Todas'],['appointment','Consultas'],['weekly','Inicio de semana'],['weighin','Pesagem']].map(([k,l]) => (
+          <button key={k} onClick={() => setSchedFilter(k)}
+            style={{ ...pillActive,
+              background: schedFilter === k ? G[600] : '#fff',
+              color: schedFilter === k ? '#fff' : G[700],
+              border: schedFilter === k ? `1.5px solid ${G[600]}` : `1.5px solid ${G[200]}` }}>
+            {l}
+          </button>
+        ))}
+        <span style={{ fontSize:11, color:G[500], marginLeft:4 }}>
+          {filteredSched.length} mensagem{filteredSched.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {loadingSched ? (
+        <div style={{ padding:40, textAlign:'center', color:G[500], fontSize:12 }}>Carregando mensagens programadas...</div>
+      ) : filteredSched.length === 0 ? (
+        <div style={{ padding:40, textAlign:'center', color:'#ccc', fontSize:12 }}>
+          Nenhuma mensagem programada {schedFilter !== 'todas' ? 'nesta categoria' : ''}.
+        </div>
+      ) : filteredSched.map(msg => {
+        const patientName = msg.patient?.name || 'Paciente';
+        const typeInfo = SCHED_TYPES[msg.type] || SCHED_TYPES.appointment;
+        const isSent = msg.status === 'enviada';
+        return (
+          <div key={msg.id} style={{ background:'#fff', borderRadius:10, border:`1px solid ${G[100]}`,
+            padding:'14px 16px', display:'flex', flexDirection:'column', gap:6, opacity: isSent ? 0.7 : 1 }}>
+            {/* Top row */}
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              {/* Colored dot */}
+              <div style={{ width:10, height:10, borderRadius:'50%', background:typeInfo.dot, flexShrink:0 }}/>
+              <Av name={patientName} size={28} src={msg.patient?.avatar}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <span style={{ fontSize:13, fontWeight:700, color:G[800] }}>{patientName}</span>
+                {msg.patient?.phone && <span style={{ fontSize:10, color:G[400], marginLeft:6 }}>{maskPhone(msg.patient.phone)}</span>}
+              </div>
+              {/* Channel badge */}
+              <span style={{ fontSize:9, fontWeight:700, padding:'2px 8px', borderRadius:10,
+                color:'#25D366', background:'#25D36615' }}>
+                WhatsApp
+              </span>
+            </div>
+            {/* Message preview */}
+            <div style={{ fontSize:11, color:'#999', lineHeight:1.4, paddingLeft:46,
+              overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box',
+              WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
+              {msg.message}
+            </div>
+            {/* Bottom row */}
+            <div style={{ display:'flex', alignItems:'center', gap:8, paddingLeft:46, flexWrap:'wrap' }}>
+              {/* Type badge */}
+              <span style={{ fontSize:9, fontWeight:600, padding:'2px 8px', borderRadius:10,
+                color:typeInfo.dot, background:typeInfo.dotBg }}>{typeInfo.label}</span>
+              {/* Date */}
+              <span style={{ fontSize:10, color:G[500] }}>
+                {safeFmt(msg.date, "dd/MM 'as' HH:mm")}
+              </span>
+              {/* Status badge */}
+              <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:10,
+                color: isSent ? S.grn : S.yel,
+                background: isSent ? S.grnBg : S.yelBg }}>
+                {isSent ? 'Enviada' : 'Agendada'}
+              </span>
+              {/* Send now button */}
+              {!isSent && msg.patient?.phone && (
+                <button onClick={() => handleSendSchedNow(msg)} disabled={sendingSchedId === msg.id}
+                  style={{ marginLeft:'auto', padding:'4px 12px', borderRadius:6, fontSize:10, fontWeight:600,
+                    border:'none', background:G[600], color:'#fff', cursor:'pointer', fontFamily:'inherit',
+                    opacity: sendingSchedId === msg.id ? 0.5 : 1, display:'inline-flex', alignItems:'center', gap:4 }}>
+                  <Send size={10}/>
+                  {sendingSchedId === msg.id ? 'Enviando...' : 'Enviar agora'}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // ══════════════════════════════════════════
   //  MAIN RETURN
   // ══════════════════════════════════════════
   return (
@@ -5649,18 +5852,14 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
             <h2 style={{ fontSize:18, fontWeight:700, color:G[800], margin:0 }}>Comunicacao</h2>
             {/* Toggle pills */}
             <div style={{ display:'flex', gap:4, background:G[50], borderRadius:22, padding:3 }}>
-              <button onClick={() => setActiveTab('templates')}
-                style={{ ...pillActive,
-                  background: activeTab === 'templates' ? G[600] : 'transparent',
-                  color: activeTab === 'templates' ? '#fff' : G[700] }}>
-                Templates
-              </button>
-              <button onClick={() => setActiveTab('historico')}
-                style={{ ...pillActive,
-                  background: activeTab === 'historico' ? G[600] : 'transparent',
-                  color: activeTab === 'historico' ? '#fff' : G[700] }}>
-                Historico
-              </button>
+              {[{k:'templates',l:'Templates'},{k:'historico',l:'Historico'},{k:'programadas',l:'Programadas'}].map(tab => (
+                <button key={tab.k} onClick={() => setActiveTab(tab.k)}
+                  style={{ ...pillActive,
+                    background: activeTab === tab.k ? G[600] : 'transparent',
+                    color: activeTab === tab.k ? '#fff' : G[700] }}>
+                  {tab.l}
+                </button>
+              ))}
             </div>
           </div>
           <div style={{ display:'flex', gap:8 }}>
@@ -5675,7 +5874,7 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
         </div>
 
         {/* Tab content */}
-        {activeTab === 'templates' ? templatesGrid : historicoList}
+        {activeTab === 'templates' ? templatesGrid : activeTab === 'historico' ? historicoList : programadasList}
       </div>
     </>
   );
@@ -5792,13 +5991,13 @@ function MinhaSemana({ p }) {
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
         <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px", textAlign:"center" }}>
           <div style={{ fontSize:20, fontWeight:700, color:G[700] }}>{p?.cw || "—"}kg</div>
-          <div style={{ fontSize:10, color:"#aaa", marginTop:2 }}>Peso atual</div>
+          <div style={{ fontSize:10, color:G[500], marginTop:2 }}>Peso atual</div>
         </div>
         <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${perdaKg > 0 ? S.grn : G[200]}`, padding:"12px 14px", textAlign:"center" }}>
           <div style={{ fontSize:20, fontWeight:700, color: perdaKg > 0 ? S.grn : "#bbb" }}>
             {perdaKg > 0 ? `-${perdaKg.toFixed(1).replace(".",",")}kg` : "—"}
           </div>
-          <div style={{ fontSize:10, color:"#aaa", marginTop:2 }}>Perda total</div>
+          <div style={{ fontSize:10, color:G[500], marginTop:2 }}>Perda total</div>
         </div>
       </div>
     </div>
@@ -5905,7 +6104,7 @@ function Portal({  p, av, setAv }) {
             <div style={{ textAlign:"center", padding:"10px 8px", background:S.blueBg, borderRadius:8 }}>
               <div style={{ fontSize:20, fontWeight:700, color:S.blue }}>{curMM.toFixed(1)}kg</div>
               <div style={{ fontSize:10, color:S.blue, fontWeight:600 }}>Massa Magra</div>
-              <div style={{ fontSize:9, color:"#aaa" }}>{pctMM}%</div>
+              <div style={{ fontSize:9, color:G[500] }}>{pctMM}%</div>
               {prevMM > 0 && (() => {
                 const d = curMM - prevMM;
                 return d !== 0 ? <span style={{ fontSize:9, fontWeight:600, padding:"1px 5px", borderRadius:4, background:d>0?S.grnBg:S.redBg, color:d>0?S.grn:S.red }}>{d>0?'+':''}{d.toFixed(1)}kg</span> : null;
@@ -5914,7 +6113,7 @@ function Portal({  p, av, setAv }) {
             <div style={{ textAlign:"center", padding:"10px 8px", background:S.yelBg, borderRadius:8 }}>
               <div style={{ fontSize:20, fontWeight:700, color:S.yel }}>{curMG.toFixed(1)}kg</div>
               <div style={{ fontSize:10, color:S.yel, fontWeight:600 }}>Massa Gorda</div>
-              <div style={{ fontSize:9, color:"#aaa" }}>{pctMG}%</div>
+              <div style={{ fontSize:9, color:G[500] }}>{pctMG}%</div>
               {prevMG > 0 && (() => {
                 const d = curMG - prevMG;
                 return d !== 0 ? <span style={{ fontSize:9, fontWeight:600, padding:"1px 5px", borderRadius:4, background:d<0?S.grnBg:S.redBg, color:d<0?S.grn:S.red }}>{d>0?'+':''}{d.toFixed(1)}kg</span> : null;
@@ -5960,7 +6159,7 @@ function Portal({  p, av, setAv }) {
       </>) : (
         <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"20px 14px", textAlign:"center" }}>
           <Activity size={24} color={G[300]} style={{ marginBottom:6 }}/>
-          <div style={{ fontSize:12, color:"#aaa" }}>Aguardando primeira avaliacao</div>
+          <div style={{ fontSize:12, color:G[500] }}>Aguardando primeira avaliacao</div>
         </div>
       )}
 
@@ -5993,7 +6192,7 @@ function Portal({  p, av, setAv }) {
               const d = prev ? (cur - prev) : null;
               return (
                 <div key={f.key} style={{ padding:"8px 10px", background:G[50], borderRadius:8 }}>
-                  <div style={{ fontSize:10, color:"#aaa", marginBottom:2 }}>{f.label}</div>
+                  <div style={{ fontSize:10, color:G[500], marginBottom:2 }}>{f.label}</div>
                   <div style={{ display:"flex", alignItems:"center", gap:4 }}>
                     <span style={{ fontSize:14, fontWeight:700, color:G[800] }}>{parseFloat(cur).toFixed(1)}cm</span>
                     {d != null && d !== 0 && (
@@ -6045,12 +6244,12 @@ function Portal({  p, av, setAv }) {
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
         <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Meus Dados</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px 16px", fontSize:12 }}>
-          <div><span style={{ color:"#aaa" }}>Nome: </span><span style={{ color:G[800] }}>{p.name}</span></div>
-          <div><span style={{ color:"#aaa" }}>Plano: </span><span style={{ color:G[800] }}>{plan?.name}</span></div>
-          <div><span style={{ color:"#aaa" }}>Telefone: </span><span style={{ color:G[800] }}>{p.phone || "--"}</span></div>
-          <div><span style={{ color:"#aaa" }}>Email: </span><span style={{ color:G[800] }}>{p.email || "--"}</span></div>
-          <div><span style={{ color:"#aaa" }}>Nascimento: </span><span style={{ color:G[800] }}>{p.birthDate ? safeFmt(p.birthDate, "dd/MM/yyyy") : "--"}</span></div>
-          <div><span style={{ color:"#aaa" }}>Ciclo: </span><span style={{ color:G[800] }}>{p.cycle}</span></div>
+          <div><span style={{ color:G[500] }}>Nome: </span><span style={{ color:G[800] }}>{p.name}</span></div>
+          <div><span style={{ color:G[500] }}>Plano: </span><span style={{ color:G[800] }}>{plan?.name}</span></div>
+          <div><span style={{ color:G[500] }}>Telefone: </span><span style={{ color:G[800] }}>{p.phone || "--"}</span></div>
+          <div><span style={{ color:G[500] }}>Email: </span><span style={{ color:G[800] }}>{p.email || "--"}</span></div>
+          <div><span style={{ color:G[500] }}>Nascimento: </span><span style={{ color:G[800] }}>{p.birthDate ? safeFmt(p.birthDate, "dd/MM/yyyy") : "--"}</span></div>
+          <div><span style={{ color:G[500] }}>Ciclo: </span><span style={{ color:G[800] }}>{p.cycle}</span></div>
         </div>
       </div>
 
@@ -6145,7 +6344,7 @@ function CircumferenceModal({ p, onClose, onSave, onLog }) {
           <span style={{ fontSize:15, fontWeight:700, color:G[800] }}>Registrar medidas</span>
           <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50], fontSize:13, color:"#aaa" }}>X</div>
         </div>
-        <div style={{ fontSize:11, color:"#aaa", marginBottom:14 }}>{p.name} -- Preencher apos consulta com a nutricionista</div>
+        <div style={{ fontSize:11, color:G[500], marginBottom:14 }}>{p.name} -- Preencher apos consulta com a nutricionista</div>
 
         {err && <div style={{ color:"#C0392B", fontSize:12, marginBottom:10, padding:"8px 10px", background:"#fef2f2", borderRadius:6 }}>{err}</div>}
 
@@ -6154,7 +6353,7 @@ function CircumferenceModal({ p, onClose, onSave, onLog }) {
           <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Data da avaliacao</label>
           <input type="date" value={date} onChange={e=>setDate(e.target.value)}
             style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
-          <div style={{ fontSize:10, color:"#aaa", marginTop:3 }}>Pode informar uma data retroativa para alinhar com dados anteriores</div>
+          <div style={{ fontSize:10, color:G[500], marginTop:3 }}>Pode informar uma data retroativa para alinhar com dados anteriores</div>
         </div>
 
         {/* Body composition (optional) */}
@@ -6365,7 +6564,7 @@ function NewLeadModal({ onClose, onSave }) {
           <div onClick={()=>setShowCirc(!showCirc)} style={{ padding:"10px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", background:showCirc?G[50]:"#fff" }}>
             <div>
               <span style={{ fontSize:12, fontWeight:600, color:G[800] }}>📏 Circunferências iniciais</span>
-              <span style={{ fontSize:10, color:"#aaa", marginLeft:6 }}>(opcional — para dados retroativos)</span>
+              <span style={{ fontSize:10, color:G[500], marginLeft:6 }}>(opcional — para dados retroativos)</span>
             </div>
             <span style={{ fontSize:12, color:G[600] }}>{showCirc ? "▲" : "▼"}</span>
           </div>
@@ -6375,7 +6574,7 @@ function NewLeadModal({ onClose, onSave }) {
                 <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Data da medição</label>
                 <input type="date" value={circDate} onChange={e=>setCircDate(e.target.value)}
                   style={{ width:"100%", padding:"8px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
-                <div style={{ fontSize:10, color:"#aaa", marginTop:3 }}>Pode ser uma data retroativa se já tem acompanhamento</div>
+                <div style={{ fontSize:10, color:G[500], marginTop:3 }}>Pode ser uma data retroativa se já tem acompanhamento</div>
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                 {circFields.map(f => (
@@ -6659,7 +6858,7 @@ function SettingsPage() {
             <div key={n.k} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 14px", borderRadius:8, background:G[50], border:`1px solid ${G[100]}` }}>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{n.name}</div>
-                <div style={{ fontSize:10, color:"#aaa", marginTop:2 }}>{n.desc}</div>
+                <div style={{ fontSize:10, color:G[500], marginTop:2 }}>{n.desc}</div>
                 <div style={{ fontSize:9, color:G[400], marginTop:3 }}>Canal: {n.channel}</div>
               </div>
               <div onClick={()=>toggle(n.k)} style={{ width:42, height:22, borderRadius:11, background:settings[n.k]?S.grn:G[200], cursor:"pointer", position:"relative", transition:"background 0.2s", flexShrink:0 }}>
@@ -6668,7 +6867,7 @@ function SettingsPage() {
             </div>
           ))}
         </div>
-        <div style={{ fontSize:10, color:"#aaa", marginTop:14, padding:"8px 10px", background:G[50], borderRadius:6 }}>
+        <div style={{ fontSize:10, color:G[500], marginTop:14, padding:"8px 10px", background:G[50], borderRadius:6 }}>
           Estas configuracoes controlam as notificacoes automaticas do sistema. A automacao real depende do backend estar configurado com os cron jobs correspondentes.
         </div>
       </div>
@@ -6765,7 +6964,7 @@ function Financeiro({ ps }) {
         </div>
         <div style={{ background:G[50], borderRadius:10, padding:"14px 16px", border:`1px solid ${G[200]}` }}>
           <div style={{ fontSize:10, color:G[600], fontWeight:500 }}>Adimplentes / Inadimplentes</div>
-          <div style={{ fontSize:18, fontWeight:700, color:G[800] }}>{pagos} <span style={{ fontSize:12, color:"#aaa" }}>/</span> {inadimplentes}</div>
+          <div style={{ fontSize:18, fontWeight:700, color:G[800] }}>{pagos} <span style={{ fontSize:12, color:G[500] }}>/</span> {inadimplentes}</div>
         </div>
       </div>
 
@@ -7132,7 +7331,7 @@ export default function App() {
                         : <Bg color={S.red} bg={S.redBg}>Retorno vencido há {Math.abs(diff)} dias</Bg>;
                     })()}
                   </div>
-                  <div style={{ fontSize:11, color:"#aaa", textAlign:"center" }}>
+                  <div style={{ fontSize:11, color:G[500], textAlign:"center" }}>
                     Semana {pp.week}/16 · Ciclo {pp.cycle}
                   </div>
                 </>
@@ -7477,18 +7676,18 @@ export default function App() {
         {nav.map(n => {
           const a = page===n.k || (n.k==="pat"&&page==="det");
           return (
-            <div key={n.k} onClick={()=>{ setPage(n.k); setSid(null); setShowMoreMenu(false); }} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:1, cursor:"pointer", padding:"3px 6px", position:"relative", flex:1 }}>
+            <div key={n.k} onClick={()=>{ setPage(n.k); setSid(null); setShowMoreMenu(false); }} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:1, cursor:"pointer", padding:"8px 6px", position:"relative", flex:1 }}>
               <n.i size={18} color={a?G[600]:"#ccc"}/>
-              <span style={{ fontSize:8, fontWeight:a?600:400, color:a?G[600]:"#ccc" }}>{n.l}</span>
+              <span style={{ fontSize:9, fontWeight:a?600:400, color:a?G[600]:"#ccc" }}>{n.l}</span>
               {n.k==="alert" && ac>0 && <div style={{ position:"absolute", top:-1, right:4, width:10, height:10, borderRadius:"50%", background:S.red }}/>}
               {n.k==="msg" && unreadMsgs>0 && <div style={{ position:"absolute", top:-1, right:4, width:10, height:10, borderRadius:"50%", background:G[500] }}/>}
             </div>
           );
         })}
         {/* Mais */}
-        <div onClick={()=>setShowMoreMenu(!showMoreMenu)} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:1, cursor:"pointer", padding:"3px 6px", position:"relative", flex:1 }}>
+        <div onClick={()=>setShowMoreMenu(!showMoreMenu)} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:1, cursor:"pointer", padding:"8px 6px", position:"relative", flex:1 }}>
           <Lucide.MoreHorizontal size={18} color={showMoreMenu||["team","fin","settings"].includes(page)?G[600]:"#ccc"}/>
-          <span style={{ fontSize:8, fontWeight:showMoreMenu||["team","fin","settings"].includes(page)?600:400, color:showMoreMenu||["team","fin","settings"].includes(page)?G[600]:"#ccc" }}>Mais</span>
+          <span style={{ fontSize:9, fontWeight:showMoreMenu||["team","fin","settings"].includes(page)?600:400, color:showMoreMenu||["team","fin","settings"].includes(page)?G[600]:"#ccc" }}>Mais</span>
         </div>
       </div>
       {/* More menu overlay */}
