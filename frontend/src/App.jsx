@@ -38,7 +38,7 @@ import {
   ArrowLeft, Camera, Star, Award, Flame, Target, Zap, BarChart3,
   Trophy, CalendarDays, Weight, Home, Heart, Brain, RefreshCw, Plus, Settings, UserPlus, Cake, FileSignature, Save,
   MessageCircle, Send, ChevronLeft, ChevronRight as ChevronRightIcon,
-  Eye, EyeOff, X, Mail, DollarSign, Copy
+  Eye, EyeOff, X, Mail, DollarSign, Copy, Pencil, Trash2
 } from "lucide-react";
 
 /* ════════════════════════════════════════════
@@ -7048,9 +7048,11 @@ function Financeiro({ ps }) {
   const [records, setRecords] = useState(() => {
     try { return JSON.parse(localStorage.getItem('serlivre_financeiro') || '[]'); } catch { return []; }
   });
-  const [modalOpen, setModalOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false); // 'new' | 'edit' | false
+  const [detailRec, setDetailRec] = useState(null); // registro selecionado para detalhe
   const [filterMonth, setFilterMonth] = useState(format(new Date(), 'yyyy-MM'));
-  const [form, setForm] = useState({ patientId:'', tipo:'mensalidade', valor:'', data:format(new Date(),'yyyy-MM-dd'), status:'pendente', obs:'' });
+  const emptyForm = { patientId:'', tipo:'mensalidade', valor:'', data:format(new Date(),'yyyy-MM-dd'), status:'pendente', formaPgto:'', obs:'' };
+  const [form, setForm] = useState(emptyForm);
 
   useEffect(() => { localStorage.setItem('serlivre_financeiro', JSON.stringify(records)); }, [records]);
 
@@ -7070,6 +7072,7 @@ function Financeiro({ ps }) {
         valor: PLAN_PRICES[p.plan] || 0,
         data: month + '-05',
         status: 'pendente',
+        formaPgto: '',
         obs: 'Gerado automaticamente',
       }));
       setRecords(prev => [...prev, ...newRecs]);
@@ -7083,11 +7086,17 @@ function Financeiro({ ps }) {
   const inadimplentes = monthRecords.filter(r => r.status !== 'pago').length;
 
   const statusColors = { pago:{bg:S.grnBg,c:S.grn,label:"Pago",icon:"✅"}, pendente:{bg:S.yelBg,c:S.yel,label:"Pendente",icon:"⏳"}, atrasado:{bg:S.redBg,c:S.red,label:"Atrasado",icon:"🔴"} };
+  const formasPgto = [{v:'',l:'Nao informado'},{v:'pix',l:'PIX'},{v:'cartao_credito',l:'Cartao de credito'},{v:'cartao_debito',l:'Cartao de debito'},{v:'boleto',l:'Boleto'},{v:'dinheiro',l:'Dinheiro'},{v:'transferencia',l:'Transferencia'}];
+  const formaLabel = (v) => formasPgto.find(f=>f.v===v)?.l || v || 'Nao informado';
+
+  const openNew = () => { setForm(emptyForm); setModalOpen('new'); setDetailRec(null); };
+  const openEdit = (r) => { setForm({ patientId:r.patientId||'', tipo:r.tipo||'mensalidade', valor:r.valor||'', data:r.data||'', status:r.status||'pendente', formaPgto:r.formaPgto||'', obs:r.obs||'' }); setModalOpen('edit'); setDetailRec(r); };
+  const openDetail = (r) => { setDetailRec(r); setModalOpen(false); };
 
   const exportFinCSV = () => {
-    const headers = ['Paciente','Plano/Tipo','Valor','Status','Vencimento','Observacao'];
+    const headers = ['Paciente','Plano/Tipo','Valor','Status','Forma Pgto','Vencimento','Observacao'];
     const rows = monthRecords.map(r => [
-      r.patientName||'', r.planName||r.tipo, r.valor, r.status, r.data, r.obs||''
+      r.patientName||'', r.planName||r.tipo, r.valor, r.status, formaLabel(r.formaPgto), r.data, r.obs||''
     ]);
     const csv = [headers, ...rows].map(r => r.map(v => `"${v||''}"`).join(',')).join('\n');
     const blob = new Blob(['\ufeff'+csv], { type: 'text/csv;charset=utf-8' });
@@ -7096,6 +7105,148 @@ function Financeiro({ ps }) {
     a.href = url; a.download = `financeiro-${filterMonth}.csv`; a.click();
     URL.revokeObjectURL(url);
   };
+
+  const saveForm = () => {
+    if (!form.patientId || !form.valor) return;
+    const pat = ps.find(p => p.id === form.patientId || p.id === Number(form.patientId));
+    if (modalOpen === 'edit' && detailRec) {
+      setRecords(prev => prev.map(x => x.id === detailRec.id ? { ...x, ...form, patientName: pat?.name || x.patientName, planName: form.tipo === 'mensalidade' ? (PLANS.find(pl=>pl.id===pat?.plan)?.name || '') : form.tipo, valor: Number(form.valor) } : x));
+    } else {
+      const nr = { ...form, id: crypto.randomUUID(), patientName: pat?.name || '', planName: form.tipo === 'mensalidade' ? (PLANS.find(pl=>pl.id===pat?.plan)?.name || '') : form.tipo, valor: Number(form.valor) };
+      setRecords(prev => [...prev, nr]);
+    }
+    setModalOpen(false);
+    setDetailRec(null);
+  };
+
+  // Modal de formulario (criar/editar)
+  const formModal = (modalOpen === 'new' || modalOpen === 'edit') && (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }} onClick={()=>{setModalOpen(false);setDetailRec(null);}}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:440, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }} onClick={e=>e.stopPropagation()}>
+        <div style={{ fontSize:15, fontWeight:700, color:G[800], marginBottom:16 }}>{modalOpen === 'edit' ? 'Editar registro' : 'Novo registro financeiro'}</div>
+        <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:16 }}>
+          <div>
+            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Paciente</label>
+            <select value={form.patientId} onChange={e=>setForm(f=>({...f,patientId:e.target.value}))}
+              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}>
+              <option value="">Selecione...</option>
+              {(ps||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Tipo</label>
+            <select value={form.tipo} onChange={e=>setForm(f=>({...f,tipo:e.target.value}))}
+              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}>
+              <option value="mensalidade">Mensalidade</option>
+              <option value="consulta_avulsa">Consulta avulsa</option>
+              <option value="exame">Exame</option>
+              <option value="outro">Outro</option>
+            </select>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            <div>
+              <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Valor (R$)</label>
+              <input type="number" value={form.valor} onChange={e=>setForm(f=>({...f,valor:e.target.value}))}
+                style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Vencimento</label>
+              <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))}
+                style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+            </div>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            <div>
+              <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Status</label>
+              <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))}
+                style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}>
+                <option value="pago">Pago</option>
+                <option value="pendente">Pendente</option>
+                <option value="atrasado">Atrasado</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Forma de pagamento</label>
+              <select value={form.formaPgto} onChange={e=>setForm(f=>({...f,formaPgto:e.target.value}))}
+                style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}>
+                {formasPgto.map(f=><option key={f.v} value={f.v}>{f.l}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Observacoes</label>
+            <textarea value={form.obs} onChange={e=>setForm(f=>({...f,obs:e.target.value}))} rows={2}
+              style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", resize:"vertical", boxSizing:"border-box" }}/>
+          </div>
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={saveForm}
+            style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>{modalOpen === 'edit' ? 'Salvar alteracoes' : 'Salvar'}</button>
+          <button onClick={()=>{setModalOpen(false);setDetailRec(null);}}
+            style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Modal de detalhe (resumo da fatura)
+  const detailModal = detailRec && !modalOpen && (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }} onClick={()=>setDetailRec(null)}>
+      <div style={{ background:"#fff", width:"100%", maxWidth:420, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }} onClick={e=>e.stopPropagation()}>
+        {(() => {
+          const r = detailRec;
+          const st = statusColors[r.status] || statusColors.pendente;
+          return <>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+              <div>
+                <div style={{ fontSize:16, fontWeight:700, color:G[800] }}>{r.patientName || '—'}</div>
+                <div style={{ fontSize:11, color:G[500], marginTop:2 }}>{r.planName || r.tipo}</div>
+              </div>
+              <span style={{ padding:"4px 12px", borderRadius:20, fontSize:11, fontWeight:600, background:st.bg, color:st.c }}>{st.icon} {st.label}</span>
+            </div>
+            <div style={{ background:G[50], borderRadius:10, padding:16, marginBottom:16 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                <div>
+                  <div style={{ fontSize:10, color:G[500], fontWeight:500, marginBottom:2 }}>Valor</div>
+                  <div style={{ fontSize:20, fontWeight:700, color:G[800] }}>R$ {Number(r.valor||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize:10, color:G[500], fontWeight:500, marginBottom:2 }}>Vencimento</div>
+                  <div style={{ fontSize:14, fontWeight:600, color:G[800] }}>{safeFmt(r.data, 'dd/MM/yyyy')}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize:10, color:G[500], fontWeight:500, marginBottom:2 }}>Forma de pagamento</div>
+                  <div style={{ fontSize:13, fontWeight:500, color:G[800] }}>{formaLabel(r.formaPgto)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize:10, color:G[500], fontWeight:500, marginBottom:2 }}>Tipo</div>
+                  <div style={{ fontSize:13, fontWeight:500, color:G[800] }}>{{mensalidade:'Mensalidade',consulta_avulsa:'Consulta avulsa',exame:'Exame',outro:'Outro'}[r.tipo]||r.tipo}</div>
+                </div>
+              </div>
+              {r.obs && (
+                <div style={{ marginTop:12, paddingTop:12, borderTop:`1px solid ${G[200]}` }}>
+                  <div style={{ fontSize:10, color:G[500], fontWeight:500, marginBottom:2 }}>Observacoes</div>
+                  <div style={{ fontSize:12, color:G[700] }}>{r.obs}</div>
+                </div>
+              )}
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={()=>openEdit(r)}
+                style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                <Pencil size={13}/>Editar
+              </button>
+              {r.status !== 'pago' && (
+                <button onClick={()=>{ setRecords(prev=>prev.map(x=>x.id===r.id?{...x,status:'pago'}:x)); setDetailRec({...r,status:'pago'}); }}
+                  style={{ flex:1, padding:11, background:S.grnBg, color:S.grn, border:`1px solid #A9DFBF`, borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Marcar pago</button>
+              )}
+              <button onClick={()=>{ if(window.confirm(`Excluir registro de ${r.patientName||'este paciente'}?`)) { setRecords(prev=>prev.filter(x=>x.id!==r.id)); setDetailRec(null); } }}
+                style={{ padding:11, background:S.redBg, color:S.red, border:`1px solid #F5B7B1`, borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Excluir</button>
+            </div>
+          </>;
+        })()}
+      </div>
+    </div>
+  );
 
   return (
     <div>
@@ -7107,7 +7258,7 @@ function Financeiro({ ps }) {
           <button onClick={exportFinCSV} style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:8, background:"#fff", color:G[700], fontSize:12, fontWeight:600, border:`1px solid ${G[300]}`, cursor:"pointer", fontFamily:"inherit" }}>
             <Download size={13}/>Exportar CSV
           </button>
-          <button onClick={()=>{ setForm({patientId:'',tipo:'mensalidade',valor:'',data:format(new Date(),'yyyy-MM-dd'),status:'pendente',obs:''}); setModalOpen(true); }}
+          <button onClick={openNew}
             style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 16px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
             <Plus size={12}/>Novo registro
           </button>
@@ -7136,7 +7287,7 @@ function Financeiro({ ps }) {
 
       {/* Payment list */}
       <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, overflow:"hidden" }}>
-        <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr 1.2fr", padding:"10px 14px", background:G[50], borderBottom:`1px solid ${G[200]}`, fontSize:10, fontWeight:600, color:G[600] }}>
+        <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr 80px", padding:"10px 14px", background:G[50], borderBottom:`1px solid ${G[200]}`, fontSize:10, fontWeight:600, color:G[600] }}>
           <div>Paciente</div><div>Plano</div><div>Valor</div><div>Status</div><div>Vencimento</div><div>Acoes</div>
         </div>
         {monthRecords.length === 0 ? (
@@ -7145,7 +7296,8 @@ function Financeiro({ ps }) {
           monthRecords.map(r => {
             const st = statusColors[r.status] || statusColors.pendente;
             return (
-              <div key={r.id} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr 1.2fr", padding:"10px 14px", borderBottom:`1px solid ${G[100]}`, alignItems:"center", fontSize:11 }}>
+              <div key={r.id} onClick={()=>openDetail(r)} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr 80px", padding:"10px 14px", borderBottom:`1px solid ${G[100]}`, alignItems:"center", fontSize:11, cursor:"pointer", transition:"background 0.1s" }}
+                onMouseEnter={e=>e.currentTarget.style.background=G[50]} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                 <div style={{ fontWeight:500, color:G[800] }}>{r.patientName || '—'}</div>
                 <div style={{ color:G[600] }}>{r.planName || r.tipo}</div>
                 <div style={{ fontWeight:600, color:G[800] }}>R$ {Number(r.valor||0).toLocaleString('pt-BR')}</div>
@@ -7153,25 +7305,11 @@ function Financeiro({ ps }) {
                   <span style={{ padding:"2px 8px", borderRadius:20, fontSize:10, fontWeight:600, background:st.bg, color:st.c }}>{st.icon} {st.label}</span>
                 </div>
                 <div style={{ color:"#aaa" }}>{safeFmt(r.data, 'dd/MM')}</div>
-                <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                  {r.status !== 'pago' && (
-                    <button onClick={()=>setRecords(prev=>prev.map(x=>x.id===r.id?{...x,status:'pago'}:x))}
-                      style={{ padding:"4px 8px", borderRadius:5, background:S.grnBg, border:`1px solid #A9DFBF`, color:S.grn, fontSize:9, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Pago</button>
-                  )}
-                  {r.status !== 'pago' && (() => { const pat = ps.find(p=>p.id===r.patientId); return pat?.phone; })() && (
-                    <button onClick={async()=>{
-                      const pat = ps.find(p=>p.id===r.patientId);
-                      if(!pat?.phone) return;
-                      try { await sendWhatsAppMsg({phone:pat.phone, message:`Ola ${pat.name}! Identificamos que sua mensalidade de R$ ${Number(r.valor||0).toLocaleString('pt-BR')} referente ao plano ${r.planName||''} esta pendente. Podemos ajudar com alguma duvida? 😊`, patientId:pat.id}); } catch {}
-                    }}
-                      style={{ padding:"4px 8px", borderRadius:5, background:"#dcf8c6", border:"1px solid #25D366", color:"#128C7E", fontSize:9, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Cobranca</button>
-                  )}
-                  {r.status === 'pago' && (
-                    <button onClick={()=>setRecords(prev=>prev.map(x=>x.id===r.id?{...x,status:'pendente'}:x))}
-                      style={{ padding:"4px 8px", borderRadius:5, background:S.yelBg, border:`1px solid #F7DC6F`, color:S.yel, fontSize:9, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>Desfazer</button>
-                  )}
-                  <button onClick={()=>{ if(window.confirm(`Excluir registro de ${r.patientName||'este paciente'}?`)) setRecords(prev=>prev.filter(x=>x.id!==r.id)); }}
-                    style={{ padding:"4px 8px", borderRadius:5, background:S.redBg, border:`1px solid #F5B7B1`, color:S.red, fontSize:9, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Excluir</button>
+                <div style={{ display:"flex", gap:4 }} onClick={e=>e.stopPropagation()}>
+                  <button onClick={()=>openEdit(r)} title="Editar"
+                    style={{ padding:"4px 8px", borderRadius:5, background:G[100], border:`1px solid ${G[200]}`, color:G[600], fontSize:9, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center" }}><Pencil size={11}/></button>
+                  <button onClick={()=>{ if(window.confirm(`Excluir registro de ${r.patientName||'este paciente'}?`)) setRecords(prev=>prev.filter(x=>x.id!==r.id)); }} title="Excluir"
+                    style={{ padding:"4px 8px", borderRadius:5, background:S.redBg, border:`1px solid #F5B7B1`, color:S.red, fontSize:9, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center" }}><Trash2 size={11}/></button>
                 </div>
               </div>
             );
@@ -7179,72 +7317,8 @@ function Financeiro({ ps }) {
         )}
       </div>
 
-      {/* New record modal */}
-      {modalOpen && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-          <div style={{ background:"#fff", width:"100%", maxWidth:440, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
-            <div style={{ fontSize:15, fontWeight:700, color:G[800], marginBottom:16 }}>Novo registro financeiro</div>
-            <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:16 }}>
-              <div>
-                <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Paciente</label>
-                <select value={form.patientId} onChange={e=>setForm(f=>({...f,patientId:e.target.value}))}
-                  style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}>
-                  <option value="">Selecione...</option>
-                  {(ps||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Tipo</label>
-                <select value={form.tipo} onChange={e=>setForm(f=>({...f,tipo:e.target.value}))}
-                  style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}>
-                  <option value="mensalidade">Mensalidade</option>
-                  <option value="consulta_avulsa">Consulta avulsa</option>
-                  <option value="exame">Exame</option>
-                  <option value="outro">Outro</option>
-                </select>
-              </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                <div>
-                  <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Valor (R$)</label>
-                  <input type="number" value={form.valor} onChange={e=>setForm(f=>({...f,valor:e.target.value}))}
-                    style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
-                </div>
-                <div>
-                  <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Data</label>
-                  <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))}
-                    style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
-                </div>
-              </div>
-              <div>
-                <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Status</label>
-                <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))}
-                  style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}>
-                  <option value="pago">Pago</option>
-                  <option value="pendente">Pendente</option>
-                  <option value="atrasado">Atrasado</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Observacoes</label>
-                <textarea value={form.obs} onChange={e=>setForm(f=>({...f,obs:e.target.value}))} rows={2}
-                  style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", resize:"vertical", boxSizing:"border-box" }}/>
-              </div>
-            </div>
-            <div style={{ display:"flex", gap:8 }}>
-              <button onClick={()=>{
-                if(!form.patientId || !form.valor) return;
-                const pat = ps.find(p=>p.id===form.patientId);
-                const nr = { ...form, id:crypto.randomUUID(), patientName:pat?.name||'', planName:form.tipo==='mensalidade'?(PLANS.find(pl=>pl.id===pat?.plan)?.name||''):form.tipo };
-                setRecords(prev=>[...prev, nr]);
-                setModalOpen(false);
-              }}
-                style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
-              <button onClick={()=>setModalOpen(false)}
-                style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {formModal}
+      {detailModal}
     </div>
   );
 }
