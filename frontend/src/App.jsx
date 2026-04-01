@@ -1871,6 +1871,23 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
   const [editEmail, setEditEmail] = useState(p.email||'');
   const [editBirth, setEditBirth] = useState(p.birthDate||'');
 
+  // ── Anamnese state (component-only for now) ──
+  const [anamnese, setAnamnese] = useState(p._anamnese || null);
+  const [anamneseEditing, setAnamneseEditing] = useState(false);
+  const [anamneseForm, setAnamneseForm] = useState({
+    patologias:'', medicamentos:'', alergias:'', intolerancias:'', cirurgias:'', historicoFamiliar:'',
+    refeicoesDia:3, consumoAgua:'2', restricoes:'', preferencias:'', horarioAcordar:'07:00', horarioDormir:'23:00',
+    atividadeFisica:'sedentario', frequenciaSemanal:0, tabagismo:false, etilismo:'nao', qualidadeSono:'regular', nivelEstresse:'moderado',
+    objetivoPrincipal:'', pesoMeta:'', expectativaPrazo:'3_meses',
+  });
+
+  // ── Prontuario state (component-only for now) ──
+  const [prontuarioNotes, setProntuarioNotes] = useState(p._prontuario || []);
+  const [prontuarioModalOpen, setProntuarioModalOpen] = useState(false);
+  const [prontuarioDate, setProntuarioDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [prontuarioText, setProntuarioText] = useState('');
+  const prontuarioAuthor = (() => { try { return JSON.parse(localStorage.getItem('serlivre_user') || '{}').name || 'Equipe'; } catch { return 'Equipe'; } })();
+
   const tabs = [
     {k:"ficha",          l:"Ficha",      i:User},
     {k:"jornada",        l:"Jornada",    i:ClipboardCheck},
@@ -1880,6 +1897,8 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
     {k:"circunferencias",l:"Medidas",    i:Lucide.Ruler},
     {k:"msgs",           l:"Mensagens",  i:MessageCircle},
     {k:"rel",            l:"Relatório",  i:FileText},
+    {k:"anamnese",       l:"Anamnese",   i:FileSignature},
+    {k:"prontuario",     l:"Prontuário", i:Lucide.Stethoscope},
   ];
 
   return (
@@ -3193,6 +3212,257 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
 
       {/* ABA RELATÓRIO */}
       {tab==="rel" && <RelTab p={p} mob={mob} plan={plan} met={met} be={be} mn={mn}/>}
+
+      {/* ABA ANAMNESE */}
+      {tab==="anamnese" && (() => {
+        const sectionCard = (title, icon, children) => (
+          <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px 16px", marginBottom:10 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:12 }}>
+              {icon}
+              <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>{title}</span>
+            </div>
+            {children}
+          </div>
+        );
+        const fieldReadOnly = (label, value) => (
+          <div style={{ marginBottom:8 }}>
+            <div style={{ fontSize:10, color:"#aaa", fontWeight:500, marginBottom:2 }}>{label}</div>
+            <div style={{ fontSize:12, color:G[800] }}>{value || "--"}</div>
+          </div>
+        );
+        const inputField = (label, key, type, opts) => (
+          <div style={{ marginBottom:10 }} key={key}>
+            <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>{label}</label>
+            {type === "textarea" ? (
+              <textarea value={anamneseForm[key]||''} onChange={e => setAnamneseForm(prev => ({...prev, [key]: e.target.value}))}
+                rows={3} style={{ width:"100%", padding:"8px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", resize:"vertical", boxSizing:"border-box" }}/>
+            ) : type === "select" ? (
+              <select value={anamneseForm[key]||''} onChange={e => setAnamneseForm(prev => ({...prev, [key]: e.target.value}))}
+                style={{ width:"100%", padding:"8px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", background:"#fff", boxSizing:"border-box" }}>
+                {(opts||[]).map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+              </select>
+            ) : type === "boolean" ? (
+              <div onClick={() => setAnamneseForm(prev => ({...prev, [key]: !prev[key]}))}
+                style={{ display:"inline-flex", alignItems:"center", gap:6, cursor:"pointer" }}>
+                <div style={{ width:18, height:18, borderRadius:4, border:`2px solid ${anamneseForm[key] ? S.grn : G[300]}`, background:anamneseForm[key] ? S.grnBg : "#fff", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  {anamneseForm[key] && <Check size={10} color={S.grn}/>}
+                </div>
+                <span style={{ fontSize:12, color:G[800] }}>{anamneseForm[key] ? "Sim" : "Nao"}</span>
+              </div>
+            ) : (
+              <input type={type||"text"} value={anamneseForm[key]||''} onChange={e => setAnamneseForm(prev => ({...prev, [key]: e.target.value}))}
+                style={{ width:"100%", padding:"8px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+            )}
+          </div>
+        );
+
+        // READ-ONLY VIEW
+        if (anamnese && !anamneseEditing) {
+          const a = anamnese;
+          const atividadeLabels = { sedentario:"Sedentario", leve:"Leve", moderado:"Moderado", intenso:"Intenso" };
+          const etilismoLabels = { nao:"Nao", social:"Social", regular:"Regular" };
+          const sonoLabels = { boa:"Boa", regular:"Regular", ruim:"Ruim" };
+          const estresseLabels = { baixo:"Baixo", moderado:"Moderado", alto:"Alto" };
+          const prazoLabels = { '1_mes':'1 mes', '3_meses':'3 meses', '6_meses':'6 meses', '12_meses':'12 meses' };
+          return (
+            <div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                <div style={{ fontSize:14, fontWeight:600, color:G[800] }}>Anamnese</div>
+                <button onClick={() => { setAnamneseForm({...anamnese}); setAnamneseEditing(true); }}
+                  style={{ fontSize:11, padding:"6px 14px", borderRadius:7, background:G[50], border:`1px solid ${G[300]}`, color:G[700], cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>Editar</button>
+              </div>
+              {sectionCard("Historico Clinico", <Lucide.HeartPulse size={14} color={S.red}/>, <>
+                {fieldReadOnly("Patologias previas", a.patologias)}
+                {fieldReadOnly("Medicamentos em uso", a.medicamentos)}
+                {fieldReadOnly("Alergias alimentares", a.alergias)}
+                {fieldReadOnly("Intolerancias", a.intolerancias)}
+                {fieldReadOnly("Cirurgias previas", a.cirurgias)}
+                {fieldReadOnly("Historico familiar", a.historicoFamiliar)}
+              </>)}
+              {sectionCard("Habitos Alimentares", <Lucide.UtensilsCrossed size={14} color={S.yel}/>, <>
+                {fieldReadOnly("Refeicoes por dia", a.refeicoesDia)}
+                {fieldReadOnly("Consumo de agua (L)", a.consumoAgua)}
+                {fieldReadOnly("Restricoes alimentares", a.restricoes)}
+                {fieldReadOnly("Preferencias alimentares", a.preferencias)}
+                {fieldReadOnly("Horario acordar", a.horarioAcordar)}
+                {fieldReadOnly("Horario dormir", a.horarioDormir)}
+              </>)}
+              {sectionCard("Habitos de Vida", <Activity size={14} color={S.grn}/>, <>
+                {fieldReadOnly("Atividade fisica", atividadeLabels[a.atividadeFisica] || a.atividadeFisica)}
+                {fieldReadOnly("Frequencia semanal", a.frequenciaSemanal ? `${a.frequenciaSemanal}x/semana` : "--")}
+                {fieldReadOnly("Tabagismo", a.tabagismo ? "Sim" : "Nao")}
+                {fieldReadOnly("Etilismo", etilismoLabels[a.etilismo] || a.etilismo)}
+                {fieldReadOnly("Qualidade do sono", sonoLabels[a.qualidadeSono] || a.qualidadeSono)}
+                {fieldReadOnly("Nivel de estresse", estresseLabels[a.nivelEstresse] || a.nivelEstresse)}
+              </>)}
+              {sectionCard("Objetivos", <Target size={14} color={G[600]}/>, <>
+                {fieldReadOnly("Objetivo principal", a.objetivoPrincipal)}
+                {fieldReadOnly("Peso meta", a.pesoMeta ? `${a.pesoMeta} kg` : "--")}
+                {fieldReadOnly("Expectativa de prazo", prazoLabels[a.expectativaPrazo] || a.expectativaPrazo)}
+              </>)}
+            </div>
+          );
+        }
+
+        // EMPTY STATE
+        if (!anamnese && !anamneseEditing) {
+          return (
+            <div style={{ textAlign:"center", padding:"40px 20px" }}>
+              <FileSignature size={40} color={G[300]} style={{ marginBottom:12 }}/>
+              <div style={{ fontSize:14, fontWeight:600, color:G[700], marginBottom:6 }}>Anamnese nao preenchida</div>
+              <div style={{ fontSize:12, color:"#aaa", marginBottom:16 }}>Preencha a anamnese na primeira consulta do paciente.</div>
+              <button onClick={() => setAnamneseEditing(true)}
+                style={{ padding:"10px 24px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Preencher anamnese</button>
+            </div>
+          );
+        }
+
+        // EDIT FORM
+        return (
+          <div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <div style={{ fontSize:14, fontWeight:600, color:G[800] }}>{anamnese ? "Editar anamnese" : "Nova anamnese"}</div>
+              <button onClick={() => setAnamneseEditing(false)}
+                style={{ fontSize:11, padding:"6px 14px", borderRadius:7, background:G[50], border:`1px solid ${G[300]}`, color:G[700], cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+            </div>
+
+            {sectionCard("Historico Clinico", <Lucide.HeartPulse size={14} color={S.red}/>, <>
+              {inputField("Patologias previas", "patologias", "textarea")}
+              {inputField("Medicamentos em uso", "medicamentos", "textarea")}
+              {inputField("Alergias alimentares", "alergias", "textarea")}
+              {inputField("Intolerancias", "intolerancias", "textarea")}
+              {inputField("Cirurgias previas", "cirurgias", "textarea")}
+              {inputField("Historico familiar", "historicoFamiliar", "textarea")}
+            </>)}
+
+            {sectionCard("Habitos Alimentares", <Lucide.UtensilsCrossed size={14} color={S.yel}/>, <>
+              {inputField("Refeicoes por dia", "refeicoesDia", "number")}
+              {inputField("Consumo de agua (litros)", "consumoAgua", "number")}
+              {inputField("Restricoes alimentares", "restricoes", "textarea")}
+              {inputField("Preferencias alimentares", "preferencias", "textarea")}
+              {inputField("Horario acordar", "horarioAcordar", "time")}
+              {inputField("Horario dormir", "horarioDormir", "time")}
+            </>)}
+
+            {sectionCard("Habitos de Vida", <Activity size={14} color={S.grn}/>, <>
+              {inputField("Atividade fisica atual", "atividadeFisica", "select", [
+                {v:"sedentario",l:"Sedentario"},{v:"leve",l:"Leve"},{v:"moderado",l:"Moderado"},{v:"intenso",l:"Intenso"}
+              ])}
+              {inputField("Frequencia semanal", "frequenciaSemanal", "number")}
+              {inputField("Tabagismo", "tabagismo", "boolean")}
+              {inputField("Etilismo", "etilismo", "select", [
+                {v:"nao",l:"Nao"},{v:"social",l:"Social"},{v:"regular",l:"Regular"}
+              ])}
+              {inputField("Qualidade do sono", "qualidadeSono", "select", [
+                {v:"boa",l:"Boa"},{v:"regular",l:"Regular"},{v:"ruim",l:"Ruim"}
+              ])}
+              {inputField("Nivel de estresse", "nivelEstresse", "select", [
+                {v:"baixo",l:"Baixo"},{v:"moderado",l:"Moderado"},{v:"alto",l:"Alto"}
+              ])}
+            </>)}
+
+            {sectionCard("Objetivos", <Target size={14} color={G[600]}/>, <>
+              {inputField("Objetivo principal", "objetivoPrincipal", "textarea")}
+              {inputField("Peso meta (kg)", "pesoMeta", "number")}
+              {inputField("Expectativa de prazo", "expectativaPrazo", "select", [
+                {v:"1_mes",l:"1 mes"},{v:"3_meses",l:"3 meses"},{v:"6_meses",l:"6 meses"},{v:"12_meses",l:"12 meses"}
+              ])}
+            </>)}
+
+            <button onClick={() => {
+              const data = {...anamneseForm};
+              setAnamnese(data);
+              setAnamneseEditing(false);
+              onLog && onLog({ action:"anamnese", patientId:p.id, patientName:p.name, detail:"Anamnese preenchida/atualizada" });
+            }}
+              style={{ width:"100%", padding:"12px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", marginTop:4 }}>
+              <Save size={13} style={{ marginRight:6, verticalAlign:"middle" }}/>Salvar anamnese
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* ABA PRONTUARIO */}
+      {tab==="prontuario" && (
+        <div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+            <div style={{ fontSize:14, fontWeight:600, color:G[800] }}>Prontuario</div>
+            <button onClick={() => { setProntuarioDate(format(new Date(), 'yyyy-MM-dd')); setProntuarioText(''); setProntuarioModalOpen(true); }}
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 16px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+              <Plus size={12}/>Nova anotacao
+            </button>
+          </div>
+
+          {prontuarioNotes.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"40px 20px" }}>
+              <Lucide.Stethoscope size={40} color={G[300]} style={{ marginBottom:12 }}/>
+              <div style={{ fontSize:14, fontWeight:600, color:G[700], marginBottom:6 }}>Nenhuma anotacao no prontuario</div>
+              <div style={{ fontSize:12, color:"#aaa" }}>Registre anotacoes clinicas a cada consulta.</div>
+            </div>
+          ) : (
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              {[...prontuarioNotes].sort((a,b) => new Date(b.date) - new Date(a.date)).map((note, i) => (
+                <div key={note.id || i} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <div style={{ width:28, height:28, borderRadius:"50%", background:G[50], display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        <Lucide.Stethoscope size={13} color={G[600]}/>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:12, fontWeight:600, color:G[800] }}>{note.author}</div>
+                        <div style={{ fontSize:10, color:"#aaa" }}>{safeFmt(note.date, "dd/MM/yyyy")}</div>
+                      </div>
+                    </div>
+                    <button onClick={() => setProntuarioNotes(prev => prev.filter(n => n.id !== note.id))}
+                      style={{ background:"none", border:"none", cursor:"pointer", padding:4 }}>
+                      <X size={12} color="#ccc"/>
+                    </button>
+                  </div>
+                  <div style={{ fontSize:12, color:G[800], lineHeight:1.6, whiteSpace:"pre-wrap" }}>{note.text}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Modal nova anotacao */}
+          {prontuarioModalOpen && (
+            <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+              <div style={{ background:"#fff", width:"100%", maxWidth:480, borderRadius:14, padding:24, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+                <div style={{ fontSize:15, fontWeight:700, color:G[800], marginBottom:16 }}>Nova anotacao clinica</div>
+                <div style={{ marginBottom:12 }}>
+                  <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Data</label>
+                  <input type="date" value={prontuarioDate} onChange={e => setProntuarioDate(e.target.value)}
+                    style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", boxSizing:"border-box" }}/>
+                </div>
+                <div style={{ marginBottom:12 }}>
+                  <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Autor</label>
+                  <input type="text" value={prontuarioAuthor} readOnly
+                    style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[200]}`, fontSize:12, fontFamily:"inherit", background:G[50], color:G[600], boxSizing:"border-box" }}/>
+                </div>
+                <div style={{ marginBottom:16 }}>
+                  <label style={{ fontSize:11, fontWeight:500, color:G[700], marginBottom:3, display:"block" }}>Anotacao</label>
+                  <textarea value={prontuarioText} onChange={e => setProntuarioText(e.target.value)}
+                    rows={6} placeholder="Descreva observacoes clinicas, ajustes de medicacao, evolucao do paciente..."
+                    style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit", resize:"vertical", boxSizing:"border-box" }}/>
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => {
+                    if (!prontuarioText.trim()) return;
+                    const note = { id: crypto.randomUUID(), date: prontuarioDate + 'T12:00:00', author: prontuarioAuthor, text: prontuarioText.trim() };
+                    setProntuarioNotes(prev => [...prev, note]);
+                    onLog && onLog({ action:"prontuario", patientId:p.id, patientName:p.name, detail:`Anotacao clinica registrada em ${safeFmt(note.date, 'dd/MM/yyyy')}` });
+                    setProntuarioModalOpen(false);
+                    setProntuarioText('');
+                  }}
+                    style={{ flex:1, padding:11, background:G[600], color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
+                  <button onClick={() => setProntuarioModalOpen(false)}
+                    style={{ flex:1, padding:11, background:G[100], color:G[800], border:"none", borderRadius:8, fontSize:13, fontWeight:400, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -5076,6 +5346,39 @@ function Portal({  p, av, setAv }) {
     { d: !!(checkAtual?.treinos?.[0]),  l: "Treino de resistência" },
   ];
 
+  // Body composition data
+  const _hist = p.history || [];
+  const lastH = _hist[_hist.length - 1] || {};
+  const prevH = _hist[_hist.length - 2] || {};
+  const curMM = lastH.massaMagra || 0;
+  const curMG = lastH.massaGordura || 0;
+  const prevMM = prevH.massaMagra || 0;
+  const prevMG = prevH.massaGordura || 0;
+  const totBody = curMM + curMG || 1;
+  const pctMM = (curMM / totBody * 100).toFixed(1);
+  const pctMG = (curMG / totBody * 100).toFixed(1);
+  const hasBodyComp = curMM > 0 || curMG > 0;
+
+  // Circumference data
+  const circ = p.circumferenceHistory || [];
+  const lastCirc = circ[circ.length - 1];
+  const prevCirc = circ[circ.length - 2];
+  const circFields = [
+    { key:"torax", label:"Torax" }, { key:"abdomen", label:"Abdomen" },
+    { key:"cintura", label:"Cintura" }, { key:"quadril", label:"Quadril" },
+    { key:"coxa", label:"Coxa" }, { key:"panturrilha", label:"Panturrilha" },
+    { key:"braco", label:"Braco" }, { key:"antebraco", label:"Antebraco" },
+  ];
+
+  // Overall classification
+  const overallScore = met + be + mn;
+  const overallMax = 24 + 18 + 9;
+  const overallPct = Math.round(overallScore / overallMax * 100);
+  const overallClass = overallPct >= 80 ? { l:"Elite", c:S.pur, bg:S.purBg }
+    : overallPct >= 60 ? { l:"Saudavel", c:S.grn, bg:S.grnBg }
+    : overallPct >= 40 ? { l:"Transicao", c:S.yel, bg:S.yelBg }
+    : { l:"Critico", c:S.red, bg:S.redBg };
+
   return (
     <div id={`portal-rel-${p.id}`} style={{ display:"flex", flexDirection:"column", gap:12 }}>
       {/* Header gradiente */}
@@ -5084,36 +5387,93 @@ function Portal({  p, av, setAv }) {
           <Av name={p.name} size={44} src={av} onEdit={setAv}/>
           <div>
             <div style={{ fontSize:10, opacity:0.5 }}>Programa Ser Livre</div>
-            <div style={{ fontSize:18, fontWeight:700 }}>Olá, {p.name.split(" ")[0]}!</div>
+            <div style={{ fontSize:18, fontWeight:700 }}>Ola, {p.name.split(" ")[0]}!</div>
           </div>
         </div>
-        <div style={{ fontSize:11, opacity:0.6 }}>Plano {plan?.name} • Semana {p.week}/16</div>
+        <div style={{ fontSize:11, opacity:0.6 }}>Plano {plan?.name} -- Semana {p.week}/16</div>
         <div style={{ height:6, background:"rgba(255,255,255,0.15)", borderRadius:3, marginTop:8, overflow:"hidden" }}>
           <div style={{ height:"100%", width:`${pct}%`, background:G[300], borderRadius:3 }}/>
         </div>
         <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, opacity:0.4, marginTop:3 }}>
-          <span>Início</span><span>{pct}%</span><span>Alta</span>
+          <span>Inicio</span><span>{pct}%</span><span>Alta</span>
         </div>
       </div>
 
-      {/* Métricas de peso */}
+      {/* Minha Evolucao — Weight Cards */}
+      <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Minha Evolucao</div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+        <Mt value={`${p.iw}kg`} label="Peso inicial" icon={Weight}/>
         <Mt value={`${p.cw}kg`} label="Peso atual" icon={Weight}/>
-        <Mt value={`-${(p.iw-p.cw).toFixed(1)}kg`} label="Já perdeu" icon={TrendingUp} color={S.grn}/>
+        <Mt value={`-${(p.iw-p.cw).toFixed(1)}kg`} label="Ja perdeu" icon={TrendingDown} color={S.grn}/>
+        <Mt value={`${p.iw > 0 ? Math.round((p.iw-p.cw)/p.iw*100) : 0}%`} label="Perda total" icon={TrendingUp} color={S.grn}/>
       </div>
 
-      {/* Scores */}
-      <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Seus scores</div>
-      <SBar label="Saúde metabólica" total={met} max={24} fn={sM}/>
-      <SBar label="Bem-estar"         total={be}  max={18} fn={sB}/>
-      <SBar label="Blindagem mental"  total={mn}  max={9}  fn={sN}/>
+      {/* Body composition */}
+      {hasBodyComp && (
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Composicao corporal</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10 }}>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:S.blueBg, borderRadius:8 }}>
+              <div style={{ fontSize:20, fontWeight:700, color:S.blue }}>{curMM.toFixed(1)}kg</div>
+              <div style={{ fontSize:10, color:S.blue, fontWeight:600 }}>Massa Magra</div>
+              <div style={{ fontSize:9, color:"#aaa" }}>{pctMM}%</div>
+              {prevMM > 0 && (() => {
+                const d = curMM - prevMM;
+                return d !== 0 ? <span style={{ fontSize:9, fontWeight:600, padding:"1px 5px", borderRadius:4, background:d>0?S.grnBg:S.redBg, color:d>0?S.grn:S.red }}>{d>0?'+':''}{d.toFixed(1)}kg</span> : null;
+              })()}
+            </div>
+            <div style={{ textAlign:"center", padding:"10px 8px", background:S.yelBg, borderRadius:8 }}>
+              <div style={{ fontSize:20, fontWeight:700, color:S.yel }}>{curMG.toFixed(1)}kg</div>
+              <div style={{ fontSize:10, color:S.yel, fontWeight:600 }}>Massa Gorda</div>
+              <div style={{ fontSize:9, color:"#aaa" }}>{pctMG}%</div>
+              {prevMG > 0 && (() => {
+                const d = curMG - prevMG;
+                return d !== 0 ? <span style={{ fontSize:9, fontWeight:600, padding:"1px 5px", borderRadius:4, background:d<0?S.grnBg:S.redBg, color:d<0?S.grn:S.red }}>{d>0?'+':''}{d.toFixed(1)}kg</span> : null;
+              })()}
+            </div>
+          </div>
+          <div style={{ height:8, borderRadius:4, overflow:"hidden", display:"flex" }}>
+            <div style={{ width:`${pctMM}%`, background:S.blue, transition:"width 0.5s" }}/>
+            <div style={{ width:`${pctMG}%`, background:S.yel,  transition:"width 0.5s" }}/>
+          </div>
+        </div>
+      )}
 
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
-        {[{l:"Met",t:met,m:24,fn:sM},{l:"Bem",t:be,m:18,fn:sB},{l:"Mental",t:mn,m:9,fn:sN}].map((s,i) => {
-          const st=s.fn(s.t);
-          return <div key={i} style={{ textAlign:"center", padding:12, background:st.bg, borderRadius:10 }}><div style={{ fontSize:24, fontWeight:700, color:st.c }}>{s.t}</div><div style={{ fontSize:8, color:"#aaa" }}>de {s.m}</div><div style={{ fontSize:10, fontWeight:600, color:st.c, marginTop:3 }}>{st.e} {st.l}</div></div>;
-        })}
+      {/* Curva de peso */}
+      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Curva de peso</div>
+        <ResponsiveContainer width="100%" height={160}>
+          <AreaChart data={(_hist).map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
+            <defs><linearGradient id="gpt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.grn} stopOpacity={0.2}/><stop offset="100%" stopColor={S.grn} stopOpacity={0}/></linearGradient></defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis domain={["dataMin-2","dataMax+1"]} tick={{fontSize:9,fill:"#bbb"}}/>
+            <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Area type="monotone" dataKey="w" stroke={S.grn} fill="url(#gpt)" strokeWidth={2}/>
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
+
+      {/* Meus Scores */}
+      <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Meus Scores</div>
+      {(met > 0 || be > 0 || mn > 0) ? (<>
+        {/* Classification badge */}
+        <div style={{ textAlign:"center", marginBottom:4 }}>
+          <Bg color={overallClass.c} bg={overallClass.bg}>{overallClass.l} ({overallScore}/{overallMax})</Bg>
+        </div>
+        <SBar label="Saude metabolica" total={met} max={24} fn={sM}/>
+        <SBar label="Bem-estar"         total={be}  max={18} fn={sB}/>
+        <SBar label="Blindagem mental"  total={mn}  max={9}  fn={sN}/>
+
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+          {[{l:"Met",t:met,m:24,fn:sM},{l:"Bem",t:be,m:18,fn:sB},{l:"Mental",t:mn,m:9,fn:sN}].map((s,i) => {
+            const st=s.fn(s.t);
+            return <div key={i} style={{ textAlign:"center", padding:12, background:st.bg, borderRadius:10 }}><div style={{ fontSize:24, fontWeight:700, color:st.c }}>{s.t}</div><div style={{ fontSize:8, color:"#aaa" }}>de {s.m}</div><div style={{ fontSize:10, fontWeight:600, color:st.c, marginTop:3 }}>{st.e} {st.l}</div></div>;
+          })}
+        </div>
+      </>) : (
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"20px 14px", textAlign:"center" }}>
+          <Activity size={24} color={G[300]} style={{ marginBottom:6 }}/>
+          <div style={{ fontSize:12, color:"#aaa" }}>Aguardando primeira avaliacao</div>
+        </div>
+      )}
 
       {/* Progresso da semana (read-only) */}
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
@@ -5126,24 +5486,41 @@ function Portal({  p, av, setAv }) {
             <span style={{ fontSize:12, color:t.d?"#bbb":G[900], textDecoration:t.d?"line-through":"none" }}>{t.l}</span>
           </div>
         ))}
-        <div style={{ fontSize:9, color:"#ccc", marginTop:6, textAlign:"center" }}>Preenchido pela equipe — visualização apenas</div>
+        <div style={{ fontSize:9, color:"#ccc", marginTop:6, textAlign:"center" }}>Preenchido pela equipe -- visualizacao apenas</div>
       </div>
 
-      {/* Curva de peso */}
-      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Curva de peso</div>
-        <ResponsiveContainer width="100%" height={160}>
-          <AreaChart data={(p.history||[]).map((h,i)=>({s:`S${i+1}`,w:h.weight}))}>
-            <defs><linearGradient id="gpt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={S.grn} stopOpacity={0.2}/><stop offset="100%" stopColor={S.grn} stopOpacity={0}/></linearGradient></defs>
-            <CartesianGrid strokeDasharray="3 3" stroke={G[100]}/><XAxis dataKey="s" tick={{fontSize:9,fill:G[600]}}/><YAxis domain={["dataMin-2","dataMax+1"]} tick={{fontSize:9,fill:"#bbb"}}/>
-            <Tooltip contentStyle={{borderRadius:8,fontSize:11}}/><Area type="monotone" dataKey="w" stroke={S.grn} fill="url(#gpt)" strokeWidth={2}/>
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
+      {/* Minhas Medidas — Circumferences */}
+      {lastCirc && (
+        <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+          <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Minhas Medidas</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+            {circFields.map(f => {
+              const cur = lastCirc?.[f.key];
+              const prev = prevCirc?.[f.key];
+              if (!cur) return null;
+              const d = prev ? (cur - prev) : null;
+              return (
+                <div key={f.key} style={{ padding:"8px 10px", background:G[50], borderRadius:8 }}>
+                  <div style={{ fontSize:10, color:"#aaa", marginBottom:2 }}>{f.label}</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                    <span style={{ fontSize:14, fontWeight:700, color:G[800] }}>{parseFloat(cur).toFixed(1)}cm</span>
+                    {d != null && d !== 0 && (
+                      <span style={{ fontSize:9, fontWeight:600, padding:"1px 5px", borderRadius:4, background:d<0?S.grnBg:S.yelBg, color:d<0?S.grn:S.yel }}>
+                        {d>0?'+':''}{d.toFixed(1)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {lastCirc && <div style={{ fontSize:9, color:"#ccc", marginTop:6, textAlign:"center" }}>Ultima medicao: {safeFmt(lastCirc.date || lastCirc.createdAt, "dd/MM/yyyy")}</div>}
+        </div>
+      )}
 
-      {/* Evolução scores */}
+      {/* Evolucao scores */}
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Evolução dos scores</div>
+        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Evolucao dos scores</div>
         {hist.length > 0 ? (
           <ResponsiveContainer width="100%" height={170}>
             <LineChart data={hist}>
@@ -5156,14 +5533,14 @@ function Portal({  p, av, setAv }) {
           </ResponsiveContainer>
         ) : (
           <div style={{ textAlign:"center", color:"#ccc", fontSize:12, padding:"24px 0" }}>
-            Histórico de scores disponível após a primeira consulta de retorno.
+            Historico de scores disponivel apos a primeira consulta de retorno.
           </div>
         )}
       </div>
 
-      {/* Radar metabólico */}
+      {/* Radar metabolico */}
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
-        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Radar metabólico</div>
+        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:6 }}>Radar metabolico</div>
         <ResponsiveContainer width="100%" height={180}>
           <RadarChart data={[{p:"Comp",v:pm.comp},{p:"Infl",v:pm.infl},{p:"Glic",v:pm.glic},{p:"Card",v:pm.card}]} outerRadius={60}>
             <PolarGrid stroke={G[200]}/><PolarAngleAxis dataKey="p" tick={{fontSize:10,fill:G[700]}}/><PolarRadiusAxis domain={[0,6]} tick={{fontSize:8,fill:"#ddd"}}/>
@@ -5172,10 +5549,23 @@ function Portal({  p, av, setAv }) {
         </ResponsiveContainer>
       </div>
 
+      {/* Meus Dados */}
+      <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
+        <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Meus Dados</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px 16px", fontSize:12 }}>
+          <div><span style={{ color:"#aaa" }}>Nome: </span><span style={{ color:G[800] }}>{p.name}</span></div>
+          <div><span style={{ color:"#aaa" }}>Plano: </span><span style={{ color:G[800] }}>{plan?.name}</span></div>
+          <div><span style={{ color:"#aaa" }}>Telefone: </span><span style={{ color:G[800] }}>{p.phone || "--"}</span></div>
+          <div><span style={{ color:"#aaa" }}>Email: </span><span style={{ color:G[800] }}>{p.email || "--"}</span></div>
+          <div><span style={{ color:"#aaa" }}>Nascimento: </span><span style={{ color:G[800] }}>{p.birthDate ? safeFmt(p.birthDate, "dd/MM/yyyy") : "--"}</span></div>
+          <div><span style={{ color:"#aaa" }}>Ciclo: </span><span style={{ color:G[800] }}>{p.cycle}</span></div>
+        </div>
+      </div>
+
       <button onClick={()=>{ const el=document.getElementById(`portal-rel-${p.id}`); if(el) html2pdf().set({margin:10,filename:`meu-relatorio.pdf`,html2canvas:{scale:2},jsPDF:{format:"a4"}}).from(el).save(); }} style={{ width:"100%", padding:"10px", borderRadius:8, background:"transparent", border:`1px solid ${G[300]}`, color:G[700], fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-        <Download size={13}/>Baixar relatório PDF
+        <Download size={13}/>Baixar relatorio PDF
       </button>
-      <div style={{ textAlign:"center", fontSize:9, color:"#ccc", padding:"6px 0" }}>Instituto Dra. Mariana Wogel • Dados preenchidos pela equipe clínica</div>
+      <div style={{ textAlign:"center", fontSize:9, color:"#ccc", padding:"6px 0" }}>Instituto Dra. Mariana Wogel -- Dados preenchidos pela equipe clinica</div>
     </div>
   );
 }
