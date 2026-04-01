@@ -516,9 +516,9 @@ const Bg = ({ children, color=G[700], bg=G[100] }) => (
 );
 
 /* Metric Card */
-function Mt({ value, label, icon:Icon, color, sub, trend }) {
+function Mt({ value, label, icon:Icon, color, sub, trend, onClick, gradient }) {
   return (
-    <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+    <div onClick={onClick} style={{ background:gradient||"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"12px 14px", cursor:onClick?"pointer":undefined, transition:"box-shadow 0.2s", ...(onClick?{":hover":{boxShadow:"0 2px 8px rgba(0,0,0,0.08)"}}:{}) }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <span style={{ fontSize:10, color:G[600], fontWeight:500, textTransform:"uppercase", letterSpacing:"0.04em" }}>{label}</span>
         {Icon && <Icon size={15} color={color||G[400]}/>}
@@ -640,7 +640,7 @@ function SI({ label, value, onChange, opts }) {
 /* ════════════════════════════════════════════
    DASHBOARD — Dra. Mariana
 ═══════════════════════════════════════════════ */
-function Dash({  ps, onSel, mob }) {
+function Dash({  ps, onSel, mob, onNavigate }) {
   const [df, setDf] = useState("all");
   const [dashData, setDashData] = useState(null);
   useEffect(() => {
@@ -742,10 +742,10 @@ function Dash({  ps, onSel, mob }) {
 
       {/* KPIs linha 1 */}
       <div style={{ display:"grid", gridTemplateColumns:gc, gap:8 }}>
-        <Mt value={dashData?.activePatients ?? filteredPs.length} label="Pacientes ativos"   icon={Users}        trend={12}/>
-        <Mt value={cr.length}          label="Críticos"            icon={AlertTriangle} color={cr.length?S.red:S.grn} sub={cr.length?cr.map(p=>p.name.split(" ")[0]).join(", "):"Nenhum"}/>
-        <Mt value={`${(dashData?.totalWeightLost ?? tl).toFixed(1)}kg`} label="Peso total perdido" icon={TrendingUp}   color={S.grn} trend={8}/>
-        <Mt value={`${dashData?.avgEngagement ?? ae}%`}  label="Engajamento médio"  icon={Flame}         color={(dashData?.avgEngagement??ae)>=80?S.grn:(dashData?.avgEngagement??ae)>=60?S.yel:S.red}/>
+        <Mt value={dashData?.activePatients ?? filteredPs.length} label="Pacientes ativos"   icon={Users}        trend={12} onClick={()=>onNavigate&&onNavigate("pat")} gradient="linear-gradient(135deg, #FEFCF9, #F5ECDA)"/>
+        <Mt value={cr.length}          label="Criticos"            icon={AlertTriangle} color={cr.length?S.red:S.grn} sub={cr.length?cr.map(p=>p.name.split(" ")[0]).join(", "):"Nenhum"} onClick={()=>onNavigate&&onNavigate("alert")} gradient={cr.length?"linear-gradient(135deg, #FDEDEC, #F5B7B1)":undefined}/>
+        <Mt value={`${(dashData?.totalWeightLost ?? tl).toFixed(1)}kg`} label="Peso total perdido" icon={TrendingUp}   color={S.grn} trend={8} gradient="linear-gradient(135deg, #EAFAF1, #D5F5E3)"/>
+        <Mt value={`${dashData?.avgEngagement ?? ae}%`}  label="Engajamento medio"  icon={Flame}         color={(dashData?.avgEngagement??ae)>=80?S.grn:(dashData?.avgEngagement??ae)>=60?S.yel:S.red}/>
       </div>
 
       {/* KPIs linha 2 */}
@@ -789,7 +789,7 @@ function Dash({  ps, onSel, mob }) {
             <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>Retornos próximos 7 dias</span>
             <CalendarDays size={15} color={G[400]}/>
           </div>
-          {rWk.length===0 ? <div style={{ fontSize:12, color:"#ccc", padding:8, textAlign:"center" }}>Nenhum</div>
+          {rWk.length===0 ? <div style={{ textAlign:"center", padding:"16px 8px" }}><CalendarDays size={24} color={G[200]} style={{ margin:"0 auto 6px", display:"block" }}/><div style={{ fontSize:11, color:"#bbb" }}>Nenhum retorno agendado</div></div>
             : rWk.map(p => {
               const isT=fmt(p.nr)===fmt(TODAY); const past=new Date(p.nr)<TODAY;
               return (
@@ -936,10 +936,28 @@ function PList({  ps, onSel, mob, onAdd, onDelete }) {
   const SC = genSC(ps);
   const [q,  setQ]  = useState("");
   const [fp, setFp] = useState("all");
+  const [sortBy, setSortBy] = useState("name");
   const f = ps.filter(p => {
     const ql = q.toLowerCase();
     const matchSearch = !q || p.name?.toLowerCase().includes(ql) || p.email?.toLowerCase().includes(ql) || p.phone?.includes(q);
     return matchSearch && (fp==="all"||p.plan===fp);
+  }).sort((a, b) => {
+    if (sortBy === "name") return (a.name||"").localeCompare(b.name||"");
+    if (sortBy === "loss") return (b.iw - b.cw) - (a.iw - a.cw);
+    if (sortBy === "eng") return (b.eng||0) - (a.eng||0);
+    if (sortBy === "recent") {
+      const getLastDate = (p) => {
+        const dates = [];
+        if (p.history?.length) dates.push(new Date(p.history[p.history.length-1].date));
+        if (p.scoreHistory?.length) dates.push(new Date(p.scoreHistory[p.scoreHistory.length-1].date));
+        if (p.circumferenceHistory?.length) dates.push(new Date(p.circumferenceHistory[p.circumferenceHistory.length-1].date));
+        if (p.updatedAt) dates.push(new Date(p.updatedAt));
+        const valid = dates.filter(d => !isNaN(d.getTime()));
+        return valid.length ? Math.max(...valid.map(d=>d.getTime())) : 0;
+      };
+      return getLastDate(b) - getLastDate(a);
+    }
+    return 0;
   });
 
   const exportCSV = () => {
@@ -971,6 +989,11 @@ function PList({  ps, onSel, mob, onAdd, onDelete }) {
           <option value="all">Todos</option>
           {PLANS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
+      </div>
+      <div style={{ display:"flex", gap:4, marginBottom:8 }}>
+        {[["name","Nome"],["loss","Perda"],["eng","Engajamento"],["recent","Recente"]].map(([k,l]) => (
+          <button key={k} onClick={()=>setSortBy(k)} style={{ padding:"4px 10px", borderRadius:6, fontSize:10, border:`1px solid ${sortBy===k?G[500]:G[200]}`, background:sortBy===k?G[100]:"#fff", color:sortBy===k?G[700]:G[500], cursor:"pointer", fontFamily:"inherit", fontWeight:sortBy===k?600:400 }}>{l}</button>
+        ))}
       </div>
       <div style={{ display:"grid", gap:6 }}>
         {f.length === 0 && (
@@ -2028,17 +2051,42 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
   return (
     <div>
       {/* Cabeçalho */}
-      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
-        <div onClick={onBack} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50] }}><ArrowLeft size={16} color={G[700]}/></div>
-        <Av name={p.name} size={40} src={avs[p.id]} onEdit={url=>setAvs(prev=>({...prev,[p.id]:url}))}/>
-        <div style={{ minWidth:0 }}>
-          <div style={{ fontSize:mob?15:17, fontWeight:700, color:G[800], overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
-          <div style={{ fontSize:11, color:G[500] }}>{plan?.name} • {calcAge(p.birthDate)}a • C{p.cycle} • S{p.week}/16</div>
-        </div>
-      </div>
+      {(() => {
+        const lastAct = (() => {
+          const dates = [];
+          if (p.history?.length) dates.push(new Date(p.history[p.history.length-1].date));
+          if (p.scoreHistory?.length) dates.push(new Date(p.scoreHistory[p.scoreHistory.length-1].date));
+          if (p.circumferenceHistory?.length) dates.push(new Date(p.circumferenceHistory[p.circumferenceHistory.length-1].date));
+          if (p.updatedAt) dates.push(new Date(p.updatedAt));
+          const valid = dates.filter(d => !isNaN(d.getTime()));
+          return valid.length ? new Date(Math.max(...valid.map(d=>d.getTime()))) : null;
+        })();
+        const isInactive = lastAct ? differenceInDays(new Date(), lastAct) >= 14 : false;
+        const age = calcAge(p.birthDate);
+        return (
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, padding:"10px 12px", background:"#fff", borderRadius:12, border:`1px solid ${G[200]}` }}>
+            <div onClick={onBack} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50], flexShrink:0 }}><ArrowLeft size={16} color={G[700]}/></div>
+            <Av name={p.name} size={48} src={avs[p.id]} onEdit={url=>setAvs(prev=>({...prev,[p.id]:url}))}/>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                <div style={{ fontSize:mob?15:17, fontWeight:700, color:G[800], overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
+                <span style={{ fontSize:9, fontWeight:600, padding:"2px 8px", borderRadius:10, background:isInactive?"#FDEBD0":"#EAFAF1", color:isInactive?"#D35400":S.grn, border:`1px solid ${isInactive?"#F5CBA7":"#A9DFBF"}` }}>{isInactive?"Inativo":"Ativo"}</span>
+              </div>
+              <div style={{ fontSize:11, color:G[500], marginTop:1 }}>{plan?.name} • {age !== "?" ? `${age}a` : ""} {age !== "?" ? "• " : ""} C{p.cycle} • S{p.week}/16</div>
+              <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:4 }}>
+                <div style={{ fontSize:9, color:G[500], fontWeight:500 }}>Engajamento</div>
+                <div style={{ flex:1, maxWidth:120, height:6, background:G[100], borderRadius:3, overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${p.eng}%`, background:p.eng>=80?S.grn:p.eng>=60?S.yel:S.red, borderRadius:3, transition:"width 0.5s" }}/>
+                </div>
+                <span style={{ fontSize:10, fontWeight:600, color:p.eng>=80?S.grn:p.eng>=60?S.yel:S.red }}>{p.eng}%</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Abas */}
-      <div style={{ display:"flex", borderBottom:`1px solid ${G[200]}`, marginBottom:14, overflowX:"auto", WebkitOverflowScrolling:"touch" }}>
+      <div style={{ display:"flex", borderBottom:`1px solid ${G[200]}`, marginBottom:14, overflowX:"auto", WebkitOverflowScrolling:"touch", position:"sticky", top:0, zIndex:10, background:"#FEFCF9", paddingTop:4 }}>
         {tabs.map(t => (
           <button key={t.k} onClick={()=>setTab(t.k)} style={{ padding:"7px 12px", fontSize:11, fontWeight:tab===t.k?600:400, color:tab===t.k?G[700]:"#aaa", borderBottom:tab===t.k?`2px solid ${G[500]}`:"2px solid transparent", background:"none", border:"none", borderBottomStyle:"solid", whiteSpace:"nowrap", fontFamily:"inherit", display:"flex", alignItems:"center", gap:3, cursor:"pointer" }}>
             <t.i size={12}/>{t.l}
@@ -3080,9 +3128,9 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
 
             {noData && (
               <div style={{ textAlign:"center", padding:40, color:"#aaa", background:"#fff", borderRadius:10, border:`1px solid ${G[200]}` }}>
-                <div style={{ fontSize:32, marginBottom:8 }}>Medidas</div>
-                <div style={{ fontSize:13, fontWeight:600, color:G[700], marginBottom:4 }}>Sem dados registrados</div>
-                <div style={{ fontSize:11 }}>Registre medidas apos consulta com a nutricionista</div>
+                <Lucide.Ruler size={36} color={G[300]} style={{ margin:"0 auto 10px", display:"block" }}/>
+                <div style={{ fontSize:13, fontWeight:600, color:G[700], marginBottom:4 }}>Sem medidas registradas</div>
+                <div style={{ fontSize:11, color:G[500] }}>Registre medidas apos consulta com a nutricionista</div>
               </div>
             )}
 
@@ -4043,7 +4091,7 @@ function MiniChat({ p, messages, setMessages, onLog }) {
         <div style={{ position:'absolute', bottom:110, left:12, right:12, background:'#fff', border:`1px solid ${G[200]}`, borderRadius:10, boxShadow:'0 4px 20px rgba(0,0,0,0.12)', maxHeight:200, overflowY:'auto', zIndex:10, padding:8 }}>
           <div style={{ fontSize:10, fontWeight:600, color:G[600], marginBottom:6, paddingInline:4 }}>Selecione um template</div>
           {templates.length === 0 ? (
-            <div style={{ fontSize:11, color:'#aaa', textAlign:'center', padding:12 }}>Nenhum template cadastrado</div>
+            <div style={{ textAlign:'center', padding:12 }}><FileText size={20} color={G[200]} style={{ margin:"0 auto 4px", display:"block" }}/><div style={{ fontSize:11, color:'#aaa' }}>Nenhum template cadastrado</div></div>
           ) : templates.map(tpl => {
             const cat = TPL_CATEGORIES[tpl.category] || TPL_CATEGORIES.custom;
             return (
@@ -4399,7 +4447,7 @@ function TeamP({ team, setTeam, ta, setTa, activityLog, onToast, currentUser }) 
         <div style={{ background:"#fff", borderRadius:12, border:`1px solid ${G[200]}`, padding:"14px 16px" }}>
           <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:10 }}>Histórico de atividades ({log.length})</div>
           {log.length === 0 ? (
-            <div style={{ textAlign:"center", padding:20, color:"#ccc", fontSize:12 }}>Nenhuma atividade registrada</div>
+            <div style={{ textAlign:"center", padding:"24px 12px" }}><Activity size={28} color={G[200]} style={{ margin:"0 auto 8px", display:"block" }}/><div style={{ fontSize:12, fontWeight:500, color:G[500] }}>Nenhuma atividade registrada</div><div style={{ fontSize:10, color:"#bbb", marginTop:3 }}>Acoes como pesagens e scores aparecerao aqui</div></div>
           ) : log.map((a,i) => {
             const icons = { pesagem:Weight, scores:Activity, cadastro:UserPlus, checklist:ClipboardCheck };
             const colors = { pesagem:S.blue, scores:S.pur, cadastro:S.grn, checklist:G[500] };
@@ -4688,6 +4736,7 @@ function Agenda({ ps, onSel, mob }) {
   };
 
   const handleDeleteAppt = async (id) => {
+    if (!window.confirm("Remover este agendamento?")) return;
     setDeleting(id);
     try { await deleteAppointment(id); await loadAppts(); }
     catch { /* silently fail */ }
@@ -6010,8 +6059,10 @@ function MinhaSemana({ p }) {
         ))}
 
         {totalItems === 0 && (
-          <div style={{ textAlign:"center", color:"#ccc", fontSize:12, padding:"12px 0" }}>
-            Nenhum item registrado para esta semana ainda.
+          <div style={{ textAlign:"center", padding:"20px 12px" }}>
+            <ClipboardCheck size={24} color={G[200]} style={{ margin:"0 auto 6px", display:"block" }}/>
+            <div style={{ fontSize:12, fontWeight:500, color:G[500] }}>Nenhum item registrado para esta semana</div>
+            <div style={{ fontSize:10, color:"#bbb", marginTop:3 }}>O checklist sera preenchido pela equipe clinica</div>
           </div>
         )}
 
@@ -7007,7 +7058,7 @@ function Financeiro({ ps }) {
           <div>Paciente</div><div>Plano</div><div>Valor</div><div>Status</div><div>Vencimento</div><div>Acoes</div>
         </div>
         {monthRecords.length === 0 ? (
-          <div style={{ textAlign:"center", padding:"30px 20px", color:"#aaa", fontSize:12 }}>Nenhum registro neste mes.</div>
+          <div style={{ textAlign:"center", padding:"30px 20px" }}><DollarSign size={28} color={G[200]} style={{ margin:"0 auto 8px", display:"block" }}/><div style={{ fontSize:12, fontWeight:500, color:G[500] }}>Nenhum registro neste mes</div><div style={{ fontSize:10, color:"#bbb", marginTop:3 }}>Registros financeiros aparecerão aqui</div></div>
         ) : (
           monthRecords.map(r => {
             const st = statusColors[r.status] || statusColors.pendente;
@@ -7606,7 +7657,7 @@ export default function App() {
             </button>
           ))}
         </div>
-        <Dash ps={ps} onSel={go} mob={mob}/>
+        <Dash ps={ps} onSel={go} mob={mob} onNavigate={setPage}/>
       </>}
       {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)} onDelete={handleDeletePatient}/>}
       {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}
