@@ -955,10 +955,25 @@ function PList({  ps, onSel, mob, onAdd, onDelete }) {
     return matchSearch && (fp==="all"||p.plan===fp);
   });
 
+  const exportCSV = () => {
+    const headers = ['Nome','Email','Telefone','Plano','Peso Inicial','Peso Atual','Perda (kg)','Semana','Ciclo','Engajamento','Inicio'];
+    const rows = ps.map(p => [
+      p.name, p.email, p.phone, PLANS.find(x=>x.id===p.plan)?.name||p.plan,
+      p.iw, p.cw, (p.iw-p.cw).toFixed(1), `S${p.week}`, `C${p.cycle}`, `${p.eng}%`, p.sd
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${v||''}"`).join(',')).join('\n');
+    const blob = new Blob(['\ufeff'+csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `pacientes-${new Date().toISOString().split('T')[0]}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div>
       <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap", alignItems:"center" }}>
         <button onClick={onAdd} style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}><Plus size={13}/>Novo paciente</button>
+        <button onClick={exportCSV} style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:8, background:"#fff", color:G[700], fontSize:12, fontWeight:600, border:`1px solid ${G[300]}`, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}><Download size={13}/>Exportar CSV</button>
       </div>
       <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
         <div style={{ flex:1, minWidth:140, position:"relative" }}>
@@ -4418,7 +4433,16 @@ function TeamP({ team, setTeam, ta, setTa, activityLog, onToast, currentUser }) 
 
   return (
     <div>
-      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:14 }}>
+      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:14, gap:6 }}>
+        <button onClick={() => {
+          const headers = ['Data','Membro','Acao','Paciente','Detalhe'];
+          const rows = activityLog.map(a => [safeFmt(a.date,'dd/MM/yyyy HH:mm'), a.memberName||'', a.action||'', a.patientName||'', a.detail||'']);
+          const csv = [headers, ...rows].map(r => r.map(v => `"${v||''}"`).join(',')).join('\n');
+          const blob = new Blob(['\ufeff'+csv], { type: 'text/csv;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = url; a.download = `atividades-${new Date().toISOString().split('T')[0]}.csv`; a.click();
+          URL.revokeObjectURL(url);
+        }} style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:8, background:"#fff", color:G[700], fontSize:12, fontWeight:600, border:`1px solid ${G[300]}`, cursor:"pointer", fontFamily:"inherit" }}><Download size={13}/>Exportar Log</button>
         {canManage && <button onClick={()=>setShowNew(true)} style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:8, background:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"inherit" }}><Plus size={13}/>Novo membro</button>}
       </div>
       {team.map(m => {
@@ -6701,6 +6725,19 @@ function Financeiro({ ps }) {
 
   const statusColors = { pago:{bg:S.grnBg,c:S.grn,label:"Pago",icon:"✅"}, pendente:{bg:S.yelBg,c:S.yel,label:"Pendente",icon:"⏳"}, atrasado:{bg:S.redBg,c:S.red,label:"Atrasado",icon:"🔴"} };
 
+  const exportFinCSV = () => {
+    const headers = ['Paciente','Plano/Tipo','Valor','Status','Vencimento','Observacao'];
+    const rows = monthRecords.map(r => [
+      r.patientName||'', r.planName||r.tipo, r.valor, r.status, r.data, r.obs||''
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${v||''}"`).join(',')).join('\n');
+    const blob = new Blob(['\ufeff'+csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `financeiro-${filterMonth}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
@@ -6708,6 +6745,9 @@ function Financeiro({ ps }) {
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <input type="month" value={filterMonth} onChange={e=>setFilterMonth(e.target.value)}
             style={{ padding:"7px 10px", borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:"inherit" }}/>
+          <button onClick={exportFinCSV} style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:8, background:"#fff", color:G[700], fontSize:12, fontWeight:600, border:`1px solid ${G[300]}`, cursor:"pointer", fontFamily:"inherit" }}>
+            <Download size={13}/>Exportar CSV
+          </button>
           <button onClick={()=>{ setForm({patientId:'',tipo:'mensalidade',valor:'',data:format(new Date(),'yyyy-MM-dd'),status:'pendente',obs:''}); setModalOpen(true); }}
             style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 16px", borderRadius:8, background:G[600], color:"#fff", border:"none", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
             <Plus size={12}/>Novo registro
@@ -6947,6 +6987,7 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('serlivre_user') || '{}'); } catch { return {}; }
   });
   const [showProfile, setShowProfile] = useState(false);
+  const [onboardingPatient, setOnboardingPatient] = useState(null); // { id, name } after patient creation
   const [page, setPage] = useState("dash");
 
   // Detectar se veio de link de reset de senha
@@ -7133,7 +7174,7 @@ export default function App() {
   // Criar paciente via API real e recarregar lista
   const handleCreatePatient = async (np) => {
     try {
-      await apiCreatePatient({
+      const result = await apiCreatePatient({
         name:          np.name,
         email:         np.email,
         phone:         np.phone,
@@ -7151,8 +7192,10 @@ export default function App() {
         ...(np.braco        && { braco:       np.braco       }),
       });
       await reloadPatients();
-      toast(`Paciente ${np.name} cadastrado com sucesso!`, 'success');
       addLog({ action:"cadastro", patientId: 0, patientName: np.name, detail:"Novo paciente cadastrado" });
+      // Show onboarding checklist modal
+      const newId = result?.data?.id || result?.id;
+      setOnboardingPatient({ id: newId, name: np.name });
     } catch (err) {
       toast(err?.response?.data?.error || err?.message || 'Erro ao cadastrar paciente. Tente novamente.', 'error');
     }
@@ -7348,6 +7391,50 @@ export default function App() {
     </>
   );
 
+  const onboardingModal = onboardingPatient && (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:10001, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ background:'#fff', borderRadius:16, padding:28, maxWidth:380, width:'100%', boxShadow:'0 12px 48px rgba(0,0,0,0.25)' }}>
+        <div style={{ textAlign:'center', marginBottom:20 }}>
+          <div style={{ width:52, height:52, borderRadius:'50%', background:S.grnBg, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 12px', border:`2px solid ${S.grn}` }}>
+            <Check size={24} color={S.grn}/>
+          </div>
+          <div style={{ fontSize:16, fontWeight:700, color:G[800], marginBottom:4 }}>Paciente cadastrado!</div>
+          <div style={{ fontSize:12, color:'#888' }}>{onboardingPatient.name}</div>
+        </div>
+        <div style={{ background:G[50], borderRadius:10, padding:'14px 16px', marginBottom:20, border:`1px solid ${G[200]}` }}>
+          <div style={{ fontSize:12, fontWeight:600, color:G[700], marginBottom:10 }}>Proximos passos:</div>
+          {[
+            { icon: ClipboardCheck, label: 'Preencher anamnese' },
+            { icon: Weight, label: 'Registrar peso inicial' },
+            { icon: Activity, label: 'Registrar medidas corporais' },
+            { icon: BarChart3, label: 'Primeiro score clinico' },
+            { icon: FileText, label: 'Criar plano alimentar' },
+          ].map((step, i) => (
+            <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 0', borderBottom: i < 4 ? `1px solid ${G[100]}` : 'none' }}>
+              <div style={{ width:24, height:24, borderRadius:'50%', background:G[100], display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                <step.icon size={12} color={G[600]}/>
+              </div>
+              <span style={{ fontSize:12, color:G[800] }}>{`${i+1}. ${step.label}`}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ display:'flex', gap:8 }}>
+          <button onClick={() => {
+            const patId = onboardingPatient.id;
+            setOnboardingPatient(null);
+            if (patId) { setSid(patId); setPage('det'); }
+          }} style={{ flex:2, padding:11, background:G[600], color:'#fff', border:'none', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+            Abrir ficha
+          </button>
+          <button onClick={() => { setOnboardingPatient(null); toast(`Paciente ${onboardingPatient.name} cadastrado com sucesso!`, 'success'); }}
+            style={{ flex:1, padding:11, background:G[100], color:G[800], border:'none', borderRadius:8, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   /* ─── MOBILE ─── */
   if (mob) return (
     <div style={{ fontFamily:"'Outfit','Inter',system-ui,sans-serif", background:W[50], minHeight:"100vh", color:"#2C2C2A", paddingBottom:62 }}>
@@ -7372,6 +7459,7 @@ export default function App() {
       {/* Conteúdo */}
       <div style={{ padding:"10px 12px" }}>
         {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setNl(false); handleCreatePatient(np); }}/>}
+        {onboardingModal}
         {content}</div>
       {/* Bottom nav */}
       <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:`1px solid ${G[200]}`, display:"flex", justifyContent:"space-around", padding:"6px 0 max(6px,env(safe-area-inset-bottom))", zIndex:50 }}>
@@ -7470,6 +7558,7 @@ export default function App() {
         </div>
         
         {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setNl(false); handleCreatePatient(np); }}/>}
+        {onboardingModal}
         {content}
       </div>
       {/* Toast unificado — desktop */}

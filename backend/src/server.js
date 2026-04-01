@@ -1724,6 +1724,87 @@ cron.schedule('0 9 * * *', async () => {
 });
 
 // ════════════════════════════════════════════
+//  CRON — Início de semana (Segunda 8h10)
+//  Envia mensagem motivacional para pacientes ativos
+// ════════════════════════════════════════════
+cron.schedule('10 8 * * 1', async () => {
+  console.log('[CRON] Início de semana — enviando mensagens');
+  try {
+    const patients = await prisma.patient.findMany({
+      where: { cycles: { some: { status: 'ACTIVE' } } },
+      include: { user: { select: { name: true, phone: true } }, cycles: { where: { status: 'ACTIVE' }, take: 1 } }
+    });
+    for (const p of patients) {
+      if (!p.user?.phone) continue;
+      const week = p.cycles[0]?.currentWeek || 1;
+      const msg = `Olá ${p.user.name.split(' ')[0]}, Semana ${week} do programa iniciada. Mantenha o protocolo alimentar. Pesagem desta semana: conforme orientação da equipe.\n\nInstituto Dra. Mariana Wogel`;
+      try {
+        await sendWhatsApp(p.user.phone, msg);
+        await prisma.messageLog.create({ data: { patientId: p.id, body: msg, channel: 'whatsapp', status: 'sent', phone: p.user.phone } });
+      } catch (e) { console.warn(`[CRON] Falha ao enviar para ${p.user.name}:`, e.message); }
+    }
+  } catch (e) { console.error('[CRON] Erro no início de semana:', e.message); }
+});
+
+// ════════════════════════════════════════════
+//  CRON — Lembrete de pesagem (Quinta 9h)
+//  Lembra pacientes que não pesaram esta semana
+// ════════════════════════════════════════════
+cron.schedule('0 9 * * 4', async () => {
+  console.log('[CRON] Lembrete de pesagem');
+  try {
+    const patients = await prisma.patient.findMany({
+      where: { cycles: { some: { status: 'ACTIVE' } } },
+      include: {
+        user: { select: { name: true, phone: true } },
+        cycles: { where: { status: 'ACTIVE' }, take: 1, include: { weekChecks: { orderBy: { createdAt: 'desc' }, take: 1 } } }
+      }
+    });
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    for (const p of patients) {
+      if (!p.user?.phone) continue;
+      const lastCheck = p.cycles[0]?.weekChecks[0];
+      if (lastCheck && new Date(lastCheck.createdAt) > weekAgo) continue; // Already weighed this week
+      const msg = `Olá ${p.user.name.split(' ')[0]}, lembre-se de registrar sua pesagem desta semana. Estamos acompanhando sua evolução!\n\nInstituto Dra. Mariana Wogel`;
+      try {
+        await sendWhatsApp(p.user.phone, msg);
+      } catch (e) { console.warn(`[CRON] Pesagem reminder falhou para ${p.user.name}:`, e.message); }
+    }
+  } catch (e) { console.error('[CRON] Erro lembrete pesagem:', e.message); }
+});
+
+// ════════════════════════════════════════════
+//  CRON — Alerta de inatividade (Diário 10h)
+//  Reengage pacientes inativos há 14+ dias
+// ════════════════════════════════════════════
+cron.schedule('0 10 * * *', async () => {
+  console.log('[CRON] Verificando pacientes inativos');
+  try {
+    const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    const patients = await prisma.patient.findMany({
+      where: {
+        cycles: { some: { status: 'ACTIVE' } },
+        updatedAt: { lt: cutoff }
+      },
+      include: { user: { select: { name: true, phone: true } } }
+    });
+    for (const p of patients) {
+      if (!p.user?.phone) continue;
+      // Only send once per week (check if we already sent recently)
+      const recentMsg = await prisma.messageLog.findFirst({
+        where: { patientId: p.id, body: { contains: 'equipe está aqui' }, createdAt: { gt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } }
+      });
+      if (recentMsg) continue;
+      const msg = `Olá ${p.user.name.split(' ')[0]}, sentimos sua falta! Nossa equipe está aqui para te apoiar. Entre em contato para agendar seu retorno.\n\nInstituto Dra. Mariana Wogel`;
+      try {
+        await sendWhatsApp(p.user.phone, msg);
+        await prisma.messageLog.create({ data: { patientId: p.id, body: msg, channel: 'whatsapp', status: 'sent', phone: p.user.phone } });
+      } catch (e) { console.warn(`[CRON] Inatividade falhou para ${p.user.name}:`, e.message); }
+    }
+  } catch (e) { console.error('[CRON] Erro alerta inatividade:', e.message); }
+});
+
+// ════════════════════════════════════════════
 //  HEALTH CHECK — para EasyPanel / Docker
 // ════════════════════════════════════════════
 app.get('/health', async (req, res) => {
