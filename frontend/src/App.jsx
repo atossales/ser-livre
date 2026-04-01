@@ -655,16 +655,27 @@ function Dash({  ps, onSel, mob }) {
     return w;
   }, [filteredPs]);
 
-  const achievements = [
-    {i:Trophy,    l:"Fernanda completou 15 semanas",        c:S.pur},
-    {i:TrendingUp,l:"Ana Carolina perdeu 1.6kg esta semana",c:S.grn},
-    {i:Star,      l:"Gabriela atingiu score Elite metabólico",c:G[500]},
-    {i:Target,    l:"Beatriz completou todos os treinos",    c:S.blue},
-  ];
-  const todayA = [
-    {i:Zap,  l:"Camila — retorno hoje",              c:S.blue},
-    {i:Check,l:"3 pacientes completaram checklist",  c:S.grn},
-  ];
+  const achievements = useMemo(() => {
+    const list = [];
+    // Patient with highest weight loss
+    const sorted = [...filteredPs].filter(p => (p.iw - p.cw) > 0).sort((a,b) => (b.iw - b.cw) - (a.iw - a.cw));
+    if (sorted[0]) list.push({ i:TrendingUp, l:`${sorted[0].name.split(" ")[0]} perdeu ${(sorted[0].iw - sorted[0].cw).toFixed(1)}kg no programa`, c:S.grn });
+    // Patients with elite score
+    el.forEach(p => list.push({ i:Star, l:`${p.name.split(" ")[0]} atingiu score Elite`, c:S.pur }));
+    // Patients with high engagement (>= 90%)
+    filteredPs.filter(p => p.eng >= 90).slice(0, 2).forEach(p => list.push({ i:Trophy, l:`${p.name.split(" ")[0]} com ${p.eng}% de engajamento`, c:G[500] }));
+    if (list.length === 0) list.push({ i:Target, l:"Nenhuma conquista recente", c:G[400] });
+    return list.slice(0, 4);
+  }, [filteredPs, el]);
+  const todayA = useMemo(() => {
+    const list = [];
+    // Patients with return today
+    rTod.forEach(p => list.push({ i:Zap, l:`${p.name.split(" ")[0]} — retorno hoje`, c:S.blue }));
+    // Critical patients count
+    if (cr.length > 0) list.push({ i:AlertTriangle, l:`${cr.length} paciente${cr.length > 1 ? 's' : ''} em estado crítico`, c:S.red });
+    if (list.length === 0) list.push({ i:Check, l:"Nenhum evento para hoje", c:S.grn });
+    return list;
+  }, [rTod, cr]);
   const gc  = mob ? "1fr" : "repeat(4,1fr)";
   const gc2 = mob ? "1fr" : "1fr 1fr";
 
@@ -3217,7 +3228,7 @@ function MiniChat({ p, messages, setMessages, onLog }) {
         id: m.id,
         date: m.createdAt || m.date,
         senderName: m.sentBy?.name || m.senderName || '',
-        role: (m.sentBy?.role === 'PACIENTE') ? 'paciente' : 'admin',
+        role: (m.sentBy?.role?.toUpperCase() === 'PACIENTE') ? 'paciente' : 'admin',
         text: m.body || m.text || '',
         channel: m.channel || 'interno',
         patientId: m.patientId,
@@ -5531,10 +5542,10 @@ function Login({ onLogin }) {
       if (authError) throw authError;
       const token    = data.session.access_token;
       const meta     = data.user.user_metadata;
-      const role     = meta?.role?.toLowerCase() || 'admin';
+      const role     = (meta?.role || 'admin').toUpperCase();
       localStorage.setItem('serlivre_token', token);
       localStorage.setItem('serlivre_user',  JSON.stringify({ id: data.user.id, email: data.user.email, name: meta?.name || email, role }));
-      onLogin(role === 'paciente' ? 'paciente' : 'admin');
+      onLogin(role === 'PACIENTE' ? 'paciente' : 'admin');
     } catch (err) {
       setError(err.message === 'Invalid login credentials'
         ? 'E-mail ou senha incorretos.'
@@ -5823,7 +5834,7 @@ export default function App() {
   const [lg,      setLg]      = useState(!!localStorage.getItem('serlivre_token'));
   const [isReset, setIsReset] = useState(false);
   const [mode, setMode] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('serlivre_user') || '{}').role === 'paciente' ? 'paciente' : 'admin'; }
+    try { return (JSON.parse(localStorage.getItem('serlivre_user') || '{}').role || '').toUpperCase() === 'PACIENTE' ? 'paciente' : 'admin'; }
     catch { return 'admin'; }
   });
   // Usuário logado atual (lido do localStorage)

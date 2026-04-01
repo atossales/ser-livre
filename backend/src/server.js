@@ -1413,55 +1413,8 @@ app.get('/api/staff', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, 
   }
 });
 
-// PUT /api/users/:id/role — Atualiza cargo do membro (só admin)
-app.put('/api/users/:id/role', authRequired, requireRole('ADMIN'), async (req, res) => {
-  try {
-    const { role } = req.body;
-    const validRoles = ['ADMIN', 'MEDICA', 'ENFERMAGEM', 'NUTRICIONISTA', 'PSICOLOGA', 'TREINADOR'];
-    if (!role || !validRoles.includes(role.toUpperCase())) {
-      return res.status(400).json({ error: `Role inválido. Válidos: ${validRoles.join(', ')}` });
-    }
-    // Não permite remover o próprio admin
-    if (req.params.id === req.user.id && role.toUpperCase() !== 'ADMIN') {
-      return res.status(400).json({ error: 'Você não pode remover seu próprio cargo de admin' });
-    }
-    const updated = await prisma.user.update({
-      where: { id: req.params.id },
-      data: { role: role.toUpperCase() },
-    });
-    // Atualiza também no Supabase Auth metadata
-    await supabaseAdmin.auth.admin.updateUserById(req.params.id, {
-      user_metadata: { role: role.toUpperCase() }
-    });
-    res.json(updated);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// DELETE /api/users/:id — Remove membro da equipe (só admin)
-app.delete('/api/users/:id', authRequired, requireRole('ADMIN'), async (req, res) => {
-  try {
-    // Não permite deletar a si mesmo
-    if (req.params.id === req.user.id) {
-      return res.status(400).json({ error: 'Você não pode excluir sua própria conta' });
-    }
-    // Verifica se o usuário existe e não é paciente
-    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
-    if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
-    // Desativa no Supabase Auth (não deleta para manter integridade)
-    await supabaseAdmin.auth.admin.updateUserById(req.params.id, {
-      ban_duration: '876000h' // ~100 anos = efetivamente deletado
-    });
-    // Remove do Prisma
-    await prisma.user.delete({ where: { id: req.params.id } });
-    console.log(`[STAFF] Membro removido: ${user.name} (${user.email})`);
-    res.json({ message: `${user.name} removido da equipe` });
-  } catch (err) {
-    console.error('[STAFF] Delete error:', err.message);
-    res.status(400).json({ error: err.message });
-  }
-});
+// NOTE: Duplicate PUT /api/users/:id/role and DELETE /api/users/:id routes were removed.
+// The canonical versions with full validation are defined below (after /api/users/:id/profile).
 
 app.put('/api/users/:id/profile', authRequired, async (req, res) => {
   try {
@@ -1469,7 +1422,8 @@ app.put('/api/users/:id/profile', authRequired, async (req, res) => {
     if (req.user.role !== 'ADMIN' && req.user.role !== 'MEDICA' && req.user.id !== req.params.id) {
       return res.status(403).json({ error: 'Acesso negado' });
     }
-    const { name, phone, specialty, active, birthDate } = req.body;
+    const { name, phone, specialty, active } = req.body;
+    // NOTE: birthDate belongs to the Patient model, not User — handle it via PUT /api/patients/:id
     const updated = await prisma.user.update({
       where: { id: req.params.id },
       data: {
@@ -1477,7 +1431,6 @@ app.put('/api/users/:id/profile', authRequired, async (req, res) => {
         ...(phone !== undefined && { phone }),
         ...(specialty !== undefined && { specialty }),
         ...(active !== undefined && { active }),
-        ...(birthDate !== undefined && { birthDate: birthDate ? new Date(birthDate) : null }),
       },
     });
     res.json(updated);
