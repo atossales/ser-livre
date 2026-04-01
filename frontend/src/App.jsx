@@ -6638,6 +6638,55 @@ function NewMemberModal({ onClose, onSave }) {
 /* ════════════════════════════════════════════
    MODAL NOVO PACIENTE
 ═══════════════════════════════════════════════ */
+// ── MedX CSV store (persiste no localStorage, carregado uma vez) ──
+function useMedxPatients() {
+  const [medxList, setMedxList] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('serlivre_medx_patients') || '[]'); } catch { return []; }
+  });
+  const importCSV = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target.result;
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (lines.length < 2) return reject('CSV vazio');
+        // Parse header (normalize: lowercase, trim, remove accents/BOM)
+        const rawHeader = lines[0].replace(/^\uFEFF/, '');
+        const sep = rawHeader.includes(';') ? ';' : ',';
+        const header = rawHeader.split(sep).map(h => h.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/"/g, ''));
+        // Map common MedX column names
+        const colMap = {
+          nome: header.findIndex(h => h.includes('nome') || h.includes('paciente') || h === 'name'),
+          email: header.findIndex(h => h.includes('email') || h.includes('e-mail')),
+          phone: header.findIndex(h => h.includes('telefone') || h.includes('celular') || h.includes('phone') || h.includes('whatsapp') || h.includes('fone')),
+          nasc: header.findIndex(h => h.includes('nascimento') || h.includes('nasc') || h.includes('birth') || h.includes('data_nascimento') || h.includes('dt_nasc')),
+          cpf: header.findIndex(h => h.includes('cpf')),
+        };
+        const patients = [];
+        for (let i = 1; i < lines.length; i++) {
+          const vals = lines[i].split(sep).map(v => v.trim().replace(/^"|"$/g, ''));
+          const nome = colMap.nome >= 0 ? vals[colMap.nome] : '';
+          if (!nome) continue;
+          patients.push({
+            nome,
+            email: colMap.email >= 0 ? vals[colMap.email] : '',
+            phone: colMap.phone >= 0 ? vals[colMap.phone] : '',
+            nasc: colMap.nasc >= 0 ? vals[colMap.nasc] : '',
+            cpf: colMap.cpf >= 0 ? vals[colMap.cpf] : '',
+          });
+        }
+        localStorage.setItem('serlivre_medx_patients', JSON.stringify(patients));
+        setMedxList(patients);
+        resolve(patients.length);
+      } catch (err) { reject(err.message); }
+    };
+    reader.onerror = () => reject('Erro ao ler arquivo');
+    reader.readAsText(file, 'UTF-8');
+  });
+  const clear = () => { localStorage.removeItem('serlivre_medx_patients'); setMedxList([]); };
+  return { medxList, importCSV, clear };
+}
+
 function NewLeadModal({ onClose, onSave, existingPatients }) {
   const [nome, setNome]   = useState("");
   const [nasc, setNasc]   = useState("");
@@ -6647,6 +6696,37 @@ function NewLeadModal({ onClose, onSave, existingPatients }) {
   const [altura, setAltura] = useState("");
   const [plan, setPlan]   = useState("essential");
   const [err,  setErr]    = useState("");
+  // MedX integration
+  const { medxList, importCSV, clear: clearMedx } = useMedxPatients();
+  const [medxSearch, setMedxSearch] = useState("");
+  const [medxOpen, setMedxOpen] = useState(false);
+  const [medxMsg, setMedxMsg] = useState("");
+  const medxResults = medxSearch.length >= 2
+    ? medxList.filter(p => p.nome.toLowerCase().includes(medxSearch.toLowerCase()) || (p.cpf && p.cpf.includes(medxSearch)) || (p.email && p.email.toLowerCase().includes(medxSearch.toLowerCase()))).slice(0, 8)
+    : [];
+  const selectMedx = (p) => {
+    setNome(p.nome || '');
+    setEmail(p.email || '');
+    setPhone(p.phone || '');
+    // Parse date (handles dd/mm/yyyy or yyyy-mm-dd)
+    if (p.nasc) {
+      const parts = p.nasc.split('/');
+      if (parts.length === 3 && parts[0].length <= 2) setNasc(`${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`);
+      else setNasc(p.nasc);
+    }
+    setMedxSearch('');
+    setMedxOpen(false);
+  };
+  const handleMedxFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const count = await importCSV(file);
+      setMedxMsg(`${count} pacientes carregados do MedX`);
+      setTimeout(() => setMedxMsg(''), 4000);
+    } catch (err) { setMedxMsg(`Erro: ${err}`); }
+    e.target.value = '';
+  };
   // Circunferências iniciais (opcionais — para pacientes em execução)
   const [showCirc, setShowCirc]           = useState(false);
   const [circDate, setCircDate]           = useState(format(new Date(),'yyyy-MM-dd'));
@@ -6698,6 +6778,60 @@ function NewLeadModal({ onClose, onSave, existingPatients }) {
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
           <span style={{ fontSize:16, fontWeight:700, color:G[800] }}>Novo paciente</span>
           <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50] }}>✕</div>
+        </div>
+
+        {/* MedX Integration */}
+        <div style={{ marginBottom:14, padding:"10px 12px", borderRadius:10, background:medxList.length > 0 ? '#F0F9FF' : G[50], border:`1px solid ${medxList.length > 0 ? '#93C5FD' : G[200]}` }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:medxList.length > 0 ? 8 : 0 }}>
+            <div style={{ fontSize:11, fontWeight:600, color:medxList.length > 0 ? '#1D4ED8' : G[600] }}>
+              {medxList.length > 0 ? `MedX (${medxList.length.toLocaleString('pt-BR')} pacientes)` : 'Importar base do MedX'}
+            </div>
+            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              {medxList.length > 0 && (
+                <button onClick={clearMedx} style={{ fontSize:9, color:'#999', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', textDecoration:'underline' }}>Limpar base</button>
+              )}
+              <label style={{ fontSize:10, fontWeight:600, color:'#fff', background:medxList.length > 0 ? '#3B82F6' : G[500], padding:"4px 10px", borderRadius:6, cursor:'pointer', display:'inline-block' }}>
+                {medxList.length > 0 ? 'Atualizar CSV' : 'Carregar CSV'}
+                <input type="file" accept=".csv,.txt,.xls,.xlsx" onChange={handleMedxFile} style={{ display:'none' }}/>
+              </label>
+            </div>
+          </div>
+          {medxMsg && <div style={{ fontSize:10, color:'#1D4ED8', marginBottom:6 }}>{medxMsg}</div>}
+          {medxList.length > 0 && (
+            <div style={{ position:'relative' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6, background:'#fff', borderRadius:7, border:'1px solid #93C5FD', padding:'1px 8px' }}>
+                <Search size={12} color="#3B82F6"/>
+                <input
+                  value={medxSearch} onChange={e=>{setMedxSearch(e.target.value);setMedxOpen(true);}}
+                  onFocus={()=>setMedxOpen(true)}
+                  placeholder="Buscar por nome, CPF ou e-mail..."
+                  style={{ flex:1, padding:"7px 0", border:'none', outline:'none', fontSize:12, fontFamily:'inherit', background:'transparent' }}/>
+                {medxSearch && <X size={12} color="#999" style={{cursor:'pointer'}} onClick={()=>{setMedxSearch('');setMedxOpen(false);}}/>}
+              </div>
+              {medxOpen && medxResults.length > 0 && (
+                <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff', borderRadius:'0 0 8px 8px', border:'1px solid #93C5FD', borderTop:'none', maxHeight:200, overflowY:'auto', zIndex:10, boxShadow:'0 8px 24px rgba(0,0,0,0.12)' }}>
+                  {medxResults.map((p,i) => (
+                    <div key={i} onClick={()=>selectMedx(p)}
+                      style={{ padding:"8px 12px", cursor:'pointer', borderBottom:`1px solid #F0F4F8`, fontSize:11, display:'flex', justifyContent:'space-between', alignItems:'center' }}
+                      onMouseEnter={e=>e.currentTarget.style.background='#EFF6FF'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                      <div>
+                        <div style={{ fontWeight:600, color:G[800] }}>{p.nome}</div>
+                        <div style={{ fontSize:10, color:'#888', marginTop:1 }}>
+                          {[p.email, p.phone, p.cpf].filter(Boolean).join(' · ')}
+                        </div>
+                      </div>
+                      <span style={{ fontSize:9, color:'#3B82F6', fontWeight:600 }}>Usar</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {medxOpen && medxSearch.length >= 2 && medxResults.length === 0 && (
+                <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff', borderRadius:'0 0 8px 8px', border:'1px solid #93C5FD', borderTop:'none', padding:'12px', textAlign:'center', fontSize:11, color:'#999' }}>
+                  Nenhum paciente encontrado no MedX
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Dados principais */}
