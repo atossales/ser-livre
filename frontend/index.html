@@ -6,6 +6,10 @@
   <meta name="theme-color" content="#4E3D12" />
   <link rel="icon" type="image/webp" href="/favicon.webp" />
   <link rel="apple-touch-icon" href="/favicon.webp" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Ser Livre — Instituto Dra. Mariana Wogel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -13,6 +17,8 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Crimson Pro', Georgia, serif; background: #FEFCF9; color: #2C2C2A; -webkit-font-smoothing: antialiased; }
     #root { min-height: 100vh; }
+    button, [role="button"] { transition: opacity 0.15s, transform 0.1s; }
+    button:active { transform: scale(0.97); }
   </style>
 </head>
 <body>

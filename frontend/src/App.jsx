@@ -566,6 +566,62 @@ function SBar({ label, total, max, fn }) {
   );
 }
 
+/* Achievement Grid — reusable gamification badges */
+function computeAchievements(p, met, be, mn) {
+  const hist = p.history || [];
+  const overallScore = (met || 0) + (be || 0) + (mn || 0);
+  const weeksDone = p.week || 0;
+  const circ = p.circumferenceHistory || [];
+  // Engagement: calculate from active cycle week checks
+  const wc = p._activeCycle?.weekChecks || [];
+  const engPct = wc.length > 0
+    ? Math.round(wc.filter(w => w.pesoRegistrado).length / Math.max(p.week || 1, 1) * 100)
+    : 0;
+  return [
+    { icon:"\u{1F3CB}\uFE0F", title:"Primeira pesagem",   earned: hist.length > 0 },
+    { icon:"\u{1F4C9}", title:"1kg perdido",         earned: (p.iw - p.cw) >= 1 },
+    { icon:"\u{1F4C9}", title:"5kg perdidos",        earned: (p.iw - p.cw) >= 5 },
+    { icon:"\u{1F4C9}", title:"10kg perdidos",       earned: (p.iw - p.cw) >= 10 },
+    { icon:"\u{1F4CA}", title:"Primeiro score",      earned: overallScore > 0 },
+    { icon:"\u2B50",    title:"Score Saudavel",      earned: met >= 17 },
+    { icon:"\u{1F3C6}", title:"Score Elite",         earned: met >= 21 },
+    { icon:"\u{1F4C5}", title:"4 semanas",           earned: weeksDone >= 4 },
+    { icon:"\u{1F4C5}", title:"8 semanas",           earned: weeksDone >= 8 },
+    { icon:"\u{1F4C5}", title:"16 semanas",          earned: weeksDone >= 16 },
+    { icon:"\u{1F4AA}", title:"Engajamento 90%+",    earned: engPct >= 90 },
+    { icon:"\u{1F4CF}", title:"Primeira medicao",    earned: circ.length > 0 },
+  ];
+}
+
+function AchievementGrid({ p, met, be, mn }) {
+  const achievements = computeAchievements(p, met, be, mn);
+  const earnedCount = achievements.filter(a => a.earned).length;
+  return (
+    <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+        <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>Conquistas</div>
+        <span style={{ fontSize:11, fontWeight:600, color:G[500] }}>{earnedCount} de {achievements.length}</span>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:6 }}>
+        {achievements.map((a, i) => (
+          <div key={i} style={{
+            padding:"10px 6px", borderRadius:10, textAlign:"center",
+            background: a.earned ? G[100] : "#f5f5f5",
+            border: `1px solid ${a.earned ? G[300] : "#e5e5e5"}`,
+            opacity: a.earned ? 1 : 0.45,
+            transition: "all 0.2s",
+          }}>
+            <div style={{ fontSize:20, marginBottom:3 }}>{a.earned ? a.icon : "?"}</div>
+            <div style={{ fontSize:9, fontWeight:a.earned ? 700 : 400, color: a.earned ? G[800] : "#999", lineHeight:1.2 }}>
+              {a.title}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* Checkbox Item */
 function CI({ checked, label, onToggle }) {
   return (
@@ -2085,6 +2141,8 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
             <SBar label="Bem-estar"         total={be}  max={18} fn={sB}/>
             <SBar label="Blindagem mental"  total={mn}  max={9}  fn={sN}/>
           </div>
+          {/* Conquistas do paciente */}
+          <AchievementGrid p={p} met={met} be={be} mn={mn} />
           {/* Histórico de atividades do paciente */}
           {activityLog && activityLog.filter(a=>a.patientId===p.id).length > 0 && (
             <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
@@ -5888,6 +5946,9 @@ function Portal({  p, av, setAv }) {
         </div>
       )}
 
+      {/* Conquistas */}
+      <AchievementGrid p={p} met={met} be={be} mn={mn} />
+
       {/* Progresso da semana (read-only) */}
       <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px" }}>
         <div style={{ fontSize:13, fontWeight:600, color:G[800], marginBottom:8 }}>Progresso da semana</div>
@@ -6803,7 +6864,7 @@ export default function App() {
   const toast = (msg, type = 'success') => {
     const id = crypto.randomUUID();
     setToasts(p => [...p, { id, msg, type }]);
-    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4000);
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3000);
   };
 
   // Carrega dados do servidor na inicialização
@@ -7436,4 +7497,11 @@ export default function App() {
       {showProfile && <ProfileModal user={currentUser} avatarSrc={ta[currentUser.id]} onClose={()=>setShowProfile(false)} onUpdate={u=>{ setCurrentUser(u); setShowProfile(false); }} onAvatarUpdate={(id,url)=>setTa(p=>({...p,[id]:url}))} toast={toast}/>}
     </div>
   );
+}
+
+// Register service worker for PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
 }
