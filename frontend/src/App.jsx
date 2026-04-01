@@ -1029,6 +1029,15 @@ function PList({  ps, onSel, mob, onAdd, onDelete }) {
             return valid.length ? new Date(Math.max(...valid.map(d=>d.getTime()))) : null;
           })();
           const lastActLabel = lastActivityDate ? safeFmt(lastActivityDate.toISOString(), 'dd/MM') : null;
+          // Auto-computed tags
+          const tags = [];
+          if (m <= 12) tags.push({ text:'Critico', color:S.red, bg:S.redBg });
+          else if (m >= 21) tags.push({ text:'Elite', color:S.pur, bg:S.purBg });
+          if ((p.eng||0) < 50) tags.push({ text:'Baixo engajamento', color:S.yel, bg:S.yelBg });
+          const lastH = (p.history||[]).slice(-1)[0];
+          if (lastH && (Date.now() - new Date(lastH.date).getTime()) > 14*24*60*60*1000) {
+            tags.push({ text:'Pesagem atrasada', color:'#E67E22', bg:'#FEF3E7' });
+          }
           return (
             <div key={p.id} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"10px 12px", display:"flex", alignItems:"center", gap:10 }}>
               <div onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:10, flex:1, minWidth:0, cursor:"pointer" }}>
@@ -1037,6 +1046,13 @@ function PList({  ps, onSel, mob, onAdd, onDelete }) {
                   <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
                   <div style={{ fontSize:10, color:G[500] }}>{PLANS.find(x=>x.id===p.plan)?.name} • S{p.week}/16 • {calcAge(p.birthDate)}a</div>
                   {lastActLabel && <div style={{ fontSize:9, color:"#bbb" }}>Atividade: {lastActLabel}</div>}
+                  {tags.length > 0 && (
+                    <div style={{ display:"flex", gap:3, marginTop:2, flexWrap:"wrap" }}>
+                      {tags.map((t,i) => (
+                        <span key={i} style={{ fontSize:8, fontWeight:600, padding:"1px 6px", borderRadius:4, background:t.bg, color:t.color }}>{t.text}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div style={{ textAlign:"right" }}>
                   <Bg color={ms.c} bg={ms.bg}>{ms.e}{ms.l}</Bg>
@@ -1964,6 +1980,13 @@ function RelTab({ p, mob, plan, met, be, mn }) {
 function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onAddCircumference, onLog, onAddScoreMonth, onChangePlan, activityLog, onDelete, onFinish, onRestart, onEdit, onSendMsg, messages, setMessages, currentUser }) {
   const SC = genSC([p]);
   const [tab, setTab]   = useState("ficha");
+  // Peso Meta — persisted in localStorage per patient
+  const [pesoMeta, setPesoMeta] = useState(() => {
+    try { return parseFloat(localStorage.getItem(`serlivre_meta_${p.id}`)) || 0; } catch { return 0; }
+  });
+  const [editingMeta, setEditingMeta] = useState(false);
+  const [metaInput, setMetaInput] = useState(pesoMeta || '');
+  const saveMeta = (v) => { const n = parseFloat(v) || 0; setPesoMeta(n); setMetaInput(n || ''); localStorage.setItem(`serlivre_meta_${p.id}`, n); setEditingMeta(false); };
   const plan = PLANS.find(x=>x.id===p.plan);
   const tier = plan?.tier || 1;
   const ft   = TIER[tier];
@@ -2102,6 +2125,42 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
             <Mt value={`${p.cw}kg`} label="Peso atual"/>
             <Mt value={`-${(p.iw-p.cw).toFixed(1)}kg`} label="Evolução" color={S.grn}/>
             <Mt value={`${Math.round((p.iw-p.cw)/p.iw*100)}%`} label="Perda total"/>
+          </div>
+          {/* Peso Meta — inline editable */}
+          <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"10px 14px" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: pesoMeta > 0 ? 6 : 0 }}>
+              <span style={{ fontSize:12, fontWeight:600, color:G[800] }}>Meta de peso</span>
+              {editingMeta ? (
+                <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                  <input type="number" value={metaInput} onChange={e=>setMetaInput(e.target.value)} placeholder="Ex: 65" style={{ width:60, padding:"3px 6px", borderRadius:5, border:`1px solid ${G[300]}`, fontSize:11, fontFamily:"inherit" }} autoFocus onKeyDown={e=>{ if(e.key==='Enter') saveMeta(metaInput); if(e.key==='Escape') setEditingMeta(false); }}/>
+                  <span style={{ fontSize:10, color:G[500] }}>kg</span>
+                  <button onClick={()=>saveMeta(metaInput)} style={{ padding:"2px 8px", borderRadius:5, background:S.grn, color:"#fff", fontSize:10, border:"none", cursor:"pointer", fontFamily:"inherit" }}>OK</button>
+                  <button onClick={()=>setEditingMeta(false)} style={{ padding:"2px 6px", borderRadius:5, background:G[100], color:G[600], fontSize:10, border:"none", cursor:"pointer", fontFamily:"inherit" }}>X</button>
+                </div>
+              ) : pesoMeta > 0 ? (
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:13, fontWeight:700, color:G[700] }}>{pesoMeta}kg</span>
+                  <button onClick={()=>{ setMetaInput(pesoMeta); setEditingMeta(true); }} style={{ fontSize:9, padding:"2px 6px", borderRadius:4, background:G[50], border:`1px solid ${G[200]}`, color:G[600], cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
+                </div>
+              ) : (
+                <button onClick={()=>setEditingMeta(true)} style={{ fontSize:10, padding:"3px 10px", borderRadius:5, background:G[50], border:`1px solid ${G[300]}`, color:G[600], cursor:"pointer", fontFamily:"inherit" }}>Definir meta</button>
+              )}
+            </div>
+            {pesoMeta > 0 && (() => {
+              const progress = Math.min(100, Math.max(0, ((p.iw - p.cw) / Math.max(0.1, p.iw - pesoMeta)) * 100));
+              const remaining = Math.max(0, p.cw - pesoMeta);
+              return (
+                <div>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:G[500], marginBottom:4 }}>
+                    <span>Progresso: {progress.toFixed(0)}%</span>
+                    <span>{remaining > 0 ? `Faltam ${remaining.toFixed(1)}kg` : 'Meta atingida!'}</span>
+                  </div>
+                  <div style={{ height:8, background:G[100], borderRadius:4, overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${progress}%`, background: progress >= 100 ? S.grn : `linear-gradient(90deg, ${S.yel}, ${S.grn})`, borderRadius:4, transition:"width 0.3s" }}/>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
           <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"12px 14px", fontSize:12 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, flexWrap:"wrap", gap:6 }}>
@@ -6179,6 +6238,25 @@ function Portal({  p, av, setAv }) {
         <Mt value={`-${(p.iw-p.cw).toFixed(1)}kg`} label="Ja perdeu" icon={TrendingDown} color={S.grn}/>
         <Mt value={`${p.iw > 0 ? Math.round((p.iw-p.cw)/p.iw*100) : 0}%`} label="Perda total" icon={TrendingUp} color={S.grn}/>
       </div>
+      {/* Meta progress — Portal */}
+      {(() => {
+        const meta = parseFloat(localStorage.getItem(`serlivre_meta_${p.id}`)) || 0;
+        if (meta <= 0) return null;
+        const progress = Math.min(100, Math.max(0, ((p.iw - p.cw) / Math.max(0.1, p.iw - meta)) * 100));
+        const remaining = Math.max(0, p.cw - meta);
+        return (
+          <div style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"10px 14px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:G[600], marginBottom:5 }}>
+              <span style={{ fontWeight:600 }}>Meta: {meta}kg</span>
+              <span>{remaining > 0 ? `Faltam ${remaining.toFixed(1)}kg` : 'Meta atingida!'}</span>
+            </div>
+            <div style={{ height:8, background:G[100], borderRadius:4, overflow:"hidden" }}>
+              <div style={{ height:"100%", width:`${progress}%`, background: progress >= 100 ? S.grn : `linear-gradient(90deg, ${S.yel}, ${S.grn})`, borderRadius:4 }}/>
+            </div>
+            <div style={{ fontSize:10, color:G[500], marginTop:3, textAlign:"center" }}>{progress.toFixed(0)}% do caminho</div>
+          </div>
+        );
+      })()}
 
       {/* Body composition */}
       {hasBodyComp && (
@@ -6560,7 +6638,7 @@ function NewMemberModal({ onClose, onSave }) {
 /* ════════════════════════════════════════════
    MODAL NOVO PACIENTE
 ═══════════════════════════════════════════════ */
-function NewLeadModal({ onClose, onSave }) {
+function NewLeadModal({ onClose, onSave, existingPatients }) {
   const [nome, setNome]   = useState("");
   const [nasc, setNasc]   = useState("");
   const [peso, setPeso]   = useState("");
@@ -6585,6 +6663,10 @@ function NewLeadModal({ onClose, onSave }) {
     const w = parseFloat(peso);
     if (!nome.trim() || !nasc || !w) return setErr("Preencha nome, nascimento e peso.");
     if (!email.trim()) return setErr("Preencha o e-mail do paciente.");
+    // Duplicate email check
+    if (email && existingPatients && existingPatients.some(p => p.email?.toLowerCase() === email.toLowerCase())) {
+      return setErr("Ja existe um paciente com este e-mail.");
+    }
     setErr("");
     const np = {
       id: crypto.randomUUID(), name: nome.trim(), plan, cycle: 1, week: 1,
@@ -7323,6 +7405,47 @@ export default function App() {
     }
   }, []);
 
+  // PART 4: Global keyboard shortcuts
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'Escape') {
+        setNl(false);
+        setShowProfile(false);
+        setShowMoreMenu(false);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        setNl(true);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        // Focus search input if on patient page
+        const searchInput = document.querySelector('input[placeholder*="Buscar"]');
+        if (searchInput) searchInput.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // PART 6: Session timeout warning
+  useEffect(() => {
+    if (!lg) return;
+    const checkToken = () => {
+      const token = localStorage.getItem('serlivre_token');
+      if (!token) return;
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const expiresIn = payload.exp * 1000 - Date.now();
+        if (expiresIn < 5 * 60 * 1000 && expiresIn > 0) {
+          toast('Sua sessao expira em breve. Salve seu trabalho.', 'warning');
+        }
+      } catch { /* invalid token format — skip */ }
+    };
+    const interval = setInterval(checkToken, 60000);
+    return () => clearInterval(interval);
+  }, [lg]);
+
   /* alertas críticos */
   const ac = ps.filter(p => { const sc=SC[p.id]; return sc&&(cM(sc.m)<=12||cB(sc.b)<10); }).length;
 
@@ -7660,7 +7783,18 @@ export default function App() {
         <Dash ps={ps} onSel={go} mob={mob} onNavigate={setPage}/>
       </>}
       {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)} onDelete={handleDeletePatient}/>}
-      {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}
+      {page==="det" && sp && <>
+        {/* Breadcrumb navigation */}
+        {!mob && (
+          <div style={{ fontSize:11, color:G[500], marginBottom:8, display:"flex", alignItems:"center", gap:4 }}>
+            <span onClick={()=>{ setPage("dash"); setSid(null); }} style={{ cursor:"pointer", textDecoration:"underline" }}>Dashboard</span>
+            <span style={{ fontSize:10 }}>›</span>
+            <span onClick={()=>{ setPage("pat"); setSid(null); }} style={{ cursor:"pointer", textDecoration:"underline" }}>Pacientes</span>
+            <span style={{ fontSize:10 }}>›</span>
+            <span style={{ color:G[800], fontWeight:600 }}>{sp.name}</span>
+          </div>
+        )}
+        <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}
         onSaveScores={handleSaveScores}
         onAddWeighIn={handleAddWeighIn}
         onAddCircumference={handleAddCircumference}
@@ -7675,7 +7809,8 @@ export default function App() {
         messages={messages}
         setMessages={setMessages}
         currentUser={currentUser}
-        onSendMsg={msg=>setMessages(prev=>[...prev,msg])}/>}
+        onSendMsg={msg=>setMessages(prev=>[...prev,msg])}/>
+      </>}
       {page==="alert" && <Alerts ps={ps} onSel={go} onResolve={handleResolveAlert}/>}
       {page==="team"  && <TeamP team={team} setTeam={setTeam} ta={ta} setTa={setTa} activityLog={activityLog} onToast={toast} currentUser={currentUser}/>}
       {page==="agenda"&& <Agenda ps={ps} onSel={go} mob={mob}/>}
@@ -7752,7 +7887,7 @@ export default function App() {
       </div>
       {/* Conteúdo */}
       <div style={{ padding:"10px 12px" }}>
-        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setNl(false); handleCreatePatient(np); }}/>}
+        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setNl(false); handleCreatePatient(np); }} existingPatients={ps}/>}
         {onboardingModal}
         {content}</div>
       {/* Bottom nav */}
@@ -7876,7 +8011,7 @@ export default function App() {
           </div>
         </div>
         
-        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setNl(false); handleCreatePatient(np); }}/>}
+        {nl && <NewLeadModal onClose={()=>setNl(false)} onSave={np=>{ setNl(false); handleCreatePatient(np); }} existingPatients={ps}/>}
         {onboardingModal}
         {content}
       </div>
