@@ -5562,9 +5562,7 @@ function Login({ onLogin }) {
     <div style={{ minHeight:"100vh", background:`linear-gradient(135deg,${G[800]},${G[900]} 50%,#1a1a2e)`, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
       <div style={{ width:"100%", maxWidth:360, background:"#fff", borderRadius:18, padding:"32px 24px", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
         <div style={{ textAlign:"center", marginBottom:24 }}>
-          <div style={{ width:52, height:52, borderRadius:"50%", background:`linear-gradient(135deg,${G[400]},${G[600]})`, margin:"0 auto 10px", display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <Shield size={22} color="#fff"/>
-          </div>
+          <img src="/favicon.webp" alt="Ser Livre" style={{ width:64, height:64, borderRadius:14, objectFit:"contain", margin:"0 auto 10px", display:"block" }}/>
           <div style={{ fontSize:19, fontWeight:700, color:G[800] }}>Programa Ser Livre</div>
           <div style={{ fontSize:11, color:"#bbb", marginTop:2 }}>Instituto Dra. Mariana Wogel</div>
         </div>
@@ -5909,9 +5907,7 @@ export default function App() {
   if (!dbLoaded) return (
     <div style={{ minHeight:"100vh", background:`linear-gradient(135deg,${G[800]},${G[900]})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
       <div style={{ textAlign:"center", color:"#fff" }}>
-        <div style={{ width:48, height:48, borderRadius:"50%", background:`linear-gradient(135deg,${G[400]},${G[600]})`, margin:"0 auto 16px", display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <Shield size={22} color="#fff"/>
-        </div>
+        <img src="/favicon.webp" alt="Ser Livre" style={{ width:56, height:56, borderRadius:12, objectFit:"contain", margin:"0 auto 16px", display:"block" }}/>
         <div style={{ fontSize:16, fontWeight:600 }}>Programa Ser Livre</div>
         <div style={{ fontSize:12, opacity:0.5, marginTop:6 }}>Carregando dados...</div>
         <div style={{ width:32, height:3, background:G[400], borderRadius:2, margin:"14px auto 0", animation:"pulse 1s infinite" }}/>
@@ -6308,7 +6304,7 @@ export default function App() {
       <div style={{ width:220, background:`linear-gradient(180deg,${G[800]},${G[900]})`, color:"#fff", position:"fixed", top:0, left:0, height:"100vh", zIndex:100, display:"flex", flexDirection:"column", transform:so?"none":"translateX(-220px)", transition:"transform 0.3s" }}>
         <div style={{ padding:"16px 14px", borderBottom:`1px solid ${G[700]}`, cursor:"pointer" }} onClick={()=>{ setPage("dash"); setSid(null); }}>
           <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-            <Shield size={18} color={G[300]}/>
+            <img src="/favicon.webp" alt="Ser Livre" style={{ width:32, height:32, borderRadius:6, objectFit:"contain" }}/>
             <div>
               <div style={{ fontSize:14, fontWeight:600 }}>Ser Livre</div>
               <div style={{ fontSize:9, opacity:0.4 }}>Dra. Mariana Wogel</div>
