@@ -130,7 +130,7 @@ const sN = t => t>=8  ? {l:"Elite",      c:S.pur, bg:S.purBg, e:"🟣", d:"Alta"
 /* ════════════════════════════════════════════
    HELPERS GERAIS
 ═══════════════════════════════════════════════ */
-const ini     = n => n.split(" ").filter((_,i,a) => i===0||i===a.length-1).map(w=>w[0]).join("").toUpperCase();
+const ini     = n => (n||"?").split(" ").filter((_,i,a) => i===0||i===a.length-1).map(w=>(w||"")[0]||"").join("").toUpperCase();
 const calcAge = bd => { try { return differenceInYears(new Date(), parseISO(bd)); } catch { return "?"; } };
 
 
@@ -995,6 +995,17 @@ function PList({  ps, onSel, mob, onAdd, onDelete }) {
         )}
         {f.map(p => {
           const sc=SC[p.id]; const m=cM(sc?.m); const ms=sM(m);
+          // Last activity: most recent date among weight history, scores, circumferences
+          const lastActivityDate = (() => {
+            const dates = [];
+            if (p.history?.length) dates.push(new Date(p.history[p.history.length-1].date));
+            if (p.scoreHistory?.length) dates.push(new Date(p.scoreHistory[p.scoreHistory.length-1].date));
+            if (p.circumferenceHistory?.length) dates.push(new Date(p.circumferenceHistory[p.circumferenceHistory.length-1].date));
+            if (p.updatedAt) dates.push(new Date(p.updatedAt));
+            const valid = dates.filter(d => !isNaN(d.getTime()));
+            return valid.length ? new Date(Math.max(...valid.map(d=>d.getTime()))) : null;
+          })();
+          const lastActLabel = lastActivityDate ? safeFmt(lastActivityDate.toISOString(), 'dd/MM') : null;
           return (
             <div key={p.id} style={{ background:"#fff", borderRadius:10, border:`1px solid ${G[200]}`, padding:"10px 12px", display:"flex", alignItems:"center", gap:10 }}>
               <div onClick={()=>onSel(p.id)} style={{ display:"flex", alignItems:"center", gap:10, flex:1, minWidth:0, cursor:"pointer" }}>
@@ -1002,6 +1013,7 @@ function PList({  ps, onSel, mob, onAdd, onDelete }) {
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
                   <div style={{ fontSize:10, color:G[500] }}>{PLANS.find(x=>x.id===p.plan)?.name} • S{p.week}/16 • {calcAge(p.birthDate)}a</div>
+                  {lastActLabel && <div style={{ fontSize:9, color:"#bbb" }}>Atividade: {lastActLabel}</div>}
                 </div>
                 <div style={{ textAlign:"right" }}>
                   <Bg color={ms.c} bg={ms.bg}>{ms.e}{ms.l}</Bg>
@@ -1082,7 +1094,19 @@ function RelTab({ p, mob, plan, met, be, mn }) {
               <Download size={13}/>{generatingPdf ? "Gerando..." : "PDF"}
             </button>
             <button
-              onClick={()=>window.print()}
+              onClick={()=>{
+                const el = document.getElementById(`rel-${p.id}`);
+                if (!el) return;
+                const win = window.open('', '_blank');
+                win.document.write(
+                  `<html><head><title>Relatorio - ${p.name}</title>` +
+                  `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>` +
+                  `<style>body{font-family:'Inter','Segoe UI',system-ui,sans-serif;margin:20px;background:#fff;}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}</style>` +
+                  `</head><body>${el.innerHTML}</body></html>`
+                );
+                win.document.close();
+                setTimeout(() => { win.print(); }, 600);
+              }}
               className="no-print"
               style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:7, background:G[50], color:G[700], fontSize:12, fontWeight:500, border:`1px solid ${G[300]}`, cursor:"pointer", fontFamily:"inherit" }}
             >
@@ -1322,15 +1346,15 @@ function RelTab({ p, mob, plan, met, be, mn }) {
             <div style={{ padding:"18px 16px", pageBreakInside:"avoid" }}>
 
               {/* Header */}
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", border:`1px solid ${G[300]}`, borderRadius:8, padding:"14px 16px", marginBottom:14, background:"#fff" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                  <img src="https://i.imgur.com/iI43uBa.png" alt="Logo" onError={e=>{ e.target.src="https://i.imgur.com/iI43uBa.jpg"; }} style={{ width:48, height:48, borderRadius:6, objectFit:"contain" }}/>
-                  <div>
-                    <div style={{ fontSize:14, fontWeight:700, color:G[800] }}>Instituto Dra. Mariana Wogel</div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", border:`1px solid ${G[300]}`, borderRadius:8, padding:"14px 16px", marginBottom:14, background:"#fff", flexWrap:"wrap", gap:8 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12, minWidth:0, flexShrink:0 }}>
+                  <img src="https://i.imgur.com/iI43uBa.png" alt="Logo" onError={e=>{ e.target.src="https://i.imgur.com/iI43uBa.jpg"; }} style={{ width:48, height:48, borderRadius:6, objectFit:"contain", flexShrink:0 }}/>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:G[800], whiteSpace:"nowrap" }}>Instituto Dra. Mariana Wogel</div>
                     <div style={{ fontSize:10, color:G[500] }}>Programa Ser Livre</div>
                   </div>
                 </div>
-                <div style={{ textAlign:"right" }}>
+                <div style={{ textAlign:"right", minWidth:0 }}>
                   <div style={{ fontSize:14, fontWeight:700, color:G[800], textTransform:"uppercase" }}>{p.name}</div>
                   <div style={{ fontSize:10, color:"#888" }}>Feminino | {age} anos | {heightM.toFixed(2)}m</div>
                   <div style={{ fontSize:10, color:"#888" }}>Semana {p.week}/16 — Ciclo {p.cycle}</div>
@@ -1582,12 +1606,13 @@ function RelTab({ p, mob, plan, met, be, mn }) {
                 {/* SVG Silhouette — multi-part female body */}
                 {(() => {
                   // Referências femininas saudáveis (cm)
-                  const ref = { busto:88, cintura:68, quadril:96, braco:28, pant:36 };
+                  const ref = { busto:88, cintura:68, quadril:96, braco:28, antebraco:22, pant:36 };
                   const cur = {
                     busto: lastC?.torax || ref.busto,
                     cintura: lastC?.cintura || ref.cintura,
                     quadril: lastC?.quadril || ref.quadril,
                     braco: lastC?.braco || ref.braco,
+                    antebraco: lastC?.antebraco || ref.antebraco,
                     pant: lastC?.panturrilha || ref.pant
                   };
                   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -1595,19 +1620,23 @@ function RelTab({ p, mob, plan, met, be, mn }) {
                   const cx = 100;
                   // Builds separate body parts for a given set of scale factors
                   const mkParts = (s) => {
-                    const bw = 24*s.busto, cw = 18*s.cintura, qw = 26*s.quadril, aw = 6*s.braco, pw = 7*s.pant;
+                    const bw = 24*s.busto, cw = 18*s.cintura, qw = 26*s.quadril, aw = Math.max(5, 6*s.braco), fw = Math.max(4, 4.5*(s.antebraco||1)), pw = 7*s.pant;
                     return {
                       head: `M${cx} 12 C${cx+12} 12 ${cx+15} 22 ${cx+15} 32 C${cx+15} 42 ${cx+12} 50 ${cx} 50 C${cx-12} 50 ${cx-15} 42 ${cx-15} 32 C${cx-15} 22 ${cx-12} 12 ${cx} 12 Z`,
                       neck: `M${cx-4} 50 L${cx+4} 50 L${cx+5} 60 L${cx-5} 60 Z`,
                       torso: `M${cx-bw} 65 C${cx-bw-2} 80 ${cx-bw+2} 90 ${cx-bw+1} 100 C${cx-cw+4} 120 ${cx-cw} 135 ${cx-cw} 140 C${cx-cw-1} 155 ${cx-qw+4} 165 ${cx-qw} 175 L${cx-qw+3} 190 L${cx-6} 192 L${cx+6} 192 L${cx+qw-3} 190 L${cx+qw} 175 C${cx+qw-4} 165 ${cx+cw+1} 155 ${cx+cw} 140 C${cx+cw} 135 ${cx+cw-4} 120 ${cx+bw-1} 100 C${cx+bw-2} 90 ${cx+bw+2} 80 ${cx+bw} 65 Q${cx+5} 62 ${cx+5} 60 L${cx-5} 60 Q${cx-5} 62 ${cx-bw} 65 Z`,
                       armL: `M${cx-bw} 67 C${cx-bw-6} 70 ${cx-bw-10} 80 ${cx-bw-12} 95 C${cx-bw-13} 105 ${cx-bw-11} 115 ${cx-bw-10} 125 Q${cx-bw-9} 135 ${cx-bw-7} 140 L${cx-bw-7+aw} 140 Q${cx-bw-5+aw} 135 ${cx-bw-4+aw} 125 C${cx-bw-3+aw} 115 ${cx-bw-5+aw} 105 ${cx-bw-4+aw} 95 C${cx-bw-2+aw} 85 ${cx-bw+aw} 75 ${cx-bw+1} 70 Z`,
                       armR: `M${cx+bw} 67 C${cx+bw+6} 70 ${cx+bw+10} 80 ${cx+bw+12} 95 C${cx+bw+13} 105 ${cx+bw+11} 115 ${cx+bw+10} 125 Q${cx+bw+9} 135 ${cx+bw+7} 140 L${cx+bw+7-aw} 140 Q${cx+bw+5-aw} 135 ${cx+bw+4-aw} 125 C${cx+bw+3-aw} 115 ${cx+bw+5-aw} 105 ${cx+bw+4-aw} 95 C${cx+bw+2-aw} 85 ${cx+bw-aw} 75 ${cx+bw-1} 70 Z`,
+                      forearmL: `M${cx-bw-7} 142 C${cx-bw-7} 150 ${cx-bw-6} 160 ${cx-bw-5} 170 L${cx-bw-5+fw} 170 C${cx-bw-4+fw} 160 ${cx-bw-3+fw} 150 ${cx-bw-7+aw} 142 Z`,
+                      forearmR: `M${cx+bw+7} 142 C${cx+bw+7} 150 ${cx+bw+6} 160 ${cx+bw+5} 170 L${cx+bw+5-fw} 170 C${cx+bw+4-fw} 160 ${cx+bw+3-fw} 150 ${cx+bw+7-aw} 142 Z`,
+                      handL: `M${cx-bw-5+fw/2} 170 C${cx-bw-5+fw/2-3} 172 ${cx-bw-5+fw/2-3} 180 ${cx-bw-5+fw/2} 182 C${cx-bw-5+fw/2+3} 180 ${cx-bw-5+fw/2+3} 172 ${cx-bw-5+fw/2} 170 Z`,
+                      handR: `M${cx+bw+5-fw/2} 170 C${cx+bw+5-fw/2+3} 172 ${cx+bw+5-fw/2+3} 180 ${cx+bw+5-fw/2} 182 C${cx+bw+5-fw/2-3} 180 ${cx+bw+5-fw/2-3} 172 ${cx+bw+5-fw/2} 170 Z`,
                       legL: `M${cx-6} 192 L${cx-qw+3} 190 C${cx-qw+1} 210 ${cx-pw-4} 250 ${cx-pw-2} 280 C${cx-pw-1} 300 ${cx-pw} 320 ${cx-pw+1} 338 L${cx-pw-3} 348 L${cx-1} 348 L${cx-1} 338 C${cx-2} 310 ${cx-3} 260 ${cx-4} 220 Z`,
                       legR: `M${cx+6} 192 L${cx+qw-3} 190 C${cx+qw-1} 210 ${cx+pw+4} 250 ${cx+pw+2} 280 C${cx+pw+1} 300 ${cx+pw} 320 ${cx+pw-1} 338 L${cx+pw+3} 348 L${cx+1} 348 L${cx+1} 338 C${cx+2} 310 ${cx+3} 260 ${cx+4} 220 Z`,
                     };
                   };
-                  const ideal = mkParts({ busto:1, cintura:1, quadril:1, braco:1, pant:1 });
-                  const actual = mkParts({ busto:sc('busto'), cintura:sc('cintura'), quadril:sc('quadril'), braco:sc('braco'), pant:sc('pant') });
+                  const ideal = mkParts({ busto:1, cintura:1, quadril:1, braco:1, antebraco:1, pant:1 });
+                  const actual = mkParts({ busto:sc('busto'), cintura:sc('cintura'), quadril:sc('quadril'), braco:sc('braco'), antebraco:sc('antebraco'), pant:sc('pant') });
                   const renderBody = (parts, fill, stroke, sw, dash, op) => (
                     <>
                       {Object.values(parts).map((d,i) => (
@@ -1632,14 +1661,18 @@ function RelTab({ p, mob, plan, met, be, mn }) {
                         <line x1={cx+bwActual+14} y1="85" x2="192" y2="85" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
                         <line x1={cx+cwActual+4} y1="140" x2="192" y2="140" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
                         <line x1={cx+qwActual+4} y1="178" x2="192" y2="178" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
+                        <line x1="12" y1="158" x2={cx-bwActual-8} y2="158" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
                         <line x1="12" y1="305" x2={cx-7*sc('pant')-2} y2="305" stroke={G[400]} strokeWidth="0.5" strokeDasharray="2,2"/>
                       </svg>
                       {/* Labels */}
                       <div style={{ position:"absolute", left:0, top:103, fontSize:9, color:G[800], fontWeight:700, textAlign:"right", width:30 }}>
-                        {cur.braco}<div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Braço</div>
+                        {cur.braco}<div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Braco</div>
+                      </div>
+                      <div style={{ position:"absolute", left:0, top:150, fontSize:9, color:G[800], fontWeight:700, textAlign:"right", width:30 }}>
+                        {cur.antebraco}<div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Antebr.</div>
                       </div>
                       <div style={{ position:"absolute", right:0, top:77, fontSize:9, color:G[800], fontWeight:700 }}>
-                        {cur.busto}<div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Tórax</div>
+                        {cur.busto}<div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Torax</div>
                       </div>
                       <div style={{ position:"absolute", right:0, top:132, fontSize:9, color:G[800], fontWeight:700 }}>
                         {cur.cintura}<div style={{ fontSize:7, color:"#aaa", fontWeight:500 }}>Cintura</div>
@@ -3649,7 +3682,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                             </div>
                             {isExp && hasContent && (
                               <div style={{ padding:"6px 8px 6px 28px", fontSize:11, color:G[700], lineHeight:1.6 }}>
-                                {meal.items.split('\n').filter(Boolean).map((item,ii)=><div key={ii}>• {item}</div>)}
+                                {(meal.items||"").split('\n').filter(Boolean).map((item,ii)=><div key={ii}>• {item}</div>)}
                                 {meal.notes?.trim() && <div style={{ fontSize:10, color:G[500], marginTop:4, fontStyle:"italic" }}>Obs: {meal.notes}</div>}
                               </div>
                             )}
@@ -3669,7 +3702,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
                           (plan.meals||[]).forEach(m=>{
                             if(m.items?.trim()){
                               txt+=`\n${MEAL_EMOJIS[m.name]||"🍽️"} ${m.name}:\n`;
-                              m.items.split('\n').filter(Boolean).forEach(item=>{txt+=`- ${item}\n`;});
+                              (m.items||"").split('\n').filter(Boolean).forEach(item=>{txt+=`- ${item}\n`;});
                               if(m.notes?.trim()) txt+=`(${m.notes})\n`;
                             }
                           });
@@ -7248,7 +7281,7 @@ export default function App() {
   const titles = { dash:"Dashboard", pat:"Pacientes", det:sp?.name||"", alert:"Central de alertas", team:"Equipe", agenda:"Agenda", msg:"Mensagens", settings:"Configuracoes", fin:"Financeiro" };
   const nav = [
     {k:"dash",  l:"Dashboard", i:LayoutDashboard},
-    {k:"pat",   l:"Pacientes", i:Users},
+    {k:"pat",   l:`Pacientes`, i:Users, badge:ps.length||null},
     {k:"agenda",l:"Agenda",    i:CalendarDays},
     {k:"msg",   l:"Mensagens", i:MessageCircle},
     {k:"alert", l:"Alertas",   i:AlertTriangle},
@@ -7757,6 +7790,7 @@ export default function App() {
             return (
               <div key={n.k} onClick={()=>{ setPage(n.k); setSid(null); }} style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 14px", cursor:"pointer", fontSize:12, fontWeight:a?600:400, background:a?"rgba(255,255,255,0.1)":"transparent", borderLeft:a?`3px solid ${G[300]}`:"3px solid transparent", color:a?"#fff":"rgba(255,255,255,0.55)", transition:"all 0.15s" }}>
                 <n.i size={15}/><span>{n.l}</span>
+                {n.badge > 0 && n.k!=="alert" && n.k!=="msg" && <span style={{ marginLeft:"auto", background:"rgba(255,255,255,0.2)", color:"rgba(255,255,255,0.7)", borderRadius:8, padding:"1px 6px", fontSize:9, fontWeight:600 }}>{n.badge}</span>}
                 {n.k==="alert" && ac>0 && <span style={{ marginLeft:"auto", background:S.red, color:"#fff", borderRadius:8, padding:"1px 6px", fontSize:9, fontWeight:600 }}>{ac}</span>}
                 {n.k==="msg" && unreadMsgs>0 && <span style={{ marginLeft:"auto", background:G[400], color:"#fff", borderRadius:8, padding:"1px 6px", fontSize:9, fontWeight:600 }}>{unreadMsgs}</span>}
               </div>
