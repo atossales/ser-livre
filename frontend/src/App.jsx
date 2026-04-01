@@ -2073,7 +2073,7 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
         <div>
           <div style={{ display:"flex", gap:5, marginBottom:12, flexWrap:"wrap" }}>
             {Array.from({length:16},(_,i)=>i+1).map(w => {
-              const sp=w===8||w===16; const cur=w===p.week; const done=cl[w]?.concluida;
+              const sp=(tier===1 && w===8)||w===16; const cur=w===p.week; const done=cl[w]?.concluida;
               const isSel = sw===w;
               return <div key={w} onClick={()=>setSw(w)} style={{ width:30, height:30, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", fontSize:11, fontWeight:cur||isSel?700:500, background:isSel?G[600]:done?S.grnBg:cur?G[100]:"#fff", color:isSel?"#fff":done?S.grn:G[800], border:sp?`2px solid ${G[500]}`:`1px solid ${done?S.grn:G[200]}`, position:"relative" }}>
                 {w}
@@ -2083,22 +2083,22 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
           </div>
           {cl[sw] && (
             <div>
-              {/* Alerta Consulta + Hilab para Platinum Plus e Gold Plus */}
-              {(sw===8||sw===16) && (
+              {/* Alerta Consulta + Hilab — Tier 1: semana 8+16, Tier 2+3: só semana 16 */}
+              {((tier===1 && (sw===8||sw===16)) || (tier!==1 && sw===16)) && (
                 <div style={{ background:`linear-gradient(135deg,${G[700]},${G[800]})`, borderRadius:10, padding:"14px 16px", marginBottom:10, color:"#fff" }}>
                   <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
                     <div style={{ width:32, height:32, borderRadius:"50%", background:"rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center" }}>
                       <FileText size={16} color={G[300]}/>
                     </div>
                     <div>
-                      <div style={{ fontSize:13, fontWeight:700 }}>⚕️ Semana {sw} — Protocolo obrigatório</div>
+                      <div style={{ fontSize:13, fontWeight:700 }}>⚕️ Semana {sw} — {tier===1 && sw===8 ? "Exames intermediários" : "Protocolo final"}</div>
                       <div style={{ fontSize:10, opacity:0.6 }}>{plan?.name}</div>
                     </div>
                   </div>
                   <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", background:"rgba(255,255,255,0.1)", borderRadius:7 }}>
+                    {tier===1 && <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", background:"rgba(255,255,255,0.1)", borderRadius:7 }}>
                       <Check size={13} color={G[300]}/><span style={{ fontSize:12 }}>Exames Hilab completos</span>
-                    </div>
+                    </div>}
                     <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", background:"rgba(255,255,255,0.1)", borderRadius:7 }}>
                       <Check size={13} color={G[300]}/><span style={{ fontSize:12 }}>Consulta médica com Dra. Mariana</span>
                     </div>
@@ -2122,7 +2122,8 @@ function PDetail({  p, onBack, mob, avs, setAvs, onSaveScores, onAddWeighIn, onA
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
                 <span style={{ fontSize:13, fontWeight:600, color:G[800] }}>
                   Semana {sw}
-                  {(sw===8||sw===16) && <Bg color={G[700]} bg={G[100]}>{sw===8?"Exames Hilab":"Exames Hilab + Consulta"}</Bg>}
+                  {tier===1 && sw===8 && <Bg color={G[700]} bg={G[100]}>Exames Hilab</Bg>}
+                  {sw===16 && <Bg color={G[700]} bg={G[100]}>{tier===1?"Exames + Consulta":"Consulta Dra. Mariana"}</Bg>}
                 </span>
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <span style={{ fontSize:11, color:G[600] }}>Tirzepatida:</span>
