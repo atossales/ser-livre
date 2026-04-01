@@ -215,7 +215,7 @@ app.post('/api/auth/refresh', authLimiter, async (req, res) => {
 });
 
 // Registrar membro da equipe (admin cria conta, Supabase envia convite por e-mail)
-app.post('/api/auth/register', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
+app.post('/api/auth/register', authLimiter, authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
   try {
     const { email, name, role, phone } = req.body;
     if (!email || !name || !role) return res.status(400).json({ error: 'email, name e role são obrigatórios' });
@@ -958,24 +958,37 @@ app.patch('/api/alerts/:id/resolve', authRequired, requireRole('ADMIN','MEDICA',
   }
 });
 
-// ── Health check — testa cada tabela individualmente (sem auth, para debug)
+// ── Health check — básico (sem auth) retorna apenas status; com auth retorna detalhes do DB
 app.get('/api/healthz', async (req, res) => {
+  // Verifica se tem token de auth para retornar detalhes
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    // Sem auth: retorna apenas status simples (sem expor estrutura do DB)
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      return res.json({ status: 'ok', ts: new Date().toISOString() });
+    } catch {
+      return res.status(503).json({ status: 'db_error', ts: new Date().toISOString() });
+    }
+  }
+
+  // Com auth: retorna diagnóstico completo por tabela
   const results = {};
   const tests = [
-    ['patient',         () => prisma.patient.findMany({ take: 1 })],
-    ['cycle',           () => prisma.cycle.findMany({ take: 1 })],
-    ['weekCheck',       () => prisma.weekCheck.findMany({ take: 1 })],
-    ['scoreEntry',      () => prisma.scoreEntry.findMany({ take: 1 })],
-    ['alert',           () => prisma.alert.findMany({ take: 1 })],
-    ['appointment',     () => prisma.appointment.findMany({ take: 1 })],
-    ['messageTemplate', () => prisma.messageTemplate.findMany({ take: 1 })],
-    ['messageLog',      () => prisma.messageLog.findMany({ take: 1 })],
-    ['activityLog',     () => prisma.activityLog.findMany({ take: 1 })],
-    ['user',            () => prisma.user.findMany({ take: 1, select: { id: true, email: true, role: true } })],
+    ['patient',         () => prisma.patient.count()],
+    ['cycle',           () => prisma.cycle.count()],
+    ['weekCheck',       () => prisma.weekCheck.count()],
+    ['scoreEntry',      () => prisma.scoreEntry.count()],
+    ['alert',           () => prisma.alert.count()],
+    ['appointment',     () => prisma.appointment.count()],
+    ['messageTemplate', () => prisma.messageTemplate.count()],
+    ['messageLog',      () => prisma.messageLog.count()],
+    ['activityLog',     () => prisma.activityLog.count()],
+    ['user',            () => prisma.user.count()],
   ];
   for (const [name, fn] of tests) {
-    try { await fn(); results[name] = 'ok'; }
-    catch (e) { results[name] = e.message; }
+    try { const count = await fn(); results[name] = { status: 'ok', count }; }
+    catch (e) { results[name] = { status: 'error', message: e.message }; }
   }
   res.json({ status: 'alive', db: results, ts: new Date().toISOString() });
 });

@@ -19,10 +19,16 @@
     #root { min-height: 100vh; }
     button, [role="button"] { transition: opacity 0.15s, transform 0.1s; }
     button:active { transform: scale(0.97); }
+    @media print {
+      body > div > div > div:first-child, /* sidebar */
+      nav, footer, .no-print { display: none !important; }
+      body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      * { box-shadow: none !important; }
+    }
   </style>
-  <script type="module" crossorigin src="/assets/index-DuOlLUOQ.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/vendor-charts-CUxyZJ6p.js">
-  <link rel="modulepreload" crossorigin href="/assets/vendor-utils-8Cp3qtJu.js">
+  <script type="module" crossorigin src="/assets/index-_CdpmjZZ.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/vendor-charts-DRzOd5iL.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-utils-DsaROkQa.js">
   <link rel="modulepreload" crossorigin href="/assets/vendor-dates-DdCdfpeK.js">
 </head>
 <body>

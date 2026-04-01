@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, updateUserEmail, updateUserPassword, updateStaffRole, deleteStaff, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getWhatsAppStatus, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage, saveCircumference as apiSaveCircumference, getCircumferences as apiGetCircumferences, updateAvatar } from './utils/api';
 import { supabase } from './utils/supabase';
 import { ResetPassword } from './components/ResetPassword';
@@ -89,11 +89,6 @@ const fmt   = d => { const dt = new Date(d); return `${String(dt.getDate()).padS
 const addD  = (d, n) => { const r = new Date(d); r.setDate(r.getDate()+n); return r; };
 
 
-const MOCK_TEAM = [
-  { id:1, name:"Dra. Mariana Wogel", role:"admin",   label:"Administradora", specialty:"Nutróloga",  color:G[600], email:"mariana@institutowogel.com",  phone:"(24) 99999-0001", createdAt:"2024-01-01T00:00:00.000Z" },
-  { id:2, name:"Juliana Santos",     role:"enferm",  label:"Enfermagem",     specialty:"Enfermeira", color:S.grn,  email:"juliana@institutowogel.com",   phone:"(24) 99999-0002", createdAt:"2024-03-15T00:00:00.000Z" },
-];
-
 const ROLES = [
   { id:"admin",    label:"Administrador(a)", color:G[600] },
   { id:"medico",   label:"Médico(a)",        color:S.blue },
@@ -101,14 +96,6 @@ const ROLES = [
   { id:"nutri",    label:"Nutricionista",    color:S.pur  },
   { id:"psi",      label:"Psicóloga",        color:"#E91E63" },
   { id:"personal", label:"Personal",         color:S.yel  },
-];
-
-const MOCK_ACTIVITY = [
-  { id:1, date: subDays(new Date(), 1).toISOString(),  memberId:2, memberName:"Juliana Santos",     action:"pesagem",  patientId:1, patientName:"Ana Carolina Silva", detail:"Peso: 84.2kg | MM: 56.8kg | MG: 27.4kg" },
-  { id:2, date: subDays(new Date(), 2).toISOString(),  memberId:2, memberName:"Juliana Santos",     action:"pesagem",  patientId:2, patientName:"Beatriz Oliveira",   detail:"Peso: 86.8kg | MM: 54.1kg | MG: 32.7kg" },
-  { id:3, date: subDays(new Date(), 3).toISOString(),  memberId:1, memberName:"Dra. Mariana Wogel", action:"scores",   patientId:1, patientName:"Ana Carolina Silva", detail:"Scores metabólicos atualizados" },
-  { id:4, date: subDays(new Date(), 5).toISOString(),  memberId:1, memberName:"Dra. Mariana Wogel", action:"cadastro", patientId:3, patientName:"Camila Ferreira",   detail:"Novo paciente cadastrado" },
-  { id:5, date: subDays(new Date(), 7).toISOString(),  memberId:2, memberName:"Juliana Santos",     action:"checklist",patientId:3, patientName:"Camila Ferreira",   detail:"Checklist semana 3 atualizado" },
 ];
 
 const genSC = (ps) => ps.reduce((acc, p) => {
@@ -1093,6 +1080,13 @@ function RelTab({ p, mob, plan, met, be, mn }) {
               style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:7, background:generatingPdf?G[400]:G[600], color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:generatingPdf?"not-allowed":"pointer", fontFamily:"inherit", opacity:generatingPdf?0.7:1 }}
             >
               <Download size={13}/>{generatingPdf ? "Gerando..." : "PDF"}
+            </button>
+            <button
+              onClick={()=>window.print()}
+              className="no-print"
+              style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:7, background:G[50], color:G[700], fontSize:12, fontWeight:500, border:`1px solid ${G[300]}`, cursor:"pointer", fontFamily:"inherit" }}
+            >
+              <Lucide.Printer size={13}/>Imprimir
             </button>
           </div>
         </div>
@@ -7025,6 +7019,7 @@ export default function App() {
   const [avs,  setAvs]  = useState({});
   const [ta,   setTa]   = useState({});
   const [nl,   setNl]   = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const mob = useMob();
   const sp  = ps.find(p => p.id===sid);
 
@@ -7364,7 +7359,23 @@ export default function App() {
   /* ─── CONTEÚDO ADMIN ─── */
   const content = (
     <>
-      {page==="dash"  && <Dash  ps={ps} onSel={go} mob={mob}/>}
+      {page==="dash" && <>
+        {/* Quick Actions */}
+        <div className="no-print" style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:12 }}>
+          {[
+            { label:"Novo paciente", icon:UserPlus, action:()=>setNl(true) },
+            { label:"Disparar mensagem", icon:MessageCircle, action:()=>setPage("msg") },
+            { label:"Ver alertas", icon:AlertTriangle, action:()=>setPage("alert"), badge:ac },
+            { label:"Agenda", icon:CalendarDays, action:()=>setPage("agenda") },
+          ].map((a,i) => (
+            <button key={i} onClick={a.action} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:8, background:"#fff", border:`1px solid ${G[200]}`, fontSize:11, fontWeight:600, color:G[700], cursor:"pointer", fontFamily:"inherit", position:"relative" }}>
+              <a.icon size={14}/>{a.label}
+              {a.badge > 0 && <span style={{ position:"absolute", top:-4, right:-4, width:16, height:16, borderRadius:"50%", background:S.red, color:"#fff", fontSize:8, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>{a.badge}</span>}
+            </button>
+          ))}
+        </div>
+        <Dash ps={ps} onSel={go} mob={mob}/>
+      </>}
       {page==="pat"   && <PList ps={ps} onSel={go} mob={mob} onAdd={()=>setNl(true)} onDelete={handleDeletePatient}/>}
       {page==="det"   && sp && <PDetail p={sp} onBack={()=>setPage("pat")} mob={mob} avs={avs} setAvs={setAvs}
         onSaveScores={handleSaveScores}
@@ -7466,7 +7477,7 @@ export default function App() {
         {nav.map(n => {
           const a = page===n.k || (n.k==="pat"&&page==="det");
           return (
-            <div key={n.k} onClick={()=>{ setPage(n.k); setSid(null); }} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:1, cursor:"pointer", padding:"3px 6px", position:"relative", flex:1 }}>
+            <div key={n.k} onClick={()=>{ setPage(n.k); setSid(null); setShowMoreMenu(false); }} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:1, cursor:"pointer", padding:"3px 6px", position:"relative", flex:1 }}>
               <n.i size={18} color={a?G[600]:"#ccc"}/>
               <span style={{ fontSize:8, fontWeight:a?600:400, color:a?G[600]:"#ccc" }}>{n.l}</span>
               {n.k==="alert" && ac>0 && <div style={{ position:"absolute", top:-1, right:4, width:10, height:10, borderRadius:"50%", background:S.red }}/>}
@@ -7474,7 +7485,31 @@ export default function App() {
             </div>
           );
         })}
+        {/* Mais */}
+        <div onClick={()=>setShowMoreMenu(!showMoreMenu)} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:1, cursor:"pointer", padding:"3px 6px", position:"relative", flex:1 }}>
+          <Lucide.MoreHorizontal size={18} color={showMoreMenu||["team","fin","settings"].includes(page)?G[600]:"#ccc"}/>
+          <span style={{ fontSize:8, fontWeight:showMoreMenu||["team","fin","settings"].includes(page)?600:400, color:showMoreMenu||["team","fin","settings"].includes(page)?G[600]:"#ccc" }}>Mais</span>
+        </div>
       </div>
+      {/* More menu overlay */}
+      {showMoreMenu && <>
+        <div onClick={()=>setShowMoreMenu(false)} style={{ position:"fixed", inset:0, zIndex:49 }}/>
+        <div style={{ position:"fixed", bottom:56, right:8, background:"#fff", borderRadius:12, boxShadow:"0 4px 24px rgba(0,0,0,0.15)", border:`1px solid ${G[200]}`, zIndex:51, minWidth:180, overflow:"hidden" }}>
+          {[
+            {k:"team", l:"Equipe", i:Shield},
+            {k:"fin", l:"Financeiro", i:DollarSign},
+            {k:"settings", l:"Configuracoes", i:Settings},
+          ].map(n => {
+            const a = page===n.k;
+            return (
+              <div key={n.k} onClick={()=>{ setPage(n.k); setSid(null); setShowMoreMenu(false); }} style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px", cursor:"pointer", background:a?G[50]:"#fff", borderBottom:`1px solid ${G[100]}` }}>
+                <n.i size={16} color={a?G[600]:G[500]}/>
+                <span style={{ fontSize:13, fontWeight:a?600:400, color:a?G[700]:G[600] }}>{n.l}</span>
+              </div>
+            );
+          })}
+        </div>
+      </>}
       {/* Toast unificado — mobile (bottom elevado para não sobrepor nav) */}
       <div style={{ position:'fixed', bottom:72, right:12, zIndex:9999 }}>
         <Toast toasts={toasts} onClose={(id) => setToasts(p => p.filter(t => t.id !== id))} />
