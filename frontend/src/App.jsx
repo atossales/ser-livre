@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, updateUserEmail, updateUserPassword, updateStaffRole, deleteStaff, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getWhatsAppStatus, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage, saveCircumference as apiSaveCircumference, getCircumferences as apiGetCircumferences, updateAvatar } from './utils/api';
+import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, updateUserEmail, updateUserPassword, updateStaffRole, deleteStaff, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getWhatsAppStatus, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage, saveCircumference as apiSaveCircumference, getCircumferences as apiGetCircumferences, updateAvatar, getAutomations, toggleAutomation, updateAutomation, getAutomationLogs } from './utils/api';
 import { supabase } from './utils/supabase';
 import { ResetPassword } from './components/ResetPassword';
 import { Toast } from './components/Toast';
@@ -5109,7 +5109,7 @@ const TPL_CATEGORIES = {
 
 function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) {
   // ── Main tab state ──
-  const [activeTab, setActiveTab] = useState('templates'); // 'templates' | 'historico' | 'programadas'
+  const [activeTab, setActiveTab] = useState('templates'); // 'templates' | 'historico' | 'programadas' | 'automacoes'
   const [templates, setTemplates] = useState([]);
   const [loadingTpls, setLoadingTpls] = useState(true);
   const [historyMsgs, setHistoryMsgs] = useState([]);
@@ -5993,7 +5993,7 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
             <h2 style={{ fontSize:18, fontWeight:700, color:G[800], margin:0 }}>Comunicacao</h2>
             {/* Toggle pills */}
             <div style={{ display:'flex', gap:4, background:G[50], borderRadius:22, padding:3 }}>
-              {[{k:'templates',l:'Templates'},{k:'historico',l:'Historico'},{k:'programadas',l:'Programadas'}].map(tab => (
+              {[{k:'templates',l:'Templates'},{k:'historico',l:'Historico'},{k:'programadas',l:'Programadas'},{k:'automacoes',l:'Envios auto'}].map(tab => (
                 <button key={tab.k} onClick={() => setActiveTab(tab.k)}
                   style={{ ...pillActive,
                     background: activeTab === tab.k ? G[600] : 'transparent',
@@ -6015,10 +6015,240 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
         </div>
 
         {/* Tab content */}
-        {activeTab === 'templates' ? templatesGrid : activeTab === 'historico' ? historicoList : programadasList}
+        {activeTab === 'templates' ? templatesGrid : activeTab === 'historico' ? historicoList : activeTab === 'automacoes' ? <AutomationsPanel/> : programadasList}
       </div>
     </>
   );
+
+  // ── Sub-componente: Painel de Automações ──
+  function AutomationsPanel() {
+    const [rules, setRules] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [expandedId, setExpandedId] = useState(null);
+    const [logs, setLogs] = useState({});
+    const [saving, setSaving] = useState(false);
+    const [editBody, setEditBody] = useState({});
+
+    useEffect(() => { loadRules(); }, []);
+    const loadRules = async () => {
+      try { const { data } = await getAutomations(); setRules(data); } catch {} finally { setLoading(false); }
+    };
+
+    const handleToggle = async (rule) => {
+      try {
+        const { data } = await toggleAutomation(rule.id);
+        setRules(prev => prev.map(r => r.id === rule.id ? { ...r, enabled: data.enabled } : r));
+      } catch {}
+    };
+
+    const handleExpand = async (rule) => {
+      if (expandedId === rule.id) { setExpandedId(null); return; }
+      setExpandedId(rule.id);
+      setEditBody(prev => ({ ...prev, [rule.id]: rule.messageBody || '' }));
+      if (!logs[rule.id]) {
+        try { const { data } = await getAutomationLogs(rule.id); setLogs(prev => ({ ...prev, [rule.id]: data })); } catch {}
+      }
+    };
+
+    const handleSave = async (rule) => {
+      setSaving(true);
+      try {
+        const body = editBody[rule.id];
+        const config = rule._editConfig || rule.config;
+        await updateAutomation(rule.id, { messageBody: body, config });
+        await loadRules();
+        setExpandedId(null);
+      } catch {} finally { setSaving(false); }
+    };
+
+    const updateConfig = (ruleId, key, val) => {
+      setRules(prev => prev.map(r => {
+        if (r.id !== ruleId) return r;
+        const cfg = { ...(r._editConfig || r.config), [key]: val };
+        return { ...r, _editConfig: cfg };
+      }));
+    };
+
+    const typeIcons = { WELCOME: UserPlus, APPOINTMENT_REMINDER: CalendarDays, WEEKLY_MOTIVATIONAL: Heart, WEIGH_REMINDER: Weight, INACTIVITY_ALERT: AlertTriangle };
+    const typeColors = { WELCOME: S.pur, APPOINTMENT_REMINDER: S.blue, WEEKLY_MOTIVATIONAL: S.grn, WEIGH_REMINDER: G[600], INACTIVITY_ALERT: S.yel };
+    const dayNames = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'];
+
+    if (loading) return <div style={{ textAlign:'center', padding:40, color:G[400] }}>Carregando...</div>;
+
+    return (
+      <div>
+        <div style={{ background:G[50], borderRadius:10, padding:'12px 16px', marginBottom:16, border:`1px solid ${G[200]}` }}>
+          <div style={{ fontSize:12, color:G[700] }}>O sistema envia mensagens automaticamente para suas pacientes nos momentos certos. Ligue ou desligue cada envio abaixo.</div>
+        </div>
+
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {rules.map(rule => {
+            const Icon = typeIcons[rule.type] || Zap;
+            const color = typeColors[rule.type] || G[600];
+            const cfg = rule._editConfig || rule.config || {};
+            const expanded = expandedId === rule.id;
+            const ruleLogs = logs[rule.id] || [];
+
+            return (
+              <div key={rule.id} style={{ background:'#fff', borderRadius:12, border:`1px solid ${expanded ? G[400] : G[200]}`, overflow:'hidden', transition:'border-color 0.2s' }}>
+                {/* Card header */}
+                <div style={{ padding:'16px 18px', display:'flex', alignItems:'center', gap:14 }}>
+                  <div style={{ width:38, height:38, borderRadius:10, background:`${color}15`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    <Icon size={18} color={color}/>
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:G[800] }}>{rule.name}</div>
+                    <div style={{ fontSize:11, color:G[500], marginTop:2 }}>
+                      {rule.type === 'WELCOME' && 'Envia ao cadastrar nova paciente'}
+                      {rule.type === 'APPOINTMENT_REMINDER' && `Envia ${cfg.hoursBefore || 24}h antes da consulta`}
+                      {rule.type === 'WEEKLY_MOTIVATIONAL' && `Toda ${dayNames[cfg.dayOfWeek ?? 1]} as ${String(cfg.hour ?? 8).padStart(2,'0')}:${String(cfg.minute ?? 0).padStart(2,'0')}`}
+                      {rule.type === 'WEIGH_REMINDER' && `${dayNames[cfg.fallbackDay ?? 4]} as ${String(cfg.hour ?? 9).padStart(2,'0')}:00 (configuravel por paciente)`}
+                      {rule.type === 'INACTIVITY_ALERT' && `Apos ${cfg.inactiveDays || 14} dias sem interacao`}
+                    </div>
+                    {rule.stats?.lastSent && (
+                      <div style={{ fontSize:10, color:'#aaa', marginTop:3 }}>
+                        Ultimo: {rule.stats.lastSent.patient?.user?.name?.split(' ')[0] || '—'} — {safeFmt(rule.stats.lastSent.createdAt, 'dd/MM')}
+                        {rule.stats.sentLast7d > 0 && <span style={{ marginLeft:8, color:S.grn }}>{rule.stats.sentLast7d} enviadas esta semana</span>}
+                      </div>
+                    )}
+                  </div>
+                  {/* Toggle */}
+                  <div onClick={() => handleToggle(rule)} style={{ width:44, height:24, borderRadius:12, background:rule.enabled ? S.grn : G[200], cursor:'pointer', position:'relative', transition:'background 0.2s', flexShrink:0 }}>
+                    <div style={{ width:20, height:20, borderRadius:10, background:'#fff', position:'absolute', top:2, left:rule.enabled ? 22 : 2, transition:'left 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.2)' }}/>
+                  </div>
+                  <button onClick={() => handleExpand(rule)} style={{ background:'none', border:'none', cursor:'pointer', padding:4, color:G[500], fontSize:11, fontFamily:'inherit' }}>
+                    {expanded ? 'Fechar' : 'Ajustar'}
+                  </button>
+                </div>
+
+                {/* Expanded config */}
+                {expanded && (
+                  <div style={{ borderTop:`1px solid ${G[200]}`, padding:'16px 18px', background:G[50] }}>
+                    {/* Config por tipo */}
+                    {rule.type === 'WEEKLY_MOTIVATIONAL' && (
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:6 }}>Dia e horario</div>
+                        <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
+                          {dayNames.map((d, i) => (
+                            <button key={i} onClick={() => updateConfig(rule.id, 'dayOfWeek', i)}
+                              style={{ padding:'5px 10px', borderRadius:6, fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'inherit',
+                                border:`1px solid ${(cfg.dayOfWeek ?? 1) === i ? G[600] : G[200]}`,
+                                background:(cfg.dayOfWeek ?? 1) === i ? G[600] : '#fff',
+                                color:(cfg.dayOfWeek ?? 1) === i ? '#fff' : G[700] }}>{d}</button>
+                          ))}
+                        </div>
+                        <select value={cfg.hour ?? 8} onChange={e => updateConfig(rule.id, 'hour', Number(e.target.value))}
+                          style={{ padding:'6px 10px', borderRadius:6, border:`1px solid ${G[300]}`, fontSize:11, fontFamily:'inherit' }}>
+                          {Array.from({length:16}, (_,i) => i+6).map(h => <option key={h} value={h}>{String(h).padStart(2,'0')}:00</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    {rule.type === 'WEIGH_REMINDER' && (
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:6 }}>Dia padrao de pesagem</div>
+                        <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:6 }}>
+                          {dayNames.map((d, i) => (
+                            <button key={i} onClick={() => updateConfig(rule.id, 'fallbackDay', i)}
+                              style={{ padding:'5px 10px', borderRadius:6, fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'inherit',
+                                border:`1px solid ${(cfg.fallbackDay ?? 4) === i ? G[600] : G[200]}`,
+                                background:(cfg.fallbackDay ?? 4) === i ? G[600] : '#fff',
+                                color:(cfg.fallbackDay ?? 4) === i ? '#fff' : G[700] }}>{d}</button>
+                          ))}
+                        </div>
+                        <div style={{ fontSize:10, color:G[500] }}>Pacientes podem ter dia individual na ficha de cadastro</div>
+                      </div>
+                    )}
+
+                    {rule.type === 'INACTIVITY_ALERT' && (
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:6 }}>Dias sem interacao</div>
+                        <div style={{ display:'flex', gap:6 }}>
+                          {[7, 14, 21, 30].map(d => (
+                            <button key={d} onClick={() => updateConfig(rule.id, 'inactiveDays', d)}
+                              style={{ padding:'5px 12px', borderRadius:6, fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'inherit',
+                                border:`1px solid ${(cfg.inactiveDays ?? 14) === d ? G[600] : G[200]}`,
+                                background:(cfg.inactiveDays ?? 14) === d ? G[600] : '#fff',
+                                color:(cfg.inactiveDays ?? 14) === d ? '#fff' : G[700] }}>{d} dias</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {rule.type === 'APPOINTMENT_REMINDER' && (
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:6 }}>Enviar quantas horas antes</div>
+                        <div style={{ display:'flex', gap:6 }}>
+                          {[12, 24, 48].map(h => (
+                            <button key={h} onClick={() => updateConfig(rule.id, 'hoursBefore', h)}
+                              style={{ padding:'5px 12px', borderRadius:6, fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'inherit',
+                                border:`1px solid ${(cfg.hoursBefore ?? 24) === h ? G[600] : G[200]}`,
+                                background:(cfg.hoursBefore ?? 24) === h ? G[600] : '#fff',
+                                color:(cfg.hoursBefore ?? 24) === h ? '#fff' : G[700] }}>{h}h antes</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Message editor */}
+                    <div style={{ marginBottom:14 }}>
+                      <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:6 }}>Mensagem</div>
+                      <textarea value={editBody[rule.id] ?? rule.messageBody ?? ''} onChange={e => setEditBody(prev => ({ ...prev, [rule.id]: e.target.value }))}
+                        rows={3} style={{ width:'100%', padding:'9px 11px', borderRadius:7, border:`1px solid ${G[300]}`, fontSize:12, fontFamily:'inherit', resize:'vertical', boxSizing:'border-box', background:'#fff' }}/>
+                      <div style={{ fontSize:10, color:G[500], marginTop:3, display:'flex', gap:6, flexWrap:'wrap' }}>
+                        Variaveis: {['nome','semana','peso_atual','tipo_consulta','hora_consulta'].map(v => (
+                          <span key={v} onClick={() => setEditBody(prev => ({ ...prev, [rule.id]: (prev[rule.id] ?? rule.messageBody ?? '') + `{{${v}}}` }))}
+                            style={{ background:G[100], padding:'1px 6px', borderRadius:4, cursor:'pointer', fontSize:10 }}>{`{{${v}}}`}</span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Recent logs */}
+                    {ruleLogs.length > 0 && (
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:6 }}>Ultimos envios</div>
+                        <div style={{ background:'#fff', borderRadius:8, border:`1px solid ${G[200]}`, overflow:'hidden' }}>
+                          {ruleLogs.slice(0, 5).map(log => (
+                            <div key={log.id} style={{ padding:'6px 10px', borderBottom:`1px solid ${G[100]}`, display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:11 }}>
+                              <div>
+                                <span style={{ fontWeight:500, color:G[800] }}>{log.patient?.user?.name?.split(' ')[0] || '—'}</span>
+                                <span style={{ color:'#aaa', marginLeft:6 }}>{safeFmt(log.createdAt, 'dd/MM HH:mm')}</span>
+                              </div>
+                              <span style={{ padding:'1px 6px', borderRadius:10, fontSize:9, fontWeight:600,
+                                background:log.status === 'sent' ? S.grnBg : S.redBg,
+                                color:log.status === 'sent' ? S.grn : S.red }}>
+                                {log.status === 'sent' ? 'Entregue' : 'Falhou'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Save button */}
+                    <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+                      <button onClick={() => setExpandedId(null)}
+                        style={{ padding:'8px 16px', borderRadius:7, border:`1px solid ${G[300]}`, background:'#fff', color:G[700], fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Cancelar</button>
+                      <button onClick={() => handleSave(rule)} disabled={saving}
+                        style={{ padding:'8px 20px', borderRadius:7, border:'none', background:G[600], color:'#fff', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit', opacity:saving?0.6:1 }}>
+                        {saving ? 'Salvando...' : 'Salvar ajustes'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Summary bar */}
+        <div style={{ marginTop:14, background:G[50], borderRadius:10, padding:'10px 16px', border:`1px solid ${G[200]}`, display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:11, color:G[600] }}>
+          <span>{rules.filter(r=>r.enabled).length} envios ligados · {rules.filter(r=>!r.enabled).length} desligados</span>
+          <span style={{ color:S.grn }}>{rules.reduce((s,r) => s + (r.stats?.sentLast7d || 0), 0)} mensagens enviadas esta semana</span>
+        </div>
+      </div>
+    );
+  }
 }
 
 /* ════════════════════════════════════════════

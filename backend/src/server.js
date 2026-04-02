@@ -1729,122 +1729,72 @@ cron.schedule('0 8 * * 1', async () => {
 });
 
 // ════════════════════════════════════════════
-//  CRON — Lembretes de consulta via WhatsApp
-//  Todo dia às 9h fuso Brasília (America/Sao_Paulo)
+//  AUTOMATION ENGINE — substitui os cron jobs antigos
+//  Todas as regras são configuráveis via /api/automations
 // ════════════════════════════════════════════
-cron.schedule('0 9 * * *', async () => {
+const automationEngine = require('./automations/engine');
+
+// ── API: Automation Rules CRUD ──
+app.get('/api/automations', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
   try {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const start = new Date(tomorrow); start.setHours(0,0,0,0);
-    const end   = new Date(tomorrow); end.setHours(23,59,59,999);
-
-    const appointments = await prisma.appointment.findMany({
-      where: { date: { gte: start, lte: end }, sendReminder: true, reminderSent: false },
-      include: { patient: { include: { user: { select: { name: true, phone: true } } } } }
-    });
-
-    for (const appt of appointments) {
-      const phone = appt.patient?.user?.phone;
-      const name  = appt.patient?.user?.name || 'Paciente';
-      if (!phone) continue;
-
-      const hora = new Date(appt.date).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
-      const tipo = appt.type === 'CONSULTA_MEDICA' ? 'consulta médica' : appt.type === 'CONSULTA_NUTRI' ? 'consulta com a nutricionista' : 'exame';
-
-      const msg = `Olá ${name}! 👋\n\nLembrete: você tem ${tipo} amanhã às ${hora} no Instituto Dra. Mariana Wogel.\n\nQualquer dúvida, entre em contato. Até amanhã! 🌟`;
-
-      const result = await sendWhatsApp(phone, msg);
-      if (result.ok || result.success) {
-        await prisma.appointment.update({ where: { id: appt.id }, data: { reminderSent: true } });
-        console.log(`[CRON] Lembrete enviado para ${name} (${phone})`);
-      }
-    }
-    console.log(`[CRON] Lembretes processados: ${appointments.length} agendamentos`);
-  } catch (err) {
-    console.error('[CRON] Erro ao enviar lembretes:', err.message);
-  }
+    const rules = await prisma.automationRule.findMany({ orderBy: { id: 'asc' } });
+    // Enrich with stats
+    const enriched = await Promise.all(rules.map(async (r) => {
+      const last7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const [sentCount, failedCount, lastSent] = await Promise.all([
+        prisma.messageLog.count({ where: { automationRuleId: r.id, status: 'sent', createdAt: { gt: last7d } } }),
+        prisma.messageLog.count({ where: { automationRuleId: r.id, status: 'failed', createdAt: { gt: last7d } } }),
+        prisma.messageLog.findFirst({ where: { automationRuleId: r.id }, orderBy: { createdAt: 'desc' }, select: { createdAt: true, body: true, phone: true, status: true, patient: { select: { user: { select: { name: true } } } } } })
+      ]);
+      return { ...r, stats: { sentLast7d: sentCount, failedLast7d: failedCount, lastSent } };
+    }));
+    res.json(enriched);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ════════════════════════════════════════════
-//  CRON — Início de semana (Segunda 8h10)
-//  Envia mensagem motivacional para pacientes ativos
-// ════════════════════════════════════════════
-cron.schedule('10 8 * * 1', async () => {
-  console.log('[CRON] Início de semana — enviando mensagens');
+app.put('/api/automations/:id', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
   try {
-    const patients = await prisma.patient.findMany({
-      where: { cycles: { some: { status: 'ACTIVE' } } },
-      include: { user: { select: { name: true, phone: true } }, cycles: { where: { status: 'ACTIVE' }, take: 1 } }
-    });
-    for (const p of patients) {
-      if (!p.user?.phone) continue;
-      const week = p.cycles[0]?.currentWeek || 1;
-      const msg = `Olá ${p.user.name.split(' ')[0]}, Semana ${week} do programa iniciada. Mantenha o protocolo alimentar. Pesagem desta semana: conforme orientação da equipe.\n\nInstituto Dra. Mariana Wogel`;
-      try {
-        await sendWhatsApp(p.user.phone, msg);
-        await prisma.messageLog.create({ data: { patientId: p.id, body: msg, channel: 'whatsapp', status: 'sent', phone: p.user.phone } });
-      } catch (e) { console.warn(`[CRON] Falha ao enviar para ${p.user.name}:`, e.message); }
-    }
-  } catch (e) { console.error('[CRON] Erro no início de semana:', e.message); }
+    const { enabled, config, messageBody, gracePeriodDays, name } = req.body;
+    const data = {};
+    if (enabled !== undefined) data.enabled = enabled;
+    if (config !== undefined) data.config = config;
+    if (messageBody !== undefined) data.messageBody = messageBody;
+    if (gracePeriodDays !== undefined) data.gracePeriodDays = gracePeriodDays;
+    if (name !== undefined) data.name = name;
+    const rule = await prisma.automationRule.update({ where: { id: parseInt(req.params.id) }, data });
+    res.json(rule);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-// ════════════════════════════════════════════
-//  CRON — Lembrete de pesagem (Quinta 9h)
-//  Lembra pacientes que não pesaram esta semana
-// ════════════════════════════════════════════
-cron.schedule('0 9 * * 4', async () => {
-  console.log('[CRON] Lembrete de pesagem');
+app.patch('/api/automations/:id/toggle', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
   try {
-    const patients = await prisma.patient.findMany({
-      where: { cycles: { some: { status: 'ACTIVE' } } },
-      include: {
-        user: { select: { name: true, phone: true } },
-        cycles: { where: { status: 'ACTIVE' }, take: 1, include: { weekChecks: { orderBy: { createdAt: 'desc' }, take: 1 } } }
-      }
-    });
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    for (const p of patients) {
-      if (!p.user?.phone) continue;
-      const lastCheck = p.cycles[0]?.weekChecks[0];
-      if (lastCheck && new Date(lastCheck.createdAt) > weekAgo) continue; // Already weighed this week
-      const msg = `Olá ${p.user.name.split(' ')[0]}, lembre-se de registrar sua pesagem desta semana. Estamos acompanhando sua evolução!\n\nInstituto Dra. Mariana Wogel`;
-      try {
-        await sendWhatsApp(p.user.phone, msg);
-      } catch (e) { console.warn(`[CRON] Pesagem reminder falhou para ${p.user.name}:`, e.message); }
-    }
-  } catch (e) { console.error('[CRON] Erro lembrete pesagem:', e.message); }
+    const current = await prisma.automationRule.findUnique({ where: { id: parseInt(req.params.id) } });
+    if (!current) return res.status(404).json({ error: 'Regra não encontrada' });
+    const rule = await prisma.automationRule.update({ where: { id: current.id }, data: { enabled: !current.enabled } });
+    res.json(rule);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-// ════════════════════════════════════════════
-//  CRON — Alerta de inatividade (Diário 10h)
-//  Reengage pacientes inativos há 14+ dias
-// ════════════════════════════════════════════
-cron.schedule('0 10 * * *', async () => {
-  console.log('[CRON] Verificando pacientes inativos');
+app.get('/api/automations/:id/logs', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
   try {
-    const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
-    const patients = await prisma.patient.findMany({
-      where: {
-        cycles: { some: { status: 'ACTIVE' } },
-        updatedAt: { lt: cutoff }
-      },
-      include: { user: { select: { name: true, phone: true } } }
+    const logs = await prisma.messageLog.findMany({
+      where: { automationRuleId: parseInt(req.params.id) },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      include: { patient: { select: { user: { select: { name: true } } } } }
     });
-    for (const p of patients) {
-      if (!p.user?.phone) continue;
-      // Only send once per week (check if we already sent recently)
-      const recentMsg = await prisma.messageLog.findFirst({
-        where: { patientId: p.id, body: { contains: 'equipe está aqui' }, createdAt: { gt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } }
-      });
-      if (recentMsg) continue;
-      const msg = `Olá ${p.user.name.split(' ')[0]}, sentimos sua falta! Nossa equipe está aqui para te apoiar. Entre em contato para agendar seu retorno.\n\nInstituto Dra. Mariana Wogel`;
-      try {
-        await sendWhatsApp(p.user.phone, msg);
-        await prisma.messageLog.create({ data: { patientId: p.id, body: msg, channel: 'whatsapp', status: 'sent', phone: p.user.phone } });
-      } catch (e) { console.warn(`[CRON] Inatividade falhou para ${p.user.name}:`, e.message); }
-    }
-  } catch (e) { console.error('[CRON] Erro alerta inatividade:', e.message); }
+    res.json(logs);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Patient weighDay ──
+app.patch('/api/patients/:id/weigh-day', authRequired, requireRole('ADMIN', 'MEDICA', 'NUTRICIONISTA'), async (req, res) => {
+  try {
+    const { weighDay } = req.body;
+    if (weighDay !== null && (weighDay < 0 || weighDay > 6)) return res.status(400).json({ error: 'weighDay deve ser 0-6 ou null' });
+    const patient = await prisma.patient.update({ where: { id: parseInt(req.params.id) }, data: { weighDay } });
+    res.json(patient);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 // ════════════════════════════════════════════
@@ -2035,6 +1985,8 @@ let server;
     console.log(`\n🟢 Ser Livre API rodando na porta ${PORT}`);
     console.log(`   Banco: ${process.env.DATABASE_URL ? 'PostgreSQL conectado' : '⚠️ DATABASE_URL não configurada'}`);
     console.log(`   Supabase Auth: ${process.env.SUPABASE_URL ? process.env.SUPABASE_URL : '⚠️ não configurado'}\n`);
+    // Inicia o motor de automações
+    automationEngine.start();
   });
 })();
 

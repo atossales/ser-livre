@@ -166,4 +166,11 @@ export const deleteStaff = (id) => api.delete(`/users/${id}`);
 export const getActivity = () => api.get('/activity');
 export const logActivity = (data) => api.post('/activity', data);
 
+// ── Automations ──
+export const getAutomations = () => api.get('/automations');
+export const updateAutomation = (id, data) => api.put(`/automations/${id}`, data);
+export const toggleAutomation = (id) => api.patch(`/automations/${id}/toggle`);
+export const getAutomationLogs = (id) => api.get(`/automations/${id}/logs`);
+export const setPatientWeighDay = (id, weighDay) => api.patch(`/patients/${id}/weigh-day`, { weighDay });
+
 export default api;

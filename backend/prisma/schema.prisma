@@ -94,6 +94,9 @@ model Patient {
   plan          Plan        @default(ESSENTIAL)
   startDate     DateTime    @default(now())
 
+  // Dia de pesagem individual (0=Dom, 1=Seg, ..., 6=Sab). null = usa padrão da regra
+  weighDay      Int?
+
   // Relacionamentos
   cycles        Cycle[]         // Ciclos de tratamento
   alerts        Alert[]         // Alertas gerados
@@ -389,6 +392,28 @@ model MessageTemplate {
   updatedAt   DateTime @updatedAt
 
   logs        MessageLog[]
+  automationRules AutomationRule[]
+}
+
+// ──────────────────────────────────────────────
+// REGRAS DE AUTOMAÇÃO DE MENSAGENS
+// Cada regra define quando e o que enviar automaticamente.
+// config é JSON flexível por tipo de regra.
+// ──────────────────────────────────────────────
+model AutomationRule {
+  id               Int              @id @default(autoincrement())
+  type             String           // APPOINTMENT_REMINDER | WEEKLY_MOTIVATIONAL | WEIGH_REMINDER | INACTIVITY_ALERT | WELCOME
+  name             String           // Nome legível
+  enabled          Boolean          @default(true)
+  config           Json             @default("{}")  // Configuração por tipo
+  messageBody      String?          // Template de mensagem customizado (se null, usa default)
+  templateId       Int?
+  template         MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  gracePeriodDays  Int              @default(0)     // Carência para novos pacientes
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  messageLogs      MessageLog[]
 }
 
 // ──────────────────────────────────────────────
@@ -403,11 +428,15 @@ model MessageLog {
   sentById    String?
   sentBy      User?    @relation("messageSender", fields: [sentById], references: [id], onDelete: SetNull)
 
-  phone       String?  // número que recebeu (null para mensagens internas do sistema)
-  body        String   // texto final enviado (após substituição de variáveis)
-  channel     String   @default("whatsapp") // whatsapp | email | interno
-  status      String   @default("sent")     // sent | failed | pending
+  phone       String?
+  body        String
+  channel     String   @default("whatsapp")
+  status      String   @default("sent")
   error       String?
+
+  // Referência à regra de automação que disparou (null = envio manual)
+  automationRuleId  Int?
+  automationRule    AutomationRule? @relation(fields: [automationRuleId], references: [id], onDelete: SetNull)
 
   createdAt   DateTime @default(now())
 }
