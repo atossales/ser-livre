@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, updateUserEmail, updateUserPassword, updateStaffRole, deleteStaff, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getWhatsAppStatus, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage, saveCircumference as apiSaveCircumference, getCircumferences as apiGetCircumferences, updateAvatar, getAutomations, toggleAutomation, updateAutomation, getAutomationLogs, setPatientOverride } from './utils/api';
+import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, updateUserEmail, updateUserPassword, updateStaffRole, deleteStaff, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getWhatsAppStatus, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage, saveCircumference as apiSaveCircumference, getCircumferences as apiGetCircumferences, updateAvatar, getAutomations, toggleAutomation, updateAutomation, getAutomationLogs, setPatientOverride, searchMedx } from './utils/api';
 import { supabase } from './utils/supabase';
 import { ResetPassword } from './components/ResetPassword';
 import { Toast } from './components/Toast';
@@ -6922,6 +6922,29 @@ function NewLeadModal({ onClose, onSave, existingPatients }) {
   const [altura, setAltura] = useState("");
   const [plan, setPlan]   = useState("essential");
   const [err,  setErr]    = useState("");
+  // MedX search
+  const [medxQ, setMedxQ] = useState("");
+  const [medxResults, setMedxResults] = useState([]);
+  const [medxLoading, setMedxLoading] = useState(false);
+  const [medxOpen, setMedxOpen] = useState(false);
+  const medxTimer = useRef(null);
+  const doMedxSearch = (q) => {
+    setMedxQ(q);
+    if (q.length < 3) { setMedxResults([]); setMedxOpen(false); return; }
+    clearTimeout(medxTimer.current);
+    medxTimer.current = setTimeout(async () => {
+      setMedxLoading(true);
+      try { const { data } = await searchMedx(q); setMedxResults(data || []); setMedxOpen(true); } catch { setMedxResults([]); }
+      finally { setMedxLoading(false); }
+    }, 400);
+  };
+  const selectMedx = (p) => {
+    setNome(p.nome || '');
+    setEmail(p.email || '');
+    const cel = (p.celular || '').replace(/\D/g, '');
+    if (cel) setPhone(cel.length === 11 ? `(${cel.slice(0,2)}) ${cel.slice(2,7)}-${cel.slice(7)}` : cel);
+    setMedxOpen(false); setMedxQ('');
+  };
   // Circunferências iniciais (opcionais — para pacientes em execução)
   const [showCirc, setShowCirc]           = useState(false);
   const [circDate, setCircDate]           = useState(format(new Date(),'yyyy-MM-dd'));
@@ -6973,6 +6996,38 @@ function NewLeadModal({ onClose, onSave, existingPatients }) {
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
           <span style={{ fontSize:16, fontWeight:700, color:G[800] }}>Novo paciente</span>
           <div onClick={onClose} style={{ cursor:"pointer", padding:4, borderRadius:6, background:G[50] }}>✕</div>
+        </div>
+
+        {/* MedX search */}
+        <div style={{ marginBottom:14, position:'relative' }}>
+          <div style={{ padding:'10px 12px', borderRadius:10, background:'#F0F9FF', border:'1px solid #93C5FD' }}>
+            <div style={{ fontSize:11, fontWeight:600, color:'#1D4ED8', marginBottom:6, display:'flex', alignItems:'center', gap:6 }}>
+              <Search size={12}/> Importar do MedX
+            </div>
+            <input value={medxQ} onChange={e=>doMedxSearch(e.target.value)} onFocus={()=>medxResults.length>0&&setMedxOpen(true)}
+              placeholder="Digite o nome do paciente no MedX..."
+              style={{ width:'100%', padding:'8px 10px', borderRadius:7, border:'1px solid #93C5FD', fontSize:12, fontFamily:'inherit', boxSizing:'border-box', background:'#fff' }}/>
+            {medxLoading && <div style={{ fontSize:10, color:'#3B82F6', marginTop:4 }}>Buscando...</div>}
+          </div>
+          {medxOpen && medxResults.length > 0 && (
+            <div style={{ position:'absolute', left:0, right:0, top:'100%', zIndex:10, background:'#fff', borderRadius:'0 0 10px 10px', border:'1px solid #93C5FD', borderTop:'none', maxHeight:220, overflowY:'auto', boxShadow:'0 8px 24px rgba(0,0,0,0.12)' }}>
+              {medxResults.map((p,i) => (
+                <div key={i} onClick={()=>selectMedx(p)}
+                  style={{ padding:'8px 12px', cursor:'pointer', borderBottom:'1px solid #F0F4F8', fontSize:11 }}
+                  onMouseEnter={e=>e.currentTarget.style.background='#EFF6FF'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                  <div style={{ fontWeight:600, color:G[800] }}>{p.nome}</div>
+                  <div style={{ fontSize:10, color:'#888', marginTop:1 }}>
+                    {[p.celular, p.email, p.cpf].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {medxOpen && medxQ.length >= 3 && medxResults.length === 0 && !medxLoading && (
+            <div style={{ position:'absolute', left:0, right:0, top:'100%', zIndex:10, background:'#fff', borderRadius:'0 0 10px 10px', border:'1px solid #93C5FD', borderTop:'none', padding:12, textAlign:'center', fontSize:11, color:'#999' }}>
+              Nenhum paciente encontrado no MedX
+            </div>
+          )}
         </div>
 
         {/* Dados principais */}

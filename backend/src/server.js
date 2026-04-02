@@ -1797,6 +1797,59 @@ app.patch('/api/patients/:id/weigh-day', authRequired, requireRole('ADMIN', 'MED
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+// ── MedX Integration — Busca de pacientes ──
+let medxAuthToken = null;
+let medxTokenExpiry = 0;
+
+async function getMedxToken() {
+  if (medxAuthToken && Date.now() < medxTokenExpiry) return medxAuthToken;
+  const token = process.env.MEDX_INTEGRATION_TOKEN;
+  if (!token) throw new Error('MEDX_INTEGRATION_TOKEN nao configurado');
+  const baseUrl = process.env.MEDX_API_URL || 'https://v65.medx.med.br';
+  const res = await fetch(`${baseUrl}/api/integration/GetAuthorizedToken?token=${token}`);
+  if (!res.ok) throw new Error('Falha ao obter token MedX');
+  const authToken = (await res.text()).replace(/"/g, '');
+  medxAuthToken = authToken;
+  medxTokenExpiry = Date.now() + 170 * 60 * 1000; // 170min (token dura 180)
+  return authToken;
+}
+
+app.get('/api/medx/search', authRequired, requireRole('ADMIN', 'MEDICA', 'NUTRICIONISTA', 'ENFERMAGEM'), async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.length < 2) return res.json([]);
+    const token = await getMedxToken();
+    const baseUrl = process.env.MEDX_API_URL || 'https://v65.medx.med.br';
+    const r = await fetch(`${baseUrl}/api/integration/GetContatosGridBySearch?Name=${encodeURIComponent(q)}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!r.ok) { medxAuthToken = null; return res.status(502).json({ error: 'Erro ao buscar no MedX' }); }
+    const data = await r.json();
+    // Retorna apenas campos necessários (sem expor dados sensíveis)
+    const patients = (data || []).slice(0, 20).map(p => ({
+      medxId: p.Id_do_Cliente,
+      nome: p.Nome,
+      celular: p.Celular || p.Telefone_Residencial || '',
+      email: p.Email || '',
+      cpf: p.CPF_CGC || '',
+    }));
+    res.json(patients);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/medx/patient/:id', authRequired, requireRole('ADMIN', 'MEDICA', 'NUTRICIONISTA', 'ENFERMAGEM'), async (req, res) => {
+  try {
+    const token = await getMedxToken();
+    const baseUrl = process.env.MEDX_API_URL || 'https://v65.medx.med.br';
+    const r = await fetch(`${baseUrl}/api/integration/GetContatosById?idcontato=${req.params.id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!r.ok) { medxAuthToken = null; return res.status(502).json({ error: 'Erro ao buscar paciente no MedX' }); }
+    const data = await r.json();
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Patient overrides per automation rule ──
 app.put('/api/automations/:id/patient-overrides', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
   try {

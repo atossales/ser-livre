@@ -172,6 +172,10 @@ export const updateAutomation = (id, data) => api.put(`/automations/${id}`, data
 export const toggleAutomation = (id) => api.patch(`/automations/${id}/toggle`);
 export const getAutomationLogs = (id) => api.get(`/automations/${id}/logs`);
 export const setPatientWeighDay = (id, weighDay) => api.patch(`/patients/${id}/weigh-day`, { weighDay });
+
+// ── MedX ──
+export const searchMedx = (q) => api.get('/medx/search', { params: { q } });
+export const getMedxPatient = (id) => api.get(`/medx/patient/${id}`);
 export const setPatientOverride = (ruleId, patientId, data) => api.put(`/automations/${ruleId}/patient-overrides`, { patientId, ...data });
 
 export default api;
