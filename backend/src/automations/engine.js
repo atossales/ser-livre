@@ -31,6 +31,20 @@ function inGracePeriod(patient, graceDays) {
   return new Date(patient.createdAt) > cutoff;
 }
 
+// ── Patient override check: está desabilitado para este paciente? ──
+function isPatientDisabled(rule, patientId) {
+  const overrides = rule.config?.patientOverrides || {};
+  const po = overrides[String(patientId)];
+  return po && po.enabled === false;
+}
+
+// ── Get patient-specific config override ──
+function getPatientOverride(rule, patientId, key) {
+  const overrides = rule.config?.patientOverrides || {};
+  const po = overrides[String(patientId)];
+  return po?.[key];
+}
+
 // ── Send + log ──
 async function sendAndLog(rule, patient, message) {
   const phone = patient.user?.phone;
@@ -119,8 +133,9 @@ async function handleWeeklyMotivational(rule) {
 
   for (const p of patients) {
     if (!p.user?.phone) continue;
+    if (isPatientDisabled(rule, p.id)) continue;
     if (inGracePeriod(p, rule.gracePeriodDays)) continue;
-    if (await alreadySent(rule.id, p.id, 6)) continue; // 1x por semana
+    if (await alreadySent(rule.id, p.id, 6)) continue;
 
     const week = p.cycles[0]?.currentWeek || 1;
     const msg = resolveTemplate(rule.messageBody || '', { nome: p.user.name?.split(' ')[0] || '', semana: String(week) });
@@ -143,10 +158,11 @@ async function handleWeighReminder(rule) {
 
   for (const p of patients) {
     if (!p.user?.phone) continue;
+    if (isPatientDisabled(rule, p.id)) continue;
     if (inGracePeriod(p, rule.gracePeriodDays)) continue;
 
-    // Dia de pesagem: individual do paciente ou fallback da regra
-    const weighDay = p.weighDay ?? config.fallbackDay ?? 4;
+    // Dia de pesagem: override > paciente > fallback da regra
+    const weighDay = getPatientOverride(rule, p.id, 'weighDay') ?? p.weighDay ?? config.fallbackDay ?? 4;
     if (now.getDay() !== weighDay) continue;
 
     // Já pesou esta semana? Skip
@@ -210,11 +226,32 @@ async function tick() {
   }
 }
 
-function start() {
-  console.log('[AUTO] Automation engine started (every 10 min)');
+// ════════════════════════════════════════════
+//  SEED — Cria regras padrão se tabela estiver vazia
+// ════════════════════════════════════════════
+async function seedDefaults() {
+  try {
+    const count = await prisma.automationRule.count();
+    if (count > 0) return;
+    console.log('[AUTO] Seeding default automation rules...');
+    const defaults = [
+      { type: 'WELCOME', name: 'Boas-vindas', enabled: true, config: {}, messageBody: 'Ola {{nome}}! Seja bem-vinda ao Programa Ser Livre do Instituto Dra. Mariana Wogel. Estamos juntas nessa jornada! Qualquer duvida, fale conosco.', gracePeriodDays: 0 },
+      { type: 'APPOINTMENT_REMINDER', name: 'Lembrete de consulta', enabled: true, config: { hoursBefore: 24 }, messageBody: 'Ola {{nome}}! Lembrete: voce tem {{tipo_consulta}} amanha as {{hora_consulta}} no Instituto Dra. Mariana Wogel. Ate la!', gracePeriodDays: 0 },
+      { type: 'WEEKLY_MOTIVATIONAL', name: 'Motivacional semanal', enabled: true, config: { dayOfWeek: 1, hour: 8, minute: 10 }, messageBody: 'Ola {{nome}}, Semana {{semana}} do programa iniciada! Mantenha o protocolo alimentar e lembre-se: cada passo conta. Instituto Dra. Mariana Wogel', gracePeriodDays: 3 },
+      { type: 'WEIGH_REMINDER', name: 'Lembrete de pesagem', enabled: true, config: { hour: 9, minute: 0, fallbackDay: 4 }, messageBody: 'Ola {{nome}}, nao esqueca de registrar seu peso esta semana! A pesagem regular e fundamental para acompanharmos sua evolucao. Equipe Ser Livre.', gracePeriodDays: 7 },
+      { type: 'INACTIVITY_ALERT', name: 'Alerta de inatividade', enabled: true, config: { inactiveDays: 14, cooldownDays: 7, hour: 10 }, messageBody: 'Ola {{nome}}, sentimos sua falta! Nossa equipe esta aqui para te apoiar. Entre em contato para agendar seu retorno. Instituto Dra. Mariana Wogel', gracePeriodDays: 14 },
+    ];
+    for (const d of defaults) await prisma.automationRule.create({ data: d });
+    console.log('[AUTO] 5 default rules created');
+  } catch (e) { console.warn('[AUTO] Seed error:', e.message); }
+}
+
+async function start() {
+  console.log('[AUTO] Automation engine starting...');
+  await seedDefaults();
   cron.schedule('*/10 * * * *', tick);
-  // Run once on startup after 30s delay
   setTimeout(tick, 30000);
+  console.log('[AUTO] Engine ready (every 10 min)');
 }
 
 module.exports = { start, tick };

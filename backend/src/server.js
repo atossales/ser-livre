@@ -1797,6 +1797,24 @@ app.patch('/api/patients/:id/weigh-day', authRequired, requireRole('ADMIN', 'MED
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+// ── Patient overrides per automation rule ──
+app.put('/api/automations/:id/patient-overrides', authRequired, requireRole('ADMIN', 'MEDICA'), async (req, res) => {
+  try {
+    const ruleId = parseInt(req.params.id);
+    const { patientId, enabled, weighDay } = req.body;
+    const rule = await prisma.automationRule.findUnique({ where: { id: ruleId } });
+    if (!rule) return res.status(404).json({ error: 'Regra nao encontrada' });
+    const cfg = rule.config || {};
+    const overrides = cfg.patientOverrides || {};
+    overrides[String(patientId)] = { enabled: enabled ?? true, ...(weighDay !== undefined ? { weighDay } : {}) };
+    const updated = await prisma.automationRule.update({
+      where: { id: ruleId },
+      data: { config: { ...cfg, patientOverrides: overrides } }
+    });
+    res.json(updated);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 // ════════════════════════════════════════════
 //  HEALTH CHECK — para EasyPanel / Docker
 // ════════════════════════════════════════════

@@ -172,5 +172,6 @@ export const updateAutomation = (id, data) => api.put(`/automations/${id}`, data
 export const toggleAutomation = (id) => api.patch(`/automations/${id}/toggle`);
 export const getAutomationLogs = (id) => api.get(`/automations/${id}/logs`);
 export const setPatientWeighDay = (id, weighDay) => api.patch(`/patients/${id}/weigh-day`, { weighDay });
+export const setPatientOverride = (ruleId, patientId, data) => api.put(`/automations/${ruleId}/patient-overrides`, { patientId, ...data });
 
 export default api;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, updateUserEmail, updateUserPassword, updateStaffRole, deleteStaff, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getWhatsAppStatus, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage, saveCircumference as apiSaveCircumference, getCircumferences as apiGetCircumferences, updateAvatar, getAutomations, toggleAutomation, updateAutomation, getAutomationLogs } from './utils/api';
+import { forgotPassword as apiForgotPassword, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient, finishProgram as apiFinishProgram, restartProgram as apiRestartProgram, saveScores as apiSaveScores, saveWeekCheck as apiSaveWeekCheck, resolveAlert as apiResolveAlert, getAppointments, createAppointment, deleteAppointment, getDashboard, getMessages, sendMessage, getStaff, updateUserProfile, updateUserEmail, updateUserPassword, updateStaffRole, deleteStaff, getActivity, logActivity, register as apiRegister, sendWhatsAppMsg, getWhatsAppStatus, getMessageTemplates, createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, generateMessage, saveCircumference as apiSaveCircumference, getCircumferences as apiGetCircumferences, updateAvatar, getAutomations, toggleAutomation, updateAutomation, getAutomationLogs, setPatientOverride } from './utils/api';
 import { supabase } from './utils/supabase';
 import { ResetPassword } from './components/ResetPassword';
 import { Toast } from './components/Toast';
@@ -6020,7 +6020,7 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
     </>
   );
 
-  // ── Sub-componente: Painel de Automações ──
+  // ── Sub-componente: Painel de Automações (completo) ──
   function AutomationsPanel() {
     const [rules, setRules] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -6028,6 +6028,7 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
     const [logs, setLogs] = useState({});
     const [saving, setSaving] = useState(false);
     const [editBody, setEditBody] = useState({});
+    const [patSearch, setPatSearch] = useState('');
 
     useEffect(() => { loadRules(); }, []);
     const loadRules = async () => {
@@ -6202,6 +6203,50 @@ function Mensagens({ ps, messages, setMessages, mob, patientMode, patientPid }) 
                         ))}
                       </div>
                     </div>
+
+                    {/* Per-patient config */}
+                    {rule.type !== 'WELCOME' && (
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:11, fontWeight:600, color:G[700], marginBottom:6 }}>Configuracao por paciente</div>
+                        <input value={patSearch} onChange={e=>setPatSearch(e.target.value)} placeholder="Buscar paciente..."
+                          style={{ width:'100%', padding:'7px 10px', borderRadius:7, border:`1px solid ${G[300]}`, fontSize:11, fontFamily:'inherit', boxSizing:'border-box', marginBottom:8, background:'#fff' }}/>
+                        <div style={{ background:'#fff', borderRadius:8, border:`1px solid ${G[200]}`, maxHeight:200, overflowY:'auto' }}>
+                          {(ps||[]).filter(p => !patSearch || p.name?.toLowerCase().includes(patSearch.toLowerCase())).slice(0, 20).map(p => {
+                            const overrides = (rule._editConfig || rule.config)?.patientOverrides || {};
+                            const po = overrides[String(p.id)] || {};
+                            const isOn = po.enabled !== false;
+                            return (
+                              <div key={p.id} style={{ padding:'7px 10px', borderBottom:`1px solid ${G[100]}`, display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:11 }}>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                  <span style={{ fontWeight:500, color:G[800] }}>{p.name}</span>
+                                  {rule.type === 'WEIGH_REMINDER' && isOn && (
+                                    <select value={po.weighDay ?? p.weighDay ?? (rule._editConfig || rule.config)?.fallbackDay ?? 4}
+                                      onChange={async (e) => {
+                                        try {
+                                          await setPatientOverride(rule.id, p.id, { enabled: true, weighDay: Number(e.target.value) });
+                                          await loadRules();
+                                        } catch {}
+                                      }}
+                                      style={{ marginLeft:8, padding:'2px 6px', borderRadius:4, border:`1px solid ${G[300]}`, fontSize:10, fontFamily:'inherit' }}>
+                                      {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'].map((d,i) => <option key={i} value={i}>{d}</option>)}
+                                    </select>
+                                  )}
+                                </div>
+                                <div onClick={async () => {
+                                  try {
+                                    await setPatientOverride(rule.id, p.id, { enabled: !isOn });
+                                    await loadRules();
+                                  } catch {}
+                                }} style={{ width:36, height:20, borderRadius:10, background:isOn ? S.grn : G[200], cursor:'pointer', position:'relative', transition:'background 0.2s', flexShrink:0 }}>
+                                  <div style={{ width:16, height:16, borderRadius:8, background:'#fff', position:'absolute', top:2, left:isOn ? 18 : 2, transition:'left 0.2s', boxShadow:'0 1px 2px rgba(0,0,0,0.2)' }}/>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {(ps||[]).length === 0 && <div style={{ padding:12, textAlign:'center', fontSize:11, color:G[400] }}>Nenhum paciente cadastrado</div>}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Recent logs */}
                     {ruleLogs.length > 0 && (
